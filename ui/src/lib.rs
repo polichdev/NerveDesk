@@ -77,6 +77,7 @@ pub struct AppState {
     pub clipboard_hash: Arc<AtomicU64>,
     pub projection_viewer: Arc<ProjectionViewer>,
     pub projection_cancel: Arc<AtomicBool>,
+    pub file_transfer_enabled: Arc<AtomicBool>,
 }
 
 fn update_mode_string(state: &AppState) {
@@ -713,6 +714,11 @@ async fn open_received_folder() -> Result<(), String> {
 }
 
 #[command]
+fn set_file_transfer_enabled(enabled: bool, state: State<'_, AppState>) {
+    state.file_transfer_enabled.store(enabled, Ordering::SeqCst);
+}
+
+#[command]
 async fn send_file_to_peer(path: String, state: State<'_, AppState>) -> Result<String, String> {
     let target_ip = if let Ok(guard) = state.paired_peer_ip.lock() {
         guard.clone()
@@ -755,6 +761,7 @@ pub fn run() {
         clipboard_hash: Arc::new(AtomicU64::new(0)),
         projection_viewer,
         projection_cancel: Arc::new(AtomicBool::new(false)),
+        file_transfer_enabled: Arc::new(AtomicBool::new(true)),
     };
 
     let discovered_for_disc = state.discovered_devices.clone();
@@ -965,6 +972,7 @@ pub fn run() {
     let (clip_tx, clip_rx) = crossbeam_channel::unbounded::<clipboard::ClipboardPayload>();
     let clipboard_hash_for_listener = state.clipboard_hash.clone();
     let clipboard_sharing_for_tx = state.clipboard_sharing.clone();
+    let file_transfer_enabled_for_tx = state.file_transfer_enabled.clone();
     let paired_key_for_tx = state.paired_security_key.clone();
     let paired_ip_for_tx = state.paired_peer_ip.clone();
 
@@ -1019,7 +1027,9 @@ pub fn run() {
                             }
                         }
                         clipboard::ClipboardPayload::Files(files) => {
-                            let _ = file_queue_tx.send((ip, token, files));
+                            if file_transfer_enabled_for_tx.load(Ordering::Relaxed) {
+                                let _ = file_queue_tx.send((ip, token, files));
+                            }
                         }
                         _ => {}
                     }
@@ -1075,6 +1085,7 @@ pub fn run() {
         .manage(state)
         .setup(|app| {
             let file_key_ref = app.state::<AppState>().paired_security_key.clone();
+            let file_enabled = app.state::<AppState>().file_transfer_enabled.clone();
             let file_app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 use tauri::Emitter;
@@ -1086,7 +1097,7 @@ pub fn run() {
                         .collect();
                     let _ = file_app_handle.emit("file-received", names);
                 };
-                let _ = net::FileTransferServer::start(net::FILE_TRANSFER_PORT, file_key_ref, cb).await;
+                let _ = net::FileTransferServer::start(net::FILE_TRANSFER_PORT, file_key_ref, file_enabled, cb).await;
             });
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_theme(Some(tauri::Theme::Dark));
@@ -1193,7 +1204,8 @@ pub fn run() {
             start_virtual_display_cast,
             stop_virtual_display_cast,
             open_received_folder,
-            send_file_to_peer
+            send_file_to_peer,
+            set_file_transfer_enabled
         ])
         .run(tauri::generate_context!())
     {

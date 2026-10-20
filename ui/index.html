@@ -702,8 +702,12 @@
                 </div>
               </div>
               <div class="setting-right" style="display: flex; align-items: center; gap: 10px;">
-                <button class="btn btn-secondary" onclick="openReceivedFolder()" title="Open Received Files Folder" style="padding: 6px 12px; border-radius: 6px; font-size: 12px;">
-                  Open Folder
+                <label class="switch">
+                  <input type="checkbox" id="homeTransferToggle" checked onchange="toggleFileTransfer(this.checked)">
+                  <span class="slider"></span>
+                </label>
+                <button class="btn btn-secondary" onclick="openReceivedFolder()" title="Open Received Files" style="padding: 6px 8px; border-radius: 6px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
                 </button>
               </div>
             </div>
@@ -1429,6 +1433,11 @@
       }
     }
 
+    function toggleFileTransfer(checked) {
+      localStorage.setItem('file_transfer_enabled', checked ? 'true' : 'false');
+      callTauri('set_file_transfer_enabled', { enabled: checked }).catch(() => {});
+    }
+
     async function openReceivedFolder() {
       try {
         await callTauri('open_received_folder');
@@ -1581,6 +1590,12 @@
         const castToggle = document.getElementById('homeCastToggle');
         if (castToggle && castToggle !== document.activeElement) {
           castToggle.checked = isProjecting;
+        }
+
+        const transferToggle = document.getElementById('homeTransferToggle');
+        const transferSaved = localStorage.getItem('file_transfer_enabled') !== 'false';
+        if (transferToggle && transferToggle !== document.activeElement) {
+          transferToggle.checked = transferSaved;
         }
         const savedPeer = localStorage.getItem('paired_device_name');
         if (savedPeer && !isPeerDisabled) {

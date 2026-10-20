@@ -12,14 +12,38 @@ const CHUNK_SIZE: usize = 65536;
 
 pub fn get_default_transfer_dir() -> PathBuf {
     if let Some(user_profile) = std::env::var_os("USERPROFILE") {
-        let p = PathBuf::from(user_profile).join("Downloads").join("NerveDesk");
-        let _ = std::fs::create_dir_all(&p);
-        p
+        let desktop = PathBuf::from(&user_profile).join("Desktop");
+        if desktop.exists() {
+            return desktop;
+        }
+        let downloads = PathBuf::from(&user_profile).join("Downloads");
+        if downloads.exists() {
+            return downloads;
+        }
+        PathBuf::from(user_profile)
     } else {
-        let p = std::env::temp_dir().join("NerveDesk");
-        let _ = std::fs::create_dir_all(&p);
-        p
+        std::env::temp_dir()
     }
+}
+
+fn get_unique_path(dir: &Path, name: &str) -> PathBuf {
+    let p = dir.join(name);
+    if !p.exists() {
+        return p;
+    }
+    let stem = Path::new(name).file_stem().and_then(|s| s.to_str()).unwrap_or(name);
+    let ext = Path::new(name).extension().and_then(|s| s.to_str());
+    for i in 1..10000 {
+        let new_name = match ext {
+            Some(e) => format!("{stem} ({i}).{e}"),
+            None => format!("{stem} ({i})"),
+        };
+        let candidate = dir.join(new_name);
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    p
 }
 
 pub struct FileTransferServer {
@@ -30,6 +54,7 @@ impl FileTransferServer {
     pub async fn start<F>(
         port: u16,
         security_key: Arc<std::sync::Mutex<Option<String>>>,
+        enabled: Arc<AtomicBool>,
         on_files_received: F,
     ) -> Result<Self>
     where
@@ -39,15 +64,17 @@ impl FileTransferServer {
 
         let is_running = Arc::new(AtomicBool::new(true));
         let running_clone = is_running.clone();
-        let target_dir = get_default_transfer_dir();
 
         tokio::spawn(async move {
             info!("File transfer server listening on port {port}");
             while running_clone.load(Ordering::Relaxed) {
                 match listener.accept().await {
                     Ok((socket, addr)) => {
+                        if !enabled.load(Ordering::Relaxed) {
+                            continue;
+                        }
                         info!("Incoming file transfer connection from {addr}");
-                        let dir = target_dir.clone();
+                        let dir = get_default_transfer_dir();
                         let key = security_key.clone();
                         let cb = on_files_received.clone();
                         tokio::spawn(async move {
@@ -137,8 +164,9 @@ where
         socket.read_exact(&mut size_buf).await?;
         let file_size = u64::from_be_bytes(size_buf);
 
-        let final_path = target_dir.join(safe_name);
-        let part_path = target_dir.join(format!("{safe_name}.part"));
+        let final_path = get_unique_path(&target_dir, safe_name);
+        let final_name = final_path.file_name().and_then(|n| n.to_str()).unwrap_or(safe_name);
+        let part_path = target_dir.join(format!("{final_name}.part"));
 
         let mut out_file = tokio::fs::File::create(&part_path).await?;
 
@@ -156,6 +184,20 @@ where
 
         let _ = tokio::fs::remove_file(&final_path).await;
         tokio::fs::rename(&part_path, &final_path).await?;
+
+        #[cfg(target_os = "windows")]
+        unsafe {
+            use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryA};
+            use windows::core::s;
+            if let Ok(shell32) = LoadLibraryA(s!("shell32.dll")) {
+                if let Some(proc) = GetProcAddress(shell32, s!("SHChangeNotify")) {
+                    type SHChangeNotifyFn = unsafe extern "system" fn(i32, u32, *const u16, *const u16);
+                    let func: SHChangeNotifyFn = std::mem::transmute(proc);
+                    let wide: Vec<u16> = final_path.to_string_lossy().encode_utf16().chain(std::iter::once(0)).collect();
+                    func(0x00000002, 0x0005, wide.as_ptr(), std::ptr::null());
+                }
+            }
+        }
 
         received_files.push(final_path);
     }
