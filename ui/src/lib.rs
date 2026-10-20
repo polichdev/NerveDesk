@@ -76,6 +76,7 @@ pub struct AppState {
     pub paired_peer_ip: Arc<Mutex<Option<String>>>,
     pub clipboard_hash: Arc<AtomicU64>,
     pub projection_viewer: Arc<ProjectionViewer>,
+    pub projection_cancel: Arc<AtomicBool>,
 }
 
 fn update_mode_string(state: &AppState) {
@@ -107,6 +108,7 @@ fn stop_kvm_internal(state: &AppState) {
 }
 
 fn stop_projection_internal(state: &AppState) {
+    state.projection_cancel.store(true, Ordering::SeqCst);
     state.is_projecting.store(false, Ordering::SeqCst);
     state.projection_viewer.stop();
     let _ = state.display_manager.unplug_display();
@@ -385,6 +387,7 @@ async fn start_virtual_display_cast(
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     stop_projection_internal(&state);
+    tokio::time::sleep(Duration::from_millis(200)).await;
 
     let resolved_ip = resolve_target_ip(&target_name, &state).await?;
 
@@ -405,6 +408,8 @@ async fn start_virtual_display_cast(
         .parse()
         .map_err(|e| format!("Invalid video target address: {e}"))?;
 
+    state.projection_cancel.store(false, Ordering::SeqCst);
+    let cancel_flag = state.projection_cancel.clone();
     let is_running_vid = state.is_projecting.clone();
     is_running_vid.store(true, Ordering::SeqCst);
     let fps_holder = state.live_fps_x10.clone();
@@ -427,12 +432,12 @@ async fn start_virtual_display_cast(
         };
         let mut duplicator = if extend_mode {
             let mut found = None;
-            for _ in 0..6 {
+            for _ in 0..15 {
                 if let Ok(d) = DxgiOutputDuplicator::new(config.clone()) {
                     found = Some(d);
                     break;
                 }
-                tokio::time::sleep(Duration::from_millis(300)).await;
+                tokio::time::sleep(Duration::from_millis(200)).await;
             }
             if let Some(d) = found {
                 d
@@ -478,7 +483,7 @@ async fn start_virtual_display_cast(
         let mut last_sent_time = Instant::now();
         let mut raw_buf = vec![0u8; (w * h * 4) as usize];
 
-        while is_running_vid.load(Ordering::SeqCst) {
+        while !cancel_flag.load(Ordering::Relaxed) && is_running_vid.load(Ordering::SeqCst) {
             let start_frame = Instant::now();
             let now_us = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -488,7 +493,7 @@ async fn start_virtual_display_cast(
             match duplicator.acquire_frame() {
                 Ok(Some(frame)) => {
                     if frame.copy_to_cpu(&mut raw_buf).is_ok() {
-                        let is_key = frame_count % 60 == 0;
+                        let is_key = frame_count < 10 || frame_count % 60 == 0;
                         match encoder.encode_bgra(w, h, &raw_buf, now_us, is_key) {
                             Ok(encoded_frame) => {
                                 if let Ok(sent_bytes) = video_sender.send_frame(&encoded_frame).await {
@@ -503,7 +508,7 @@ async fn start_virtual_display_cast(
                 }
                 Ok(None) => {
                     if last_sent_time.elapsed() >= Duration::from_millis(500) && frame_count > 0 {
-                        let is_key = frame_count % 60 == 0;
+                        let is_key = frame_count < 10 || frame_count % 60 == 0;
                         if let Ok(encoded_frame) = encoder.encode_bgra(w, h, &raw_buf, now_us, is_key) {
                             if let Ok(sent_bytes) = video_sender.send_frame(&encoded_frame).await {
                                 total_bytes += sent_bytes as u64;
@@ -666,6 +671,35 @@ Start-Process powershell -ArgumentList "-NoExit -EncodedCommand $b" -Verb RunAs
 }
 
 #[command]
+fn uninstall_virtual_display_driver() -> Result<String, String> {
+    let ps_cmd = r#"
+$s = {
+    $pkg = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\VirtualDrivers.Virtual-Display-Driver*" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($pkg) {
+        $devcon = Join-Path $pkg.FullName "Dependencies\devcon.exe"
+        if (Test-Path $devcon) {
+            & "$devcon" remove "Root\MttVDD"
+        }
+    }
+    pnputil /delete-driver mttvdd.inf /uninstall /force
+    $w = (Get-Command winget.exe -ErrorAction SilentlyContinue).Source
+    if (-not $w) { $w = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe" }
+    & "$w" uninstall --id=VirtualDrivers.Virtual-Display-Driver -e --accept-source-agreements
+    Remove-Item "C:\VirtualDisplayDriver" -Recurse -Force -ErrorAction SilentlyContinue
+    displayswitch.exe /clone
+    Write-Host 'Virtual Display Driver completely uninstalled!' -ForegroundColor Green
+}
+$b = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($s.ToString()))
+Start-Process powershell -ArgumentList "-NoExit -EncodedCommand $b" -Verb RunAs
+"#;
+    let _ = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-Command", ps_cmd])
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    Ok("Uninstaller started".into())
+}
+
+#[command]
 fn get_display_driver_status() -> bool {
     let count = unsafe { windows::Win32::UI::WindowsAndMessaging::GetSystemMetrics(windows::Win32::UI::WindowsAndMessaging::SM_CMONITORS) };
     count > 1
@@ -693,6 +727,7 @@ pub fn run() {
         paired_peer_ip: Arc::new(Mutex::new(None)),
         clipboard_hash: Arc::new(AtomicU64::new(0)),
         projection_viewer,
+        projection_cancel: Arc::new(AtomicBool::new(false)),
     };
 
     let discovered_for_disc = state.discovered_devices.clone();
@@ -1101,6 +1136,7 @@ pub fn run() {
             get_feature_settings,
             open_display_settings,
             install_virtual_display_driver,
+            uninstall_virtual_display_driver,
             get_display_driver_status,
             start_virtual_display_cast,
             stop_virtual_display_cast

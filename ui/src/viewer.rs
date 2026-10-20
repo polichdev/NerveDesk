@@ -1,19 +1,23 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
-    GetDC, GetDeviceCaps, ReleaseDC, SetBrushOrgEx, SetStretchBltMode, StretchDIBits, BITMAPINFO,
-    BITMAPINFOHEADER, BI_RGB, DESKTOPHORZRES, DESKTOPVERTRES, DIB_RGB_COLORS, HALFTONE, RGBQUAD,
-    SRCCOPY,
+    GetDC, ReleaseDC, SetBrushOrgEx, SetStretchBltMode, StretchDIBits, BITMAPINFO,
+    BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HALFTONE, RGBQUAD, SRCCOPY,
+};
+use windows::Win32::UI::HiDpi::{
+    SetThreadDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::VK_ESCAPE;
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DispatchMessageW, GetClientRect, GetSystemMetrics,
-    PeekMessageW, RegisterClassW, SetWindowPos, ShowWindow, TranslateMessage, MSG, PM_REMOVE,
-    SM_CXSCREEN, SM_CYSCREEN, SWP_HIDEWINDOW, SWP_NOACTIVATE, SWP_SHOWWINDOW, SW_HIDE, SW_SHOW,
-    WM_DESTROY, WM_KEYDOWN, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP,
-    WM_RBUTTONDOWN, WM_RBUTTONUP, WNDCLASSW, WS_EX_TOPMOST, WS_POPUP, HWND_TOPMOST,
+    LoadCursorW, PeekMessageW, RegisterClassW, SetCursor, SetWindowPos, ShowWindow,
+    TranslateMessage, MSG, PM_REMOVE, SM_CXSCREEN, SM_CYSCREEN, SWP_HIDEWINDOW,
+    SWP_NOACTIVATE, SWP_SHOWWINDOW, SW_HIDE, SW_SHOW, WM_DESTROY, WM_KEYDOWN,
+    WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_RBUTTONDOWN,
+    WM_RBUTTONUP, WM_SETCURSOR, WNDCLASSW, WS_EX_TOPMOST, WS_POPUP, HWND_TOPMOST,
+    IDC_ARROW,
 };
 
 pub struct ProjectionViewer {
@@ -30,15 +34,19 @@ impl ProjectionViewer {
 
         let slot_clone = frame_slot.clone();
         let active_clone = is_active.clone();
+        let time_clone = last_frame_time.clone();
 
         std::thread::Builder::new()
             .name("nerve-projection-viewer".into())
             .spawn(move || unsafe {
+                let _ = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
                 let class_name = windows::core::w!("NerveDeskProjectionWindowClass");
                 let wnd_class = WNDCLASSW {
                     lpfnWndProc: Some(projection_wnd_proc),
                     hInstance: HINSTANCE::default(),
                     lpszClassName: class_name,
+                    hCursor: LoadCursorW(HINSTANCE::default(), IDC_ARROW).unwrap_or_default(),
                     ..Default::default()
                 };
 
@@ -88,25 +96,18 @@ impl ProjectionViewer {
                         DispatchMessageW(&msg);
                     }
 
-                    let active = active_clone.load(Ordering::Relaxed);
+                    let is_active = active_clone.load(Ordering::Relaxed);
+                    let timed_out = if let Ok(t) = time_clone.lock() {
+                        t.elapsed() >= Duration::from_millis(1500)
+                    } else {
+                        false
+                    };
+                    let active = is_active && !timed_out;
 
                     if active {
                         if !is_shown {
-                            let (sw, sh) = {
-                                let hdc = GetDC(HWND::default());
-                                let mut w = 0;
-                                let mut h = 0;
-                                if !hdc.is_invalid() {
-                                    w = GetDeviceCaps(hdc, DESKTOPHORZRES);
-                                    h = GetDeviceCaps(hdc, DESKTOPVERTRES);
-                                    let _ = ReleaseDC(HWND::default(), hdc);
-                                }
-                                if w == 0 || h == 0 {
-                                    w = GetSystemMetrics(SM_CXSCREEN);
-                                    h = GetSystemMetrics(SM_CYSCREEN);
-                                }
-                                (w, h)
-                            };
+                            let sw = GetSystemMetrics(SM_CXSCREEN);
+                            let sh = GetSystemMetrics(SM_CYSCREEN);
 
                             let _ = SetWindowPos(
                                 hwnd,
@@ -221,6 +222,11 @@ unsafe extern "system" fn projection_wnd_proc(
                 let _ = ShowWindow(hwnd, SW_HIDE);
                 return LRESULT(0);
             }
+        }
+        WM_SETCURSOR => {
+            let cursor = LoadCursorW(HINSTANCE::default(), IDC_ARROW).unwrap_or_default();
+            SetCursor(cursor);
+            return LRESULT(1);
         }
         WM_LBUTTONDOWN | WM_LBUTTONUP | WM_RBUTTONDOWN | WM_RBUTTONUP | WM_MBUTTONDOWN | WM_MBUTTONUP => {
             return LRESULT(0);

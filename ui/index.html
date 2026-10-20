@@ -834,6 +834,7 @@
           </div>
           <div class="setting-right" style="display: flex; gap: 8px; align-items: center;">
             <button class="btn btn-secondary" id="btnInstallDriver" onclick="installDriver()" style="display: none; padding: 4px 10px; font-size: 12px; border-color: #f59e0b; color: #fbbf24;">Install IddCx Driver</button>
+            <button class="btn btn-secondary" id="btnUninstallDriver" onclick="uninstallDriver()" style="display: none; padding: 4px 10px; font-size: 12px; border-color: rgba(239,68,68,0.4); color: #ef4444;">Uninstall Driver</button>
             <span class="badge" id="vDisplayBadge">Checking...</span>
           </div>
         </div>
@@ -1323,17 +1324,20 @@
         const badge = document.getElementById('vDisplayBadge');
         const desc = document.getElementById('vDisplayStatusDesc');
         const installBtn = document.getElementById('btnInstallDriver');
+        const uninstallBtn = document.getElementById('btnUninstallDriver');
         if (isProjecting) return;
         if (hasSecondDisplay) {
           badge.innerText = 'Virtual Display Ready';
           badge.style.background = '#15803d';
           desc.innerText = 'Secondary virtual monitor active. Windows desktop extended independently.';
           if (installBtn) installBtn.style.display = 'none';
+          if (uninstallBtn) uninstallBtn.style.display = 'inline-block';
         } else {
           badge.innerText = 'Driver Not Installed';
           badge.style.background = '#d97706';
           desc.innerText = 'Single display detected. Install IddCx driver to create an independent 2nd monitor.';
           if (installBtn) installBtn.style.display = 'inline-block';
+          if (uninstallBtn) uninstallBtn.style.display = 'none';
         }
       } catch (e) {}
     }
@@ -1343,6 +1347,16 @@
         await callTauri('install_virtual_display_driver');
       } catch (e) {
         alert('Failed to launch driver installer: ' + e);
+      }
+    }
+
+    async function uninstallDriver() {
+      const ok = confirm("Ви впевнені, що хочете повністю видалити драйвер віртуального дисплея IddCx та всі його компоненти?");
+      if (!ok) return;
+      try {
+        await callTauri('uninstall_virtual_display_driver');
+      } catch (e) {
+        alert('Failed to launch driver uninstaller: ' + e);
       }
     }
 
