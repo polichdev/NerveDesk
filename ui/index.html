@@ -457,6 +457,19 @@
   </main>
 
   <script>
+    async function callTauri(cmd, args) {
+      if (window.__TAURI__?.core?.invoke) {
+        return await window.__TAURI__.core.invoke(cmd, args);
+      }
+      if (window.__TAURI__?.invoke) {
+        return await window.__TAURI__.invoke(cmd, args);
+      }
+      if (window.__TAURI_INTERNALS__?.invoke) {
+        return await window.__TAURI_INTERNALS__.invoke(cmd, args);
+      }
+      throw new Error("Tauri API not accessible");
+    }
+
     function renderDevices(devices) {
       const container = document.getElementById('deviceList');
       container.innerHTML = '';
@@ -486,29 +499,21 @@
     function setEdge(edge) {
       document.querySelectorAll('.edge-btn').forEach(b => b.classList.remove('active'));
       event.target.classList.add('active');
-      if (window.__TAURI__) {
-        window.__TAURI__.core.invoke('set_screen_edge', { edge });
-      }
+      callTauri('set_screen_edge', { edge }).catch(() => {});
     }
 
     function toggleVirtualDisplay(checked) {
       document.getElementById('displayStateVal').innerText = checked ? "Attached" : "Detached";
-      if (window.__TAURI__) {
-        window.__TAURI__.core.invoke('toggle_virtual_display', { enable: checked });
-      }
+      callTauri('toggle_virtual_display', { enable: checked }).catch(() => {});
     }
 
     function connectTo(ip) {
-      if (window.__TAURI__) {
-        window.__TAURI__.core.invoke('start_host', { targetIp: ip + ":48100", streamVideo: true });
-      }
+      callTauri('start_host', { targetIp: ip + ":48100", streamVideo: true }).catch(() => {});
       document.getElementById('statusText').innerText = "Streaming to " + ip;
     }
 
     function startClient() {
-      if (window.__TAURI__) {
-        window.__TAURI__.core.invoke('start_client', { bindPort: 48100 });
-      }
+      callTauri('start_client', { bindPort: 48100 }).catch(() => {});
       document.getElementById('statusText').innerText = "Client Active (Listening on port 48100)";
     }
 
@@ -526,9 +531,7 @@
     }
 
     function stopService() {
-      if (window.__TAURI__) {
-        window.__TAURI__.core.invoke('stop_service');
-      }
+      callTauri('stop_service').catch(() => {});
       document.getElementById('statusText').innerText = "Idle";
       document.getElementById('rttVal').innerText = "0.00 ms";
       document.getElementById('fpsVal').innerText = "0.0 FPS";
@@ -546,12 +549,8 @@
         </div>
       `;
       try {
-        if (window.__TAURI__) {
-          const devices = await window.__TAURI__.core.invoke('discover_devices');
-          renderDevices(devices);
-        } else {
-          renderDevices([]);
-        }
+        const devices = await callTauri('discover_devices');
+        renderDevices(devices);
       } catch (e) {
         renderDevices([]);
       } finally {
@@ -561,11 +560,11 @@
     }
 
     async function loadMyIp() {
-      if (window.__TAURI__) {
-        try {
-          const ip = await window.__TAURI__.core.invoke('get_my_ip');
-          document.getElementById('myIpBadge').innerText = "This Device: " + ip;
-        } catch (e) {}
+      try {
+        const ip = await callTauri('get_my_ip');
+        document.getElementById('myIpBadge').innerText = "This Device: " + ip;
+      } catch (e) {
+        document.getElementById('myIpBadge').innerText = "IP: Local";
       }
     }
 
@@ -579,8 +578,26 @@
       }
     }
 
-    loadMyIp();
-    refreshDevices();
+    setTimeout(() => {
+      loadMyIp();
+      refreshDevices();
+    }, 150);
+
+    setInterval(async () => {
+      try {
+        const m = await callTauri('get_metrics');
+        document.getElementById('rttVal').innerText = m.rtt_ms > 0 ? m.rtt_ms.toFixed(2) + " ms" : "0.00 ms";
+        document.getElementById('fpsVal').innerText = m.video_fps.toFixed(1) + " FPS";
+        document.getElementById('bitrateVal').innerText = m.bandwidth_mbps.toFixed(1) + " Mbps";
+        document.getElementById('displayStateVal').innerText = m.virtual_display_active ? "Attached" : "Detached";
+        if (m.is_active) {
+          document.getElementById('statusText').innerText = m.mode + " Active " + (m.peer_device ? "(" + m.peer_device + ")" : "");
+        } else {
+          document.getElementById('statusText').innerText = "Ready";
+        }
+      } catch (e) {}
+    }, 1000);
+  </script>
 
     setInterval(async () => {
       if (window.__TAURI__) {

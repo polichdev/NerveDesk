@@ -7,8 +7,10 @@
     "frontendDist": "../"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
+        "label": "main",
         "title": "NerveDesk - Ultra-Low Latency Virtual Display & KVM",
         "width": 980,
         "height": 680,
