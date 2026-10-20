@@ -1,4 +1,4 @@
-# NerveDesk — Ultra-Low Latency Hybrid KVM & Virtual Display for Windows
+# NerveDesk — Low Latency KVM Virtual Display
 
 [![Rust 1.80+](https://img.shields.io/badge/Rust-1.80%2B-orange.svg?logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Tauri v2](https://img.shields.io/badge/Tauri-v2-24C8DB.svg?logo=tauri&logoColor=white)](https://v2.tauri.app/)
@@ -9,7 +9,7 @@
 [![Raw UDP](https://img.shields.io/badge/Networking-Raw_UDP-00A4EF.svg)](https://en.wikipedia.org/wiki/User_Datagram_Protocol)
 [![H.264 Codec](https://img.shields.io/badge/Video-H.264_Hardware-FF0000.svg)](https://en.wikipedia.org/wiki/Advanced_Video_Coding)
 [![MSVC CRT Static](https://img.shields.io/badge/MSVC-Static_CRT-5C2D91.svg)](https://learn.microsoft.com/en-us/cpp/build/reference/md-mt-ld-use-run-time-library)
-[![License: MIT or Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ---
 
@@ -54,55 +54,10 @@ NerveDesk eliminates Head-of-Line blocking through decoupled binary datagram pro
 
 ---
 
-## Architecture & Data Flow
+## Documentation
 
-```
-[ Host Machine ]                                  [ Client Machine ]
-  │                                                     │
-  ├─ WH_MOUSE_LL / WH_KEYBOARD_LL                       │
-  │  (Low-Level Input Hooks)                            │
-  │         │                                           │
-  │  Edge Detection ──> [UDP Datagram: Port 48100] ───> UdpInputReceiver
-  │  (Border Crossing)                                  │
-  │                                                     ├─ Windows SendInput
-  │                                                     │  (Synthesize Motion/Keys)
-  │                                                     │
-  ├─ DXGI Desktop Duplication (GPU VRAM)                │
-  │         │                                           │
-  │  H.264 Hardware Encoder                             │
-  │         │                                           │
-  │         └───> [UDP Frame Stream: Port 48101] ─────> Hardware Decoder
-  │                                                     │         │
-  │                                                     │   Render Surface / IddCx
-```
-
----
-
-## Repository Structure
-
-```
-nerve-desk/
-├── Cargo.toml                  Workspace root definition
-├── crates/
-│   ├── common/                 Binary packet structures, network protocols, serialization
-│   ├── input/                  Low-level input hooks, edge crossing detection, SendInput emulation
-│   ├── net/                    UDP datagram transports and subnet beacon discovery
-│   ├── capture/                DXGI Desktop Duplication and virtual display manager
-│   ├── codec/                  Hardware video encoder and decoder abstractions
-│   ├── clipboard/              Non-blocking clipboard synchronization
-│   ├── host/                   Host streaming daemon
-│   └── client/                 Client receiver daemon
-├── driver/
-│   └── idd-virtual-display/    Microsoft IddCx Virtual Display Driver (C++ UMDF)
-└── ui/
-    ├── index.html              Single-page application dashboard interface
-    ├── src-tauri/
-    │   ├── Cargo.toml          Desktop binary configuration (NerveDesk.exe)
-    │   ├── src/
-    │   │   ├── main.rs         Tauri application lifecycle, tray icon, Win32 window hooks
-    │   │   └── lib.rs          IPC commands, state management, background receiver tasks
-    │   └── tauri.conf.json     Tauri v2 manifest, bundle settings, and security policies
-```
+- [Architecture & Data Flow](docs/ARCHITECTURE.md)
+- [Repository Structure](docs/STRUCTURE.md)
 
 ---
 
@@ -151,8 +106,4 @@ cargo test --workspace
 
 ## License
 
-This project is licensed under either of:
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
-- MIT License ([LICENSE-MIT](LICENSE-MIT))
-
-at your option.
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
