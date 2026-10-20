@@ -1,10 +1,19 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::net::SocketAddr;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 use tauri::{command, State};
-use tracing::info;
+use tracing::{error, info};
 
-use capture::VirtualDisplayManager;
+use capture::{DxgiCaptureConfig, DxgiOutputDuplicator, VirtualDisplayManager};
+use codec::{HardwareVideoDecoder, HardwareVideoEncoder, VideoDecoderConfig, VideoEncoderConfig};
+use common::InputEvent;
+use input::{InputEmulator, InputHookManager};
+use net::{
+    DeviceRole, DiscoveryBeacon, DiscoveryBeaconEmitter, DiscoveryListener,
+    UdpInputReceiver, UdpInputSender, VideoReceiver, VideoSender,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppMetrics {
@@ -33,6 +42,31 @@ pub struct AppState {
     pub peer_device: Mutex<Option<String>>,
     pub screen_edge: Mutex<String>,
     pub display_manager: VirtualDisplayManager,
+    pub hook_manager: Mutex<Option<InputHookManager>>,
+    pub active_workers: Mutex<Vec<tokio::task::JoinHandle<()>>>,
+    pub live_rtt_us: Arc<AtomicU64>,
+    pub live_fps_x10: Arc<AtomicU64>,
+    pub live_mbps_x10: Arc<AtomicU64>,
+}
+
+fn stop_service_internal(state: &AppState) {
+    state.is_running.store(false, Ordering::SeqCst);
+    if let Ok(mut guard) = state.hook_manager.lock() {
+        if let Some(mut hook) = guard.take() {
+            hook.stop();
+        }
+    }
+    if let Ok(mut workers) = state.active_workers.lock() {
+        for w in workers.drain(..) {
+            w.abort();
+        }
+    }
+    let _ = state.display_manager.unplug_display();
+    *state.mode.lock().unwrap() = "Idle".into();
+    *state.peer_device.lock().unwrap() = None;
+    state.live_rtt_us.store(0, Ordering::Relaxed);
+    state.live_fps_x10.store(0, Ordering::Relaxed);
+    state.live_mbps_x10.store(0, Ordering::Relaxed);
 }
 
 #[command]
@@ -43,12 +77,17 @@ fn get_metrics(state: State<AppState>) -> AppMetrics {
     let is_active = state.is_running.load(Ordering::SeqCst);
     let v_display = state.display_manager.is_plugged();
 
+    let rtt_us = state.live_rtt_us.load(Ordering::Relaxed);
+    let rtt_ms = if is_active { (rtt_us as f64) / 1000.0 } else { 0.0 };
+    let fps = if is_active { (state.live_fps_x10.load(Ordering::Relaxed) as f64) / 10.0 } else { 0.0 };
+    let mbps = if is_active { (state.live_mbps_x10.load(Ordering::Relaxed) as f64) / 10.0 } else { 0.0 };
+
     AppMetrics {
         mode,
         is_active,
-        rtt_ms: if is_active { 0.85 } else { 0.0 },
-        video_fps: if is_active { 60.0 } else { 0.0 },
-        bandwidth_mbps: if is_active { 18.5 } else { 0.0 },
+        rtt_ms,
+        video_fps: fps,
+        bandwidth_mbps: mbps,
         peer_device: peer,
         virtual_display_active: v_display,
         screen_edge: edge,
@@ -60,7 +99,6 @@ async fn discover_devices() -> Result<Vec<DiscoveredDevice>, String> {
     use std::collections::HashSet;
     use std::time::Duration;
     use tokio::time::timeout;
-    use net::{DeviceRole, DiscoveryBeacon, DiscoveryBeaconEmitter, DiscoveryListener};
 
     let my_name = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Host-PC".into());
     let beacon = DiscoveryBeacon::new(my_name.clone(), DeviceRole::Host, 48100, 48101);
@@ -100,46 +138,254 @@ async fn discover_devices() -> Result<Vec<DiscoveredDevice>, String> {
 }
 
 #[command]
-fn start_host(target_ip: String, stream_video: bool, state: State<AppState>) -> Result<String, String> {
-    info!("Starting Host mode targeting {} (video={})", target_ip, stream_video);
-    *state.mode.lock().unwrap() = "Host".into();
-    *state.peer_device.lock().unwrap() = Some(target_ip.clone());
-    state.is_running.store(true, Ordering::SeqCst);
+async fn start_host(
+    target_ip: String,
+    stream_video: bool,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    stop_service_internal(&state);
+
+    let target_addr: SocketAddr = if target_ip.contains(':') {
+        target_ip.parse().map_err(|e| format!("Invalid target address: {e}"))?
+    } else {
+        format!("{target_ip}:48100")
+            .parse()
+            .map_err(|e| format!("Invalid target address: {e}"))?
+    };
+
+    let video_target: SocketAddr = SocketAddr::new(target_addr.ip(), 48101);
+
+    info!("Starting internal Host engine -> input={}, video={}", target_addr, video_target);
+
+    let input_sender = UdpInputSender::new(target_addr)
+        .await
+        .map_err(|e| format!("Failed to create UDP input sender: {e}"))?;
+
+    let (event_tx, event_rx) = crossbeam_channel::unbounded::<InputEvent>();
+    let hook_manager = InputHookManager::start(event_tx)
+        .map_err(|e| format!("Failed to install input hooks: {e}"))?;
+
+    let is_running_in = state.is_running.clone();
+
+    let input_worker = tokio::spawn(async move {
+        while is_running_in.load(Ordering::SeqCst) {
+            match event_rx.try_recv() {
+                Ok(event) => {
+                    let _ = input_sender.send_event(&event).await;
+                }
+                Err(crossbeam_channel::TryRecvError::Empty) => {
+                    tokio::time::sleep(Duration::from_micros(500)).await;
+                }
+                Err(crossbeam_channel::TryRecvError::Disconnected) => break,
+            }
+        }
+    });
+
+    let mut workers = vec![input_worker];
 
     if stream_video {
         let _ = state.display_manager.plug_display();
+        let is_running_vid = state.is_running.clone();
+        let fps_holder = state.live_fps_x10.clone();
+        let mbps_holder = state.live_mbps_x10.clone();
+
+        let vid_worker = tokio::spawn(async move {
+            let video_sender = match VideoSender::new(video_target).await {
+                Ok(s) => s,
+                Err(e) => {
+                    error!("VideoSender error: {:?}", e);
+                    return;
+                }
+            };
+
+            let config = DxgiCaptureConfig::default();
+            let mut duplicator = match DxgiOutputDuplicator::new(config) {
+                Ok(d) => d,
+                Err(e) => {
+                    error!("DxgiDuplicator error: {:?}", e);
+                    return;
+                }
+            };
+
+            let (w, h) = duplicator.dimensions();
+            let encoder_config = VideoEncoderConfig {
+                width: w,
+                height: h,
+                fps: 60,
+                bitrate_bps: 15_000_000,
+                keyframe_interval: 120,
+            };
+
+            let encoder = match HardwareVideoEncoder::new(encoder_config) {
+                Ok(enc) => enc,
+                Err(e) => {
+                    error!("HardwareVideoEncoder error: {:?}", e);
+                    return;
+                }
+            };
+
+            let mut frames_streamed = 0u64;
+            let mut bytes_streamed = 0usize;
+            let mut last_report = Instant::now();
+
+            while is_running_vid.load(Ordering::SeqCst) {
+                let now_us = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_micros() as u64;
+
+                match duplicator.acquire_frame() {
+                    Ok(Some(frame)) => {
+                        if let Ok(encoded) = encoder.encode_frame(&frame.texture, now_us, false) {
+                            if let Ok(sent) = video_sender.send_frame(&encoded).await {
+                                frames_streamed += 1;
+                                bytes_streamed += sent;
+                            }
+                        }
+                    }
+                    Ok(None) => {
+                        tokio::time::sleep(Duration::from_millis(1)).await;
+                    }
+                    Err(_) => {
+                        tokio::time::sleep(Duration::from_millis(50)).await;
+                    }
+                }
+
+                if last_report.elapsed() >= Duration::from_secs(1) {
+                    let sec = last_report.elapsed().as_secs_f64();
+                    let fps = frames_streamed as f64 / sec;
+                    let mbps = (bytes_streamed as f64 * 8.0) / (sec * 1_000_000.0);
+                    fps_holder.store((fps * 10.0) as u64, Ordering::Relaxed);
+                    mbps_holder.store((mbps * 10.0) as u64, Ordering::Relaxed);
+                    frames_streamed = 0;
+                    bytes_streamed = 0;
+                    last_report = Instant::now();
+                }
+            }
+        });
+
+        workers.push(vid_worker);
     }
 
-    Ok(format!("Host mode active -> streaming to {}", target_ip))
-}
-
-#[command]
-fn start_client(bind_port: u16, state: State<AppState>) -> Result<String, String> {
-    info!("Starting Client mode on port {}", bind_port);
-    *state.mode.lock().unwrap() = "Client".into();
+    *state.mode.lock().unwrap() = "Host".into();
+    *state.peer_device.lock().unwrap() = Some(target_ip.clone());
+    *state.hook_manager.lock().unwrap() = Some(hook_manager);
+    *state.active_workers.lock().unwrap() = workers;
     state.is_running.store(true, Ordering::SeqCst);
-    Ok("Client mode active -> listening for input and video".into())
+
+    Ok(format!("Host mode active -> streaming to {target_ip}"))
 }
 
 #[command]
-fn stop_service(state: State<AppState>) -> Result<String, String> {
-    info!("Stopping NerveDesk streaming service");
-    state.is_running.store(false, Ordering::SeqCst);
-    *state.mode.lock().unwrap() = "Idle".into();
-    *state.peer_device.lock().unwrap() = None;
-    let _ = state.display_manager.unplug_display();
+async fn start_client(
+    bind_port: u16,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    stop_service_internal(&state);
+
+    let input_bind: SocketAddr = format!("0.0.0.0:{bind_port}")
+        .parse()
+        .map_err(|e| format!("Invalid bind address: {e}"))?;
+    let video_bind: SocketAddr = format!("0.0.0.0:{}", bind_port + 1)
+        .parse()
+        .map_err(|e| format!("Invalid bind address: {e}"))?;
+
+    info!("Starting internal Client engine on input={}, video={}", input_bind, video_bind);
+
+    let mut input_receiver = UdpInputReceiver::bind(input_bind)
+        .await
+        .map_err(|e| format!("Failed to bind input receiver: {e}"))?;
+
+    let emulator = InputEmulator::new();
+    let is_running_in = state.is_running.clone();
+    let rtt_holder = state.live_rtt_us.clone();
+
+    let input_worker = tokio::spawn(async move {
+        while is_running_in.load(Ordering::SeqCst) {
+            match input_receiver.recv_event().await {
+                Ok((header, event, _peer)) => {
+                    let now_us = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_micros() as u64;
+                    let latency_us = now_us.saturating_sub(header.timestamp_us);
+                    rtt_holder.store(latency_us, Ordering::Relaxed);
+                    let _ = emulator.inject(&event);
+                }
+                Err(_) => {
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
+            }
+        }
+    });
+
+    let is_running_vid = state.is_running.clone();
+    let fps_holder = state.live_fps_x10.clone();
+
+    let video_worker = tokio::spawn(async move {
+        let mut video_receiver = match VideoReceiver::bind(video_bind).await {
+            Ok(r) => r,
+            Err(e) => {
+                error!("Failed to bind video receiver: {:?}", e);
+                return;
+            }
+        };
+
+        let decoder_config = VideoDecoderConfig::default();
+        let mut decoder = match HardwareVideoDecoder::new(decoder_config) {
+            Ok(d) => d,
+            Err(e) => {
+                error!("Failed to init decoder: {:?}", e);
+                return;
+            }
+        };
+
+        let mut frames = 0u64;
+        let mut last_rep = Instant::now();
+
+        while is_running_vid.load(Ordering::SeqCst) {
+            match video_receiver.recv_frame().await {
+                Ok((frame_id, _key, timestamp_us, data)) => {
+                    frames += 1;
+                    let _ = decoder.decode_frame(frame_id, timestamp_us, &data);
+
+                    if last_rep.elapsed() >= Duration::from_secs(1) {
+                        let fps = frames as f64 / last_rep.elapsed().as_secs_f64();
+                        fps_holder.store((fps * 10.0) as u64, Ordering::Relaxed);
+                        frames = 0;
+                        last_rep = Instant::now();
+                    }
+                }
+                Err(_) => {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            }
+        }
+    });
+
+    *state.mode.lock().unwrap() = "Client".into();
+    *state.peer_device.lock().unwrap() = Some(format!("0.0.0.0:{bind_port}"));
+    *state.active_workers.lock().unwrap() = vec![input_worker, video_worker];
+    state.is_running.store(true, Ordering::SeqCst);
+
+    Ok(format!("Client mode active -> listening on port {bind_port}"))
+}
+
+#[command]
+fn stop_service(state: State<'_, AppState>) -> Result<String, String> {
+    stop_service_internal(&state);
     Ok("Service stopped".into())
 }
 
 #[command]
-fn set_screen_edge(edge: String, state: State<AppState>) -> Result<String, String> {
+fn set_screen_edge(edge: String, state: State<'_, AppState>) -> Result<String, String> {
     info!("Setting screen transition edge to {}", edge);
     *state.screen_edge.lock().unwrap() = edge.clone();
     Ok(format!("Edge set to {}", edge))
 }
 
 #[command]
-fn toggle_virtual_display(enable: bool, state: State<AppState>) -> Result<bool, String> {
+fn toggle_virtual_display(enable: bool, state: State<'_, AppState>) -> Result<bool, String> {
     if enable {
         state.display_manager.plug_display().map_err(|e| e.to_string())?;
     } else {
@@ -156,11 +402,14 @@ pub fn run() {
         peer_device: Mutex::new(None),
         screen_edge: Mutex::new("Right".into()),
         display_manager: VirtualDisplayManager::new(),
+        hook_manager: Mutex::new(None),
+        active_workers: Mutex::new(Vec::new()),
+        live_rtt_us: Arc::new(AtomicU64::new(0)),
+        live_fps_x10: Arc::new(AtomicU64::new(0)),
+        live_mbps_x10: Arc::new(AtomicU64::new(0)),
     };
 
     tauri::async_runtime::spawn(async move {
-        use std::time::Duration;
-        use net::{DeviceRole, DiscoveryBeacon, DiscoveryBeaconEmitter};
         let my_name = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "NerveDesk-PC".into());
         let beacon = DiscoveryBeacon::new(my_name, DeviceRole::Host, 48100, 48101);
         if let Ok(emitter) = DiscoveryBeaconEmitter::new(beacon).await {

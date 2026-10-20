@@ -431,8 +431,9 @@
       </div>
 
       <div style="display: flex; gap: 10px; margin-top: auto;">
-        <button class="btn btn-secondary" style="flex: 1;" onclick="stopService()">Stop Service</button>
-        <button class="btn" style="flex: 1;" onclick="startHost()">Start Host Stream</button>
+        <button class="btn btn-secondary" style="flex: 0.8;" onclick="stopService()">Stop</button>
+        <button class="btn btn-secondary" style="flex: 1.1;" onclick="startClient()">Receive (Client)</button>
+        <button class="btn" style="flex: 1.1;" onclick="startHost()">Stream (Host)</button>
       </div>
     </div>
 
@@ -496,6 +497,13 @@
       document.getElementById('statusText').innerText = "Streaming to " + ip;
     }
 
+    function startClient() {
+      if (window.__TAURI__) {
+        window.__TAURI__.core.invoke('start_client', { bindPort: 48100 });
+      }
+      document.getElementById('statusText').innerText = "Client Active (Listening on port 48100)";
+    }
+
     function startHost() {
       const container = document.getElementById('deviceList');
       const firstConnectBtn = container.querySelector('button[data-ip]');
@@ -545,6 +553,23 @@
     }
 
     refreshDevices();
+
+    setInterval(async () => {
+      if (window.__TAURI__) {
+        try {
+          const m = await window.__TAURI__.core.invoke('get_metrics');
+          document.getElementById('rttVal').innerText = m.rtt_ms > 0 ? m.rtt_ms.toFixed(2) + " ms" : "0.00 ms";
+          document.getElementById('fpsVal').innerText = m.video_fps.toFixed(1) + " FPS";
+          document.getElementById('bitrateVal').innerText = m.bandwidth_mbps.toFixed(1) + " Mbps";
+          document.getElementById('displayStateVal').innerText = m.virtual_display_active ? "Attached" : "Detached";
+          if (m.is_active) {
+            document.getElementById('statusText').innerText = m.mode + " Active " + (m.peer_device ? "(" + m.peer_device + ")" : "");
+          } else {
+            document.getElementById('statusText').innerText = "Ready";
+          }
+        } catch (e) {}
+      }
+    }, 1000);
   </script>
 </body>
 </html>
