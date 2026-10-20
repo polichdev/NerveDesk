@@ -12,10 +12,11 @@ use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM
 use windows::Win32::System::Threading::{
     GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_TIME_CRITICAL,
 };
+use crate::edge::{ActiveLocation, EdgeConfig, EdgeDetector, ScreenEdge};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, DispatchMessageW, GetMessageW, PeekMessageW, PostThreadMessageW,
+    CallNextHookEx, DispatchMessageW, GetMessageW, GetSystemMetrics, PeekMessageW, PostThreadMessageW,
     SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx, HHOOK, KBDLLHOOKSTRUCT,
-    MSLLHOOKSTRUCT, MSG, PM_NOREMOVE, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_APP,
+    MSLLHOOKSTRUCT, MSG, PM_NOREMOVE, SM_CXSCREEN, SM_CYSCREEN, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_APP,
     WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP,
     WM_MOUSEHWHEEL, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_RBUTTONDOWN, WM_RBUTTONUP,
     WM_SYSKEYDOWN, WM_SYSKEYUP, WM_XBUTTONDOWN, WM_XBUTTONUP,
@@ -27,33 +28,71 @@ const XBUTTON2: u32 = 0x0002;
 static HOOK_SENDER: Mutex<Option<Sender<InputEvent>>> = Mutex::new(None);
 static CAPTURE_ACTIVE: AtomicBool = AtomicBool::new(false);
 static LAST_CURSOR_POS: Mutex<Option<POINT>> = Mutex::new(None);
+static EDGE_DETECTOR: Mutex<Option<EdgeDetector>> = Mutex::new(None);
+
+pub fn set_active_edge(edge: ScreenEdge) {
+    let w = unsafe { GetSystemMetrics(SM_CXSCREEN) };
+    let h = unsafe { GetSystemMetrics(SM_CYSCREEN) };
+    let config = EdgeConfig {
+        host_width: if w > 0 { w } else { 1920 },
+        host_height: if h > 0 { h } else { 1080 },
+        client_edge: edge,
+        trigger_threshold: 4,
+    };
+    if let Ok(mut guard) = EDGE_DETECTOR.lock() {
+        *guard = Some(EdgeDetector::new(config));
+    }
+}
 
 const WM_STOP_HOOK: u32 = WM_APP + 42;
 
 unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: LPARAM) -> LRESULT {
-    if n_code >= 0 && CAPTURE_ACTIVE.load(Ordering::Relaxed) {
+    if n_code >= 0 {
         let msg = w_param.0 as u32;
         let hook_struct = *(l_param.0 as *const MSLLHOOKSTRUCT);
 
         let mut event_to_send = None;
         let mut block_event = false;
 
-        match msg {
-            WM_MOUSEMOVE => {
-                let current_pt = hook_struct.pt;
-                if let Ok(mut guard) = LAST_CURSOR_POS.lock() {
-                    if let Some(last_pt) = *guard {
-                        let dx = current_pt.x - last_pt.x;
-                        let dy = current_pt.y - last_pt.y;
-                        if dx != 0 || dy != 0 {
-                            event_to_send = Some(InputEvent::MouseMove { dx, dy });
-                        }
+        if msg == WM_MOUSEMOVE {
+            let current_pt = hook_struct.pt;
+            let mut dx = 0;
+            let mut dy = 0;
+            if let Ok(mut guard) = LAST_CURSOR_POS.lock() {
+                if let Some(last_pt) = *guard {
+                    dx = current_pt.x - last_pt.x;
+                    dy = current_pt.y - last_pt.y;
+                }
+                *guard = Some(current_pt);
+            }
+
+            let mut transitioned = None;
+            if let Ok(mut edge_guard) = EDGE_DETECTOR.lock() {
+                if let Some(detector) = edge_guard.as_mut() {
+                    transitioned = detector.evaluate_motion(current_pt.x, current_pt.y, dx, dy);
+                }
+            }
+
+            if let Some(location) = transitioned {
+                match location {
+                    ActiveLocation::Client => {
+                        CAPTURE_ACTIVE.store(true, Ordering::SeqCst);
                     }
-                    *guard = Some(current_pt);
+                    ActiveLocation::Host => {
+                        CAPTURE_ACTIVE.store(false, Ordering::SeqCst);
+                    }
+                }
+            }
+
+            if CAPTURE_ACTIVE.load(Ordering::Relaxed) {
+                if dx != 0 || dy != 0 {
+                    event_to_send = Some(InputEvent::MouseMove { dx, dy });
                 }
                 block_event = true;
             }
-            WM_LBUTTONDOWN => {
+        } else if CAPTURE_ACTIVE.load(Ordering::Relaxed) {
+            match msg {
+                WM_LBUTTONDOWN => {
                 event_to_send = Some(InputEvent::MouseButton {
                     button: MouseButton::Left,
                     state: ButtonState::Pressed,
@@ -143,6 +182,7 @@ unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: LPAR
             }
             _ => {}
         }
+    }
 
         if let Some(event) = event_to_send {
             if let Ok(guard) = HOOK_SENDER.lock() {
@@ -213,6 +253,7 @@ pub struct InputHookManager {
 
 impl InputHookManager {
     pub fn start(event_sender: Sender<InputEvent>) -> Result<Self> {
+        set_active_edge(ScreenEdge::Right);
         let (init_tx, init_rx) = crossbeam_channel::bounded::<Result<u32>>(1);
         let is_capturing = Arc::new(AtomicBool::new(false));
         let is_capturing_clone = is_capturing.clone();
@@ -305,6 +346,11 @@ impl InputHookManager {
     pub fn set_capturing(&self, active: bool) {
         CAPTURE_ACTIVE.store(active, Ordering::SeqCst);
         self.is_capturing.store(active, Ordering::SeqCst);
+        if let Ok(mut guard) = EDGE_DETECTOR.lock() {
+            if let Some(detector) = guard.as_mut() {
+                detector.set_location(if active { ActiveLocation::Client } else { ActiveLocation::Host });
+            }
+        }
         if !active {
             if let Ok(mut guard) = LAST_CURSOR_POS.lock() {
                 *guard = None;

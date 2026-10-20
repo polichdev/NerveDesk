@@ -156,6 +156,16 @@ async fn start_host(
     let hook_manager = InputHookManager::start(event_tx)
         .map_err(|e| format!("Failed to install input hooks: {e}"))?;
 
+    let edge_str = state.screen_edge.lock().unwrap().clone();
+    let screen_edge = match edge_str.as_str() {
+        "Left" => input::ScreenEdge::Left,
+        "Right" => input::ScreenEdge::Right,
+        "Top" => input::ScreenEdge::Top,
+        "Bottom" => input::ScreenEdge::Bottom,
+        _ => input::ScreenEdge::Right,
+    };
+    input::set_active_edge(screen_edge);
+
     let is_running_in = state.is_running.clone();
 
     let input_worker = tokio::spawn(async move {
@@ -372,6 +382,14 @@ fn stop_service(state: State<'_, AppState>) -> Result<String, String> {
 fn set_screen_edge(edge: String, state: State<'_, AppState>) -> Result<String, String> {
     info!("Setting screen transition edge to {}", edge);
     *state.screen_edge.lock().unwrap() = edge.clone();
+    let screen_edge = match edge.as_str() {
+        "Left" => input::ScreenEdge::Left,
+        "Right" => input::ScreenEdge::Right,
+        "Top" => input::ScreenEdge::Top,
+        "Bottom" => input::ScreenEdge::Bottom,
+        _ => input::ScreenEdge::Right,
+    };
+    input::set_active_edge(screen_edge);
     Ok(format!("Edge set to {}", edge))
 }
 
