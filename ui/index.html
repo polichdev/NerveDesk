@@ -696,8 +696,9 @@
               <div class="monitor-label" id="peerBoxLabel"></div>
               <div class="monitor-sub" id="peerBoxSub">Connected</div>
               <div id="peerContextMenu" style="display: none; position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); background: #1c1c20; border: 1px solid #33333a; border-radius: 6px; padding: 4px; box-shadow: 0 8px 24px rgba(0,0,0,0.6); z-index: 100; min-width: 150px; flex-direction: column; gap: 4px;">
+                <button class="btn btn-secondary" id="btnPeerReconnect" style="width: 100%; font-size: 12px; padding: 6px 12px; justify-content: flex-start; color: #38bdf8;" onclick="reconnectCurrentPeer(event)">Reconnect</button>
                 <button class="btn btn-secondary" id="btnPeerToggleDisable" style="width: 100%; font-size: 12px; padding: 6px 12px; justify-content: flex-start;" onclick="togglePeerDisabled(event)">Disable Device</button>
-                <button class="btn btn-secondary" style="width: 100%; color: #ef4444; border-color: rgba(239,68,68,0.3); font-size: 12px; padding: 6px 12px; justify-content: flex-start;" onclick="disconnectCurrentPeer(event)">Disconnect</button>
+                <button class="btn btn-secondary" style="width: 100%; color: #ef4444; border-color: rgba(239,68,68,0.3); font-size: 12px; padding: 6px 12px; justify-content: flex-start;" onclick="disconnectCurrentPeer(event)">Forget Device</button>
               </div>
             </div>
 
@@ -714,6 +715,12 @@
             <div style="display: flex; gap: 8px; align-items: center;">
               <span style="font-size: 12px; color: var(--text-dark);">Transition Edge:</span>
               <button class="btn btn-secondary" id="edgeToggleBtn" onclick="cycleEdge()">Right Edge</button>
+            </div>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <button class="btn btn-secondary" id="btnReconnectDevice" onclick="reconnectCurrentPeer()" style="display: none; font-size: 12px; padding: 6px 12px; border-color: #38bdf8; color: #38bdf8; gap: 6px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                Reconnect Device
+              </button>
             </div>
           </div>
         </div>
@@ -1120,6 +1127,57 @@
       }
     }
 
+    async function reconnectCurrentPeer(e) {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      const menu = document.getElementById('peerContextMenu');
+      if (menu) menu.style.display = 'none';
+
+      const target = localStorage.getItem('paired_device_name');
+      const key = localStorage.getItem('paired_security_key') || '';
+      if (!target) return;
+
+      const sub = document.getElementById('peerBoxSub');
+      const box = document.getElementById('monitorBoxPeer');
+      const btn = document.getElementById('btnReconnectDevice');
+
+      if (sub) {
+        sub.innerText = 'Connecting...';
+        sub.style.color = '#f59e0b';
+      }
+      if (btn) {
+        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg> Connecting...';
+        btn.style.opacity = '0.7';
+      }
+
+      try {
+        await callTauri('pair_device', { targetName: target, securityKey: key });
+        isPeerDisabled = false;
+        localStorage.setItem('peer_device_disabled', 'false');
+        if (sub) {
+          sub.innerText = 'Connected';
+          sub.style.color = '#4ade80';
+        }
+        if (box) {
+          box.style.opacity = '1';
+          box.style.borderStyle = 'solid';
+        }
+        if (btn) btn.style.display = 'none';
+      } catch (err) {
+        if (sub) {
+          sub.innerText = 'Offline (Click Reconnect)';
+          sub.style.color = '#ef4444';
+        }
+        if (btn) {
+          btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg> Reconnect Device';
+          btn.style.display = 'inline-flex';
+          btn.style.opacity = '1';
+        }
+      }
+    }
+
     async function togglePeerDisabled(e) {
       if (e) {
         e.preventDefault();
@@ -1135,8 +1193,11 @@
           await callTauri('stop_service');
         } catch (err) {}
         document.getElementById('peerBoxSub').innerText = 'Disabled';
+        document.getElementById('peerBoxSub').style.color = 'var(--text-dark)';
         document.getElementById('monitorBoxPeer').style.opacity = '0.5';
         document.getElementById('monitorBoxPeer').style.borderStyle = 'dashed';
+        const reconnectBtn = document.getElementById('btnReconnectDevice');
+        if (reconnectBtn) reconnectBtn.style.display = 'none';
       } else {
         isPeerDisabled = false;
         localStorage.setItem('peer_device_disabled', 'false');
@@ -1148,8 +1209,11 @@
           } catch (err) {}
         }
         document.getElementById('peerBoxSub').innerText = 'Connected';
+        document.getElementById('peerBoxSub').style.color = '#4ade80';
         document.getElementById('monitorBoxPeer').style.opacity = '1';
         document.getElementById('monitorBoxPeer').style.borderStyle = 'solid';
+        const reconnectBtn = document.getElementById('btnReconnectDevice');
+        if (reconnectBtn) reconnectBtn.style.display = 'none';
       }
     }
 
@@ -1174,6 +1238,8 @@
       if (menu) menu.style.display = 'none';
       document.getElementById('peerAvailableSlot').style.display = 'flex';
       document.getElementById('monitorBoxPeer').style.display = 'none';
+      const reconnectBtn = document.getElementById('btnReconnectDevice');
+      if (reconnectBtn) reconnectBtn.style.display = 'none';
     }
 
     function selectMonitorBox(which) {
@@ -1325,13 +1391,18 @@
         if (isDisabled) {
           isPeerDisabled = true;
           document.getElementById('peerBoxSub').innerText = "Disabled";
+          document.getElementById('peerBoxSub').style.color = "var(--text-dark)";
           document.getElementById('monitorBoxPeer').style.opacity = "0.5";
           document.getElementById('monitorBoxPeer').style.borderStyle = "dashed";
         } else {
           isPeerDisabled = false;
-          document.getElementById('peerBoxSub').innerText = "Connected";
+          document.getElementById('peerBoxSub').innerText = "Connecting...";
+          document.getElementById('peerBoxSub').style.color = "#f59e0b";
           document.getElementById('monitorBoxPeer').style.opacity = "1";
           document.getElementById('monitorBoxPeer').style.borderStyle = "solid";
+          const reconnectBtn = document.getElementById('btnReconnectDevice');
+          if (reconnectBtn) reconnectBtn.style.display = 'inline-flex';
+          reconnectCurrentPeer();
         }
       } else {
         document.getElementById('peerAvailableSlot').style.display = 'flex';
@@ -1374,23 +1445,46 @@
           activeEdge = m.screen_edge;
           document.getElementById('edgeToggleBtn').innerText = activeEdge + ' Edge';
         }
-        if (m.peer_device && !isPeerDisabled) {
-          let peerName = m.peer_device;
+        const savedPeer = localStorage.getItem('paired_device_name');
+        if (savedPeer && !isPeerDisabled) {
+          let peerName = m.peer_device || savedPeer;
           if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(peerName)) {
-            const saved = localStorage.getItem('paired_device_name');
-            if (saved && !/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(saved)) {
-              peerName = saved;
+            if (!/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(savedPeer)) {
+              peerName = savedPeer;
             }
           }
           document.getElementById('peerAvailableSlot').style.display = 'none';
           document.getElementById('monitorBoxPeer').style.display = 'flex';
           document.getElementById('peerBoxLabel').innerText = peerName.toUpperCase();
-          document.getElementById('peerBoxSub').innerText = "Connected";
-          document.getElementById('monitorBoxPeer').style.opacity = "1";
-          document.getElementById('monitorBoxPeer').style.borderStyle = "solid";
-          if (!/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(peerName)) {
-            localStorage.setItem('paired_device_name', peerName);
+          const sub = document.getElementById('peerBoxSub');
+          const reconnectBtn = document.getElementById('btnReconnectDevice');
+          if (m.is_active) {
+            if (sub) {
+              sub.innerText = "Connected";
+              sub.style.color = "#4ade80";
+            }
+            document.getElementById('monitorBoxPeer').style.opacity = "1";
+            document.getElementById('monitorBoxPeer').style.borderStyle = "solid";
+            if (reconnectBtn) reconnectBtn.style.display = "none";
+          } else {
+            if (sub && sub.innerText !== "Connecting...") {
+              sub.innerText = "Offline (Click Reconnect)";
+              sub.style.color = "#f59e0b";
+            }
+            if (reconnectBtn && sub && sub.innerText !== "Connecting...") {
+              reconnectBtn.style.display = "inline-flex";
+              reconnectBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg> Reconnect Device';
+              reconnectBtn.style.opacity = "1";
+            }
           }
+          if (m.peer_device && !/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(m.peer_device)) {
+            localStorage.setItem('paired_device_name', m.peer_device);
+          }
+        } else if (!savedPeer) {
+          document.getElementById('peerAvailableSlot').style.display = 'flex';
+          document.getElementById('monitorBoxPeer').style.display = 'none';
+          const reconnectBtn = document.getElementById('btnReconnectDevice');
+          if (reconnectBtn) reconnectBtn.style.display = 'none';
         }
       } catch (e) {}
     }, 1000);
