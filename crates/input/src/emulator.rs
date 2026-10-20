@@ -2,7 +2,7 @@ use common::{ButtonState, InputEvent, KeyState, MouseButton, Result};
 use tracing::warn;
 
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT,
+    keybd_event, SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT,
     KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, KEYEVENTF_SCANCODE, MOUSEEVENTF_HWHEEL,
     MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_MIDDLEDOWN,
     MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_MOVE, MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP,
@@ -148,7 +148,7 @@ impl InputEmulator {
         }
 
         let (vk, scan) = if vk_code != 0 {
-            (VIRTUAL_KEY(vk_code), scan_code)
+            (VIRTUAL_KEY(vk_code), 0)
         } else if scan_code != 0 {
             flags |= KEYEVENTF_SCANCODE;
             (VIRTUAL_KEY(0), scan_code)
@@ -170,7 +170,19 @@ impl InputEmulator {
         };
 
         unsafe {
-            SendInput(&[input], std::mem::size_of::<INPUT>() as i32);
+            let sent = SendInput(&[input], std::mem::size_of::<INPUT>() as i32);
+            if sent == 0 {
+                let b_vk = (vk_code & 0xFF) as u8;
+                let b_scan = (scan_code & 0xFF) as u8;
+                let mut dw_flags = windows::Win32::UI::Input::KeyboardAndMouse::KEYBD_EVENT_FLAGS(0);
+                if state == KeyState::KeyUp {
+                    dw_flags |= KEYEVENTF_KEYUP;
+                }
+                if is_extended {
+                    dw_flags |= KEYEVENTF_EXTENDEDKEY;
+                }
+                keybd_event(b_vk, b_scan, dw_flags, 0);
+            }
         }
         Ok(())
     }

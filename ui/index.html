@@ -722,6 +722,24 @@
           <div class="setting-card">
             <div class="setting-left">
               <div class="setting-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="6" y1="8" x2="6.01" y2="8"/><line x1="10" y1="8" x2="10.01" y2="8"/><line x1="14" y1="8" x2="14.01" y2="8"/><line x1="18" y1="8" x2="18.01" y2="8"/><line x1="6" y1="12" x2="6.01" y2="12"/><line x1="10" y1="12" x2="10.01" y2="12"/><line x1="14" y1="12" x2="14.01" y2="12"/><line x1="18" y1="12" x2="18.01" y2="12"/><line x1="7" y1="16" x2="17" y2="16"/></svg>
+              </div>
+              <div class="setting-text">
+                <div class="setting-name">Share Keyboard across computers</div>
+                <div class="setting-desc">Forward keystrokes seamlessly to the remote computer when cursor crosses screen edges.</div>
+              </div>
+            </div>
+            <div class="setting-right">
+              <label class="switch">
+                <input type="checkbox" id="kvmKbToggle" checked onchange="onKeyboardSharingToggle(this.checked)">
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="setting-card">
+            <div class="setting-left">
+              <div class="setting-icon">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
               </div>
               <div class="setting-text">
@@ -731,7 +749,7 @@
             </div>
             <div class="setting-right">
               <label class="switch">
-                <input type="checkbox" checked>
+                <input type="checkbox" id="kvmClipToggle" checked onchange="onClipboardSharingToggle(this.checked)">
                 <span class="slider"></span>
               </label>
             </div>
@@ -1168,11 +1186,19 @@
 
     function onKeyboardSharingToggle(checked) {
       localStorage.setItem('keyboard_sharing_enabled', checked ? 'true' : 'false');
+      const e1 = document.getElementById('kvmKbToggle');
+      const e2 = document.getElementById('settingKbSharing');
+      if (e1) e1.checked = checked;
+      if (e2) e2.checked = checked;
       callTauri('set_keyboard_sharing_enabled', { enabled: checked }).catch(() => {});
     }
 
     function onClipboardSharingToggle(checked) {
       localStorage.setItem('clipboard_sharing_enabled', checked ? 'true' : 'false');
+      const e1 = document.getElementById('kvmClipToggle');
+      const e2 = document.getElementById('settingClipSharing');
+      if (e1) e1.checked = checked;
+      if (e2) e2.checked = checked;
       callTauri('set_clipboard_sharing_enabled', { enabled: checked }).catch(() => {});
     }
 
@@ -1211,8 +1237,12 @@
       const clipSharing = localStorage.getItem('clipboard_sharing_enabled') !== 'false';
       const kbElem = document.getElementById('settingKbSharing');
       const clipElem = document.getElementById('settingClipSharing');
+      const kvmKb = document.getElementById('kvmKbToggle');
+      const kvmClip = document.getElementById('kvmClipToggle');
       if (kbElem) kbElem.checked = kbSharing;
       if (clipElem) clipElem.checked = clipSharing;
+      if (kvmKb) kvmKb.checked = kbSharing;
+      if (kvmClip) kvmClip.checked = clipSharing;
       callTauri('set_keyboard_sharing_enabled', { enabled: kbSharing }).catch(() => {});
       callTauri('set_clipboard_sharing_enabled', { enabled: clipSharing }).catch(() => {});
     }

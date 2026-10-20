@@ -54,13 +54,15 @@ pub struct ClipboardPacket {
 }
 
 pub struct AppState {
-    pub is_running: Arc<AtomicBool>,
+    pub is_kvm_active: Arc<AtomicBool>,
+    pub is_projecting: Arc<AtomicBool>,
     pub mode: Mutex<String>,
     pub peer_device: Arc<Mutex<Option<String>>>,
     pub screen_edge: Mutex<String>,
     pub display_manager: VirtualDisplayManager,
     pub hook_manager: Mutex<Option<InputHookManager>>,
-    pub active_workers: Mutex<Vec<tokio::task::JoinHandle<()>>>,
+    pub kvm_workers: Mutex<Vec<tokio::task::JoinHandle<()>>>,
+    pub projection_workers: Mutex<Vec<tokio::task::JoinHandle<()>>>,
     pub live_rtt_us: Arc<AtomicU64>,
     pub live_fps_x10: Arc<AtomicU64>,
     pub live_mbps_x10: Arc<AtomicU64>,
@@ -72,24 +74,73 @@ pub struct AppState {
     pub clipboard_hash: Arc<AtomicU64>,
 }
 
-fn stop_service_internal(state: &AppState) {
-    state.is_running.store(false, Ordering::SeqCst);
+fn update_mode_string(state: &AppState) {
+    let kvm = state.is_kvm_active.load(Ordering::SeqCst);
+    let proj = state.is_projecting.load(Ordering::SeqCst);
+    let m = match (kvm, proj) {
+        (true, true) => "KVM & Projection Active",
+        (true, false) => "KVM Active",
+        (false, true) => "Projection Active",
+        (false, false) => "Idle",
+    };
+    *state.mode.lock().unwrap() = m.into();
+}
+
+fn stop_kvm_internal(state: &AppState) {
+    state.is_kvm_active.store(false, Ordering::SeqCst);
     if let Ok(mut guard) = state.hook_manager.lock() {
         if let Some(mut hook) = guard.take() {
             hook.stop();
         }
     }
-    if let Ok(mut workers) = state.active_workers.lock() {
+    if let Ok(mut workers) = state.kvm_workers.lock() {
         for w in workers.drain(..) {
             w.abort();
         }
     }
-    let _ = state.display_manager.unplug_display();
-    *state.mode.lock().unwrap() = "Idle".into();
-    *state.peer_device.lock().unwrap() = None;
     state.live_rtt_us.store(0, Ordering::Relaxed);
+    update_mode_string(state);
+}
+
+fn stop_projection_internal(state: &AppState) {
+    state.is_projecting.store(false, Ordering::SeqCst);
+    let _ = state.display_manager.unplug_display();
+    if let Ok(mut workers) = state.projection_workers.lock() {
+        for w in workers.drain(..) {
+            w.abort();
+        }
+    }
     state.live_fps_x10.store(0, Ordering::Relaxed);
     state.live_mbps_x10.store(0, Ordering::Relaxed);
+    update_mode_string(state);
+}
+
+async fn resolve_target_ip(target_ip: &str, state: &AppState) -> Result<String, String> {
+    let host_part = if let Some((h, _)) = target_ip.split_once(':') {
+        h
+    } else {
+        target_ip
+    };
+
+    if let Ok(ip) = host_part.parse::<std::net::IpAddr>() {
+        return Ok(ip.to_string());
+    }
+
+    if let Ok(guard) = state.discovered_devices.lock() {
+        for d in guard.values() {
+            if d.name.eq_ignore_ascii_case(host_part) {
+                return Ok(d.ip.clone());
+            }
+        }
+    }
+
+    if let Ok(mut addrs) = tokio::net::lookup_host(format!("{host_part}:48100")).await {
+        if let Some(addr) = addrs.next() {
+            return Ok(addr.ip().to_string());
+        }
+    }
+
+    Err(format!("Device not reachable: {host_part}"))
 }
 
 #[command]
@@ -126,7 +177,7 @@ fn get_metrics(state: State<AppState>) -> AppMetrics {
     }
 
     let edge = state.screen_edge.lock().unwrap().clone();
-    let is_active = state.is_running.load(Ordering::SeqCst);
+    let is_active = state.is_kvm_active.load(Ordering::SeqCst) || state.is_projecting.load(Ordering::SeqCst);
     let v_display = state.display_manager.is_plugged();
 
     let rtt_us = state.live_rtt_us.load(Ordering::Relaxed);
@@ -203,38 +254,9 @@ async fn start_host(
     stream_video: bool,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    stop_service_internal(&state);
+    stop_kvm_internal(&state);
 
-    let host_part = if let Some((h, _)) = target_ip.split_once(':') {
-        h
-    } else {
-        target_ip.as_str()
-    };
-
-    let resolved_ip = if let Ok(ip) = host_part.parse::<std::net::IpAddr>() {
-        ip.to_string()
-    } else {
-        let mut found_ip = None;
-        if let Ok(guard) = state.discovered_devices.lock() {
-            for d in guard.values() {
-                if d.name.eq_ignore_ascii_case(host_part) {
-                    found_ip = Some(d.ip.clone());
-                    break;
-                }
-            }
-        }
-        if let Some(ip) = found_ip {
-            ip
-        } else if let Ok(mut addrs) = tokio::net::lookup_host(format!("{host_part}:48100")).await {
-            if let Some(addr) = addrs.next() {
-                addr.ip().to_string()
-            } else {
-                return Err(format!("Could not resolve device name: {host_part}"));
-            }
-        } else {
-            return Err(format!("Device not reachable: {host_part}"));
-        }
-    };
+    let resolved_ip = resolve_target_ip(&target_ip, &state).await?;
 
     if let Ok(mut ip_guard) = state.paired_peer_ip.lock() {
         *ip_guard = Some(resolved_ip.clone());
@@ -244,9 +266,7 @@ async fn start_host(
         .parse()
         .map_err(|e| format!("Invalid target address: {e}"))?;
 
-    let video_target: SocketAddr = SocketAddr::new(target_addr.ip(), 48101);
-
-    info!("Starting internal Host engine -> input={}, video={}", target_addr, video_target);
+    info!("Starting internal Host KVM engine -> input={}", target_addr);
 
     let input_sender = UdpInputSender::new(target_addr)
         .await
@@ -274,7 +294,8 @@ async fn start_host(
     }
     input::set_active_edge_and_resolution(screen_edge, client_w, client_h);
 
-    let is_running_in = state.is_running.clone();
+    let is_running_in = state.is_kvm_active.clone();
+    is_running_in.store(true, Ordering::SeqCst);
 
     let _ = input_sender.send_event(&InputEvent::Heartbeat).await;
 
@@ -292,107 +313,8 @@ async fn start_host(
         }
     });
 
-    let mut workers = vec![input_worker];
-
-    if stream_video {
-        let _ = state.display_manager.plug_display();
-        let is_running_vid = state.is_running.clone();
-        let fps_holder = state.live_fps_x10.clone();
-        let mbps_holder = state.live_mbps_x10.clone();
-
-        let vid_worker = tokio::spawn(async move {
-            let video_sender = match VideoSender::new(video_target).await {
-                Ok(s) => s,
-                Err(e) => {
-                    error!("VideoSender error: {:?}", e);
-                    return;
-                }
-            };
-
-            let config = DxgiCaptureConfig::default();
-            let mut duplicator = match DxgiOutputDuplicator::new(config) {
-                Ok(d) => d,
-                Err(e) => {
-                    error!("DxgiDuplicator error: {:?}", e);
-                    return;
-                }
-            };
-
-            let (w, h) = duplicator.dimensions();
-            let encoder_config = VideoEncoderConfig {
-                width: w,
-                height: h,
-                fps: 60,
-                bitrate_bps: 10_000_000,
-                keyframe_interval: 120,
-            };
-            let encoder = match HardwareVideoEncoder::new(encoder_config) {
-                Ok(enc) => enc,
-                Err(e) => {
-                    error!("Encoder error: {:?}", e);
-                    return;
-                }
-            };
-
-            let mut frame_count = 0u64;
-            let mut total_bytes = 0u64;
-            let mut last_report = Instant::now();
-
-            while is_running_vid.load(Ordering::SeqCst) {
-                let start_frame = Instant::now();
-                let now_us = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_micros() as u64;
-
-                match duplicator.acquire_frame() {
-                    Ok(Some(frame)) => {
-                        let is_key = frame_count % 120 == 0;
-                        match encoder.encode_frame(&frame.texture, now_us, is_key) {
-                            Ok(encoded_frame) => {
-                                if let Ok(sent_bytes) = video_sender.send_frame(&encoded_frame).await {
-                                    total_bytes += sent_bytes as u64;
-                                    frame_count += 1;
-                                }
-                            }
-                            Err(_) => {}
-                        }
-                    }
-                    Ok(None) => {
-                        tokio::time::sleep(Duration::from_millis(1)).await;
-                    }
-                    Err(_) => {
-                        tokio::time::sleep(Duration::from_millis(16)).await;
-                    }
-                }
-
-                if last_report.elapsed() >= Duration::from_secs(1) {
-                    let elapsed = last_report.elapsed().as_secs_f64();
-                    let fps = (frame_count as f64) / elapsed;
-                    let mbps = ((total_bytes * 8) as f64) / (elapsed * 1_000_000.0);
-
-                    fps_holder.store((fps * 10.0) as u64, Ordering::Relaxed);
-                    mbps_holder.store((mbps * 10.0) as u64, Ordering::Relaxed);
-
-                    frame_count = 0;
-                    total_bytes = 0;
-                    last_report = Instant::now();
-                }
-
-                let frame_time = start_frame.elapsed();
-                if frame_time < Duration::from_millis(16) {
-                    tokio::time::sleep(Duration::from_millis(16) - frame_time).await;
-                }
-            }
-        });
-
-        workers.push(vid_worker);
-    }
-
     *state.hook_manager.lock().unwrap() = Some(hook_manager);
-    *state.active_workers.lock().unwrap() = workers;
-    state.is_running.store(true, Ordering::SeqCst);
-    *state.mode.lock().unwrap() = if stream_video { "Cast & KVM".into() } else { "KVM Active".into() };
+    *state.kvm_workers.lock().unwrap() = vec![input_worker];
 
     let display_name = if let Ok(guard) = state.discovered_devices.lock() {
         if let Some(d) = guard.get(&target_addr.ip().to_string()) {
@@ -405,127 +327,144 @@ async fn start_host(
     };
     *state.peer_device.lock().unwrap() = Some(display_name);
 
+    if stream_video {
+        let _ = start_virtual_display_cast(target_ip.clone(), true, state.clone()).await;
+    }
+
+    update_mode_string(&state);
     Ok(format!("Host service active -> {}", target_addr))
 }
 
 #[command]
-async fn start_client(
-    bind_port: u16,
+async fn start_virtual_display_cast(
+    target_name: String,
+    extend_mode: bool,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    stop_service_internal(&state);
+    stop_projection_internal(&state);
 
-    let input_bind: SocketAddr = format!("0.0.0.0:{bind_port}")
-        .parse()
-        .map_err(|e| format!("Invalid input port: {e}"))?;
+    let resolved_ip = resolve_target_ip(&target_name, &state).await?;
 
-    let video_bind: SocketAddr = format!("0.0.0.0:{}", bind_port + 1)
-        .parse()
-        .map_err(|e| format!("Invalid video port: {e}"))?;
-
-    info!("Starting internal Client engine on input={}, video={}", input_bind, video_bind);
-
-    let mut input_receiver = UdpInputReceiver::bind(input_bind)
-        .await
-        .map_err(|e| format!("Failed to bind input receiver: {e}"))?;
-
-    let emulator = InputEmulator::new();
-    let is_running_in = state.is_running.clone();
-    let rtt_holder = state.live_rtt_us.clone();
-    let kb_sharing = state.keyboard_sharing.clone();
-    let peer_ip_ref = state.paired_peer_ip.clone();
-
-    let input_worker = tokio::spawn(async move {
-        while is_running_in.load(Ordering::SeqCst) {
-            match input_receiver.recv_event().await {
-                Ok((header, event, peer)) => {
-                    if let Ok(guard) = peer_ip_ref.lock() {
-                        if let Some(ref allowed_ip) = *guard {
-                            if peer.ip().to_string() != *allowed_ip && peer.ip().to_string() != "127.0.0.1" {
-                                continue;
-                            }
-                        }
-                    }
-
-                    if let InputEvent::Keyboard { .. } = event {
-                        if !kb_sharing.load(Ordering::Relaxed) {
-                            continue;
-                        }
-                    }
-
-                    let now_us = SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_micros() as u64;
-                    let latency_us = now_us.saturating_sub(header.timestamp_us);
-                    rtt_holder.store(latency_us, Ordering::Relaxed);
-                    let _ = emulator.inject(&event);
-                }
-                Err(_) => {
-                    tokio::time::sleep(Duration::from_millis(5)).await;
-                }
-            }
+    if let Ok(mut ip_guard) = state.paired_peer_ip.lock() {
+        if ip_guard.is_none() {
+            *ip_guard = Some(resolved_ip.clone());
         }
-    });
+    }
 
-    let is_running_vid = state.is_running.clone();
+    if extend_mode {
+        let _ = state.display_manager.plug_display();
+    }
+
+    let video_target: SocketAddr = format!("{}:48101", resolved_ip)
+        .parse()
+        .map_err(|e| format!("Invalid video target address: {e}"))?;
+
+    let is_running_vid = state.is_projecting.clone();
+    is_running_vid.store(true, Ordering::SeqCst);
     let fps_holder = state.live_fps_x10.clone();
+    let mbps_holder = state.live_mbps_x10.clone();
 
-    let video_worker = tokio::spawn(async move {
-        let mut video_receiver = match VideoReceiver::bind(video_bind).await {
-            Ok(r) => r,
+    let vid_worker = tokio::spawn(async move {
+        let video_sender = match VideoSender::new(video_target).await {
+            Ok(s) => s,
             Err(e) => {
-                error!("Failed to bind video receiver: {:?}", e);
+                error!("VideoSender error: {:?}", e);
                 return;
             }
         };
 
-        let decoder_config = VideoDecoderConfig::default();
-        let mut decoder = match HardwareVideoDecoder::new(decoder_config) {
+        let config = DxgiCaptureConfig::default();
+        let mut duplicator = match DxgiOutputDuplicator::new(config) {
             Ok(d) => d,
             Err(e) => {
-                error!("Failed to init decoder: {:?}", e);
+                error!("DxgiDuplicator error: {:?}", e);
                 return;
             }
         };
 
-        let mut frames = 0u64;
-        let mut last_rep = Instant::now();
+        let (w, h) = duplicator.dimensions();
+        let encoder_config = VideoEncoderConfig {
+            width: w,
+            height: h,
+            fps: 60,
+            bitrate_bps: 10_000_000,
+            keyframe_interval: 120,
+        };
+        let encoder = match HardwareVideoEncoder::new(encoder_config) {
+            Ok(enc) => enc,
+            Err(e) => {
+                error!("Encoder error: {:?}", e);
+                return;
+            }
+        };
+
+        let mut frame_count = 0u64;
+        let mut total_bytes = 0u64;
+        let mut last_report = Instant::now();
 
         while is_running_vid.load(Ordering::SeqCst) {
-            match video_receiver.recv_frame().await {
-                Ok((frame_id, _is_keyframe, timestamp_us, frame_data)) => {
-                    if decoder.decode_frame(frame_id, timestamp_us, &frame_data).is_ok() {
-                        frames += 1;
+            let start_frame = Instant::now();
+            let now_us = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_micros() as u64;
+
+            match duplicator.acquire_frame() {
+                Ok(Some(frame)) => {
+                    let is_key = frame_count % 120 == 0;
+                    match encoder.encode_frame(&frame.texture, now_us, is_key) {
+                        Ok(encoded_frame) => {
+                            if let Ok(sent_bytes) = video_sender.send_frame(&encoded_frame).await {
+                                total_bytes += sent_bytes as u64;
+                                frame_count += 1;
+                            }
+                        }
+                        Err(_) => {}
                     }
                 }
+                Ok(None) => {
+                    tokio::time::sleep(Duration::from_millis(1)).await;
+                }
                 Err(_) => {
-                    tokio::time::sleep(Duration::from_millis(2)).await;
+                    tokio::time::sleep(Duration::from_millis(16)).await;
                 }
             }
 
-            if last_rep.elapsed() >= Duration::from_secs(1) {
-                let el = last_rep.elapsed().as_secs_f64();
-                let fps = (frames as f64) / el;
+            if last_report.elapsed() >= Duration::from_secs(1) {
+                let elapsed = last_report.elapsed().as_secs_f64();
+                let fps = (frame_count as f64) / elapsed;
+                let mbps = ((total_bytes * 8) as f64) / (elapsed * 1_000_000.0);
+
                 fps_holder.store((fps * 10.0) as u64, Ordering::Relaxed);
-                frames = 0;
-                last_rep = Instant::now();
+                mbps_holder.store((mbps * 10.0) as u64, Ordering::Relaxed);
+
+                frame_count = 0;
+                total_bytes = 0;
+                last_report = Instant::now();
+            }
+
+            let frame_time = start_frame.elapsed();
+            if frame_time < Duration::from_millis(16) {
+                tokio::time::sleep(Duration::from_millis(16) - frame_time).await;
             }
         }
     });
 
-    *state.active_workers.lock().unwrap() = vec![input_worker, video_worker];
-    state.is_running.store(true, Ordering::SeqCst);
-    *state.mode.lock().unwrap() = "Client Listening".into();
-    *state.peer_device.lock().unwrap() = Some(format!("0.0.0.0:{bind_port}"));
+    *state.projection_workers.lock().unwrap() = vec![vid_worker];
+    update_mode_string(&state);
 
-    Ok(format!("Client receiver active on port {}", bind_port))
+    Ok(format!("Projection active -> {}", video_target))
+}
+
+#[command]
+fn stop_virtual_display_cast(state: State<'_, AppState>) {
+    stop_projection_internal(&state);
 }
 
 #[command]
 fn stop_service(state: State<'_, AppState>) -> Result<String, String> {
-    stop_service_internal(&state);
-    Ok("Engine safely terminated".into())
+    stop_kvm_internal(&state);
+    Ok("KVM stopped safely".into())
 }
 
 #[command]
@@ -593,33 +532,17 @@ fn open_display_settings() {
         .spawn();
 }
 
-#[command]
-async fn start_virtual_display_cast(
-    target_name: String,
-    extend_mode: bool,
-    state: State<'_, AppState>,
-) -> Result<String, String> {
-    if extend_mode {
-        let _ = state.display_manager.plug_display();
-    }
-    start_host(target_name, true, state).await
-}
-
-#[command]
-fn stop_virtual_display_cast(state: State<'_, AppState>) {
-    let _ = state.display_manager.unplug_display();
-    stop_service_internal(&state);
-}
-
 pub fn run() {
     let state = AppState {
-        is_running: Arc::new(AtomicBool::new(false)),
+        is_kvm_active: Arc::new(AtomicBool::new(false)),
+        is_projecting: Arc::new(AtomicBool::new(false)),
         mode: Mutex::new("Idle".into()),
         peer_device: Arc::new(Mutex::new(None)),
         screen_edge: Mutex::new("Right".into()),
         display_manager: VirtualDisplayManager::new(),
         hook_manager: Mutex::new(None),
-        active_workers: Mutex::new(Vec::new()),
+        kvm_workers: Mutex::new(Vec::new()),
+        projection_workers: Mutex::new(Vec::new()),
         live_rtt_us: Arc::new(AtomicU64::new(0)),
         live_fps_x10: Arc::new(AtomicU64::new(0)),
         live_mbps_x10: Arc::new(AtomicU64::new(0)),
@@ -699,11 +622,11 @@ pub fn run() {
         loop {
             match receiver.recv_event().await {
                 Ok((header, event, peer)) => {
-                    if let Ok(guard) = paired_ip_for_rx.lock() {
-                        if let Some(ref allowed_ip) = *guard {
-                            if peer.ip().to_string() != *allowed_ip && peer.ip().to_string() != "127.0.0.1" {
-                                continue;
-                            }
+                    let peer_ip = peer.ip().to_string();
+
+                    if let Ok(mut ip_guard) = paired_ip_for_rx.lock() {
+                        if ip_guard.is_none() {
+                            *ip_guard = Some(peer_ip.clone());
                         }
                     }
 
@@ -720,7 +643,6 @@ pub fn run() {
                     let latency_us = now_us.saturating_sub(header.timestamp_us);
                     live_rtt_for_rx.store(latency_us, Ordering::Relaxed);
 
-                    let peer_ip = peer.ip().to_string();
                     let peer_name = if let Ok(guard) = discovered_for_rx.lock() {
                         if let Some(d) = guard.get(&peer_ip) {
                             d.name.clone()
@@ -771,11 +693,10 @@ pub fn run() {
                 continue;
             }
 
-            if let Ok(guard) = paired_ip_for_srv.lock() {
-                if let Some(ref allowed_ip) = *guard {
-                    if peer_addr.ip().to_string() != *allowed_ip && peer_addr.ip().to_string() != "127.0.0.1" {
-                        continue;
-                    }
+            let incoming_ip = peer_addr.ip().to_string();
+            if let Ok(mut guard) = paired_ip_for_srv.lock() {
+                if guard.is_none() {
+                    *guard = Some(incoming_ip);
                 }
             }
 
@@ -878,6 +799,45 @@ pub fn run() {
         }
     });
 
+    let live_fps_for_vid_rx = state.live_fps_x10.clone();
+    tauri::async_runtime::spawn(async move {
+        let bind_addr: SocketAddr = "0.0.0.0:48101".parse().unwrap();
+        let mut video_receiver = match VideoReceiver::bind(bind_addr).await {
+            Ok(r) => r,
+            Err(_) => return,
+        };
+
+        let decoder_config = VideoDecoderConfig::default();
+        let mut decoder = match HardwareVideoDecoder::new(decoder_config) {
+            Ok(d) => d,
+            Err(_) => return,
+        };
+
+        let mut frames = 0u64;
+        let mut last_rep = Instant::now();
+
+        loop {
+            match video_receiver.recv_frame().await {
+                Ok((frame_id, _is_keyframe, timestamp_us, frame_data)) => {
+                    if decoder.decode_frame(frame_id, timestamp_us, &frame_data).is_ok() {
+                        frames += 1;
+                    }
+                }
+                Err(_) => {
+                    tokio::time::sleep(Duration::from_millis(2)).await;
+                }
+            }
+
+            if last_rep.elapsed() >= Duration::from_secs(1) {
+                let el = last_rep.elapsed().as_secs_f64();
+                let fps = (frames as f64) / el;
+                live_fps_for_vid_rx.store((fps * 10.0) as u64, Ordering::Relaxed);
+                frames = 0;
+                last_rep = Instant::now();
+            }
+        }
+    });
+
     if let Err(e) = tauri::Builder::default()
         .manage(state)
         .setup(|app| {
@@ -973,7 +933,6 @@ pub fn run() {
             discover_devices,
             pair_device,
             start_host,
-            start_client,
             stop_service,
             set_screen_edge,
             toggle_virtual_display,

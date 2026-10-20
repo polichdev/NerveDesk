@@ -151,7 +151,15 @@ unsafe extern "system" fn clipboard_wnd_proc(
 
 fn read_clipboard_content() -> Option<ClipboardPayload> {
     unsafe {
-        if OpenClipboard(HWND::default()).is_err() {
+        let mut opened = false;
+        for _ in 0..10 {
+            if OpenClipboard(HWND::default()).is_ok() {
+                opened = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(15));
+        }
+        if !opened {
             return None;
         }
 
@@ -193,7 +201,15 @@ impl ClipboardWriter {
         let bytes_len = wide.len() * std::mem::size_of::<u16>();
 
         unsafe {
-            if OpenClipboard(HWND::default()).is_err() {
+            let mut opened = false;
+            for _ in 0..10 {
+                if OpenClipboard(HWND::default()).is_ok() {
+                    opened = true;
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(15));
+            }
+            if !opened {
                 return Err(NerveError::Platform("Failed to open clipboard for writing".into()));
             }
 
