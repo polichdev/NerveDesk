@@ -21,10 +21,9 @@ nerve-desk/
 │   └── idd-virtual-display/    Microsoft IddCx Virtual Display Driver (C++ UMDF)
 └── ui/
     ├── index.html              Single-page application dashboard interface
-    ├── src-tauri/
-    │   ├── Cargo.toml          Desktop binary configuration (NerveDesk.exe)
-    │   ├── src/
-    │   │   ├── main.rs         Tauri application lifecycle, tray icon, Win32 window hooks
-    │   │   └── lib.rs          IPC commands, state management, background receiver tasks
-    │   └── tauri.conf.json     Tauri v2 manifest, bundle settings, and security policies
+    ├── Cargo.toml              Desktop binary package configuration
+    ├── tauri.conf.json         Tauri v2 application manifest and settings
+    └── src/
+        ├── main.rs             Tauri lifecycle and Win32 window entry point
+        └── lib.rs              IPC commands, KVM pipeline, and clipboard background tasks
 ```

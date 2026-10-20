@@ -9,7 +9,7 @@ members = [
     "crates/clipboard",
     "crates/host",
     "crates/client",
-    "ui/src-tauri",
+    "ui",
 ]
 
 [workspace.package]

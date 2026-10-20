@@ -27,9 +27,18 @@ const XBUTTON2: u32 = 0x0002;
 
 static HOOK_SENDER: Mutex<Option<Sender<InputEvent>>> = Mutex::new(None);
 static CAPTURE_ACTIVE: AtomicBool = AtomicBool::new(false);
+static KEYBOARD_SHARING_ENABLED: AtomicBool = AtomicBool::new(true);
 static LAST_CURSOR_POS: Mutex<Option<POINT>> = Mutex::new(None);
 static EDGE_DETECTOR: Mutex<Option<EdgeDetector>> = Mutex::new(None);
 static CENTER_PT: Mutex<POINT> = Mutex::new(POINT { x: 960, y: 540 });
+
+pub fn set_keyboard_sharing(enabled: bool) {
+    KEYBOARD_SHARING_ENABLED.store(enabled, Ordering::SeqCst);
+}
+
+pub fn is_keyboard_sharing_enabled() -> bool {
+    KEYBOARD_SHARING_ENABLED.load(Ordering::SeqCst)
+}
 
 pub fn set_active_edge(edge: ScreenEdge) {
     set_active_edge_and_resolution(edge, 0, 0);
@@ -247,7 +256,7 @@ unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: LPAR
 }
 
 unsafe extern "system" fn keyboard_proc(n_code: i32, w_param: WPARAM, l_param: LPARAM) -> LRESULT {
-    if n_code >= 0 && CAPTURE_ACTIVE.load(Ordering::Relaxed) {
+    if n_code >= 0 && CAPTURE_ACTIVE.load(Ordering::Relaxed) && KEYBOARD_SHARING_ENABLED.load(Ordering::Relaxed) {
         let msg = w_param.0 as u32;
         let hook_struct = *(l_param.0 as *const KBDLLHOOKSTRUCT);
 

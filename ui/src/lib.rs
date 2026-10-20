@@ -41,6 +41,18 @@ pub struct DiscoveredDevice {
     pub screen_height: u32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FeatureSettings {
+    pub keyboard_sharing: bool,
+    pub clipboard_sharing: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClipboardPacket {
+    pub token: String,
+    pub text: String,
+}
+
 pub struct AppState {
     pub is_running: Arc<AtomicBool>,
     pub mode: Mutex<String>,
@@ -53,6 +65,11 @@ pub struct AppState {
     pub live_fps_x10: Arc<AtomicU64>,
     pub live_mbps_x10: Arc<AtomicU64>,
     pub discovered_devices: Arc<Mutex<HashMap<String, DiscoveredDevice>>>,
+    pub keyboard_sharing: Arc<AtomicBool>,
+    pub clipboard_sharing: Arc<AtomicBool>,
+    pub paired_security_key: Arc<Mutex<Option<String>>>,
+    pub paired_peer_ip: Arc<Mutex<Option<String>>>,
+    pub clipboard_hash: Arc<AtomicU64>,
 }
 
 fn stop_service_internal(state: &AppState) {
@@ -165,6 +182,10 @@ async fn pair_device(
         return Err("Security key cannot be empty".into());
     }
 
+    if let Ok(mut key_guard) = state.paired_security_key.lock() {
+        *key_guard = Some(security_key.trim().to_string());
+    }
+
     let my_name = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Desktop-PC".into());
     let sw = unsafe { windows::Win32::UI::WindowsAndMessaging::GetSystemMetrics(windows::Win32::UI::WindowsAndMessaging::SM_CXSCREEN) } as u32;
     let sh = unsafe { windows::Win32::UI::WindowsAndMessaging::GetSystemMetrics(windows::Win32::UI::WindowsAndMessaging::SM_CYSCREEN) } as u32;
@@ -214,6 +235,10 @@ async fn start_host(
             return Err(format!("Device not reachable: {host_part}"));
         }
     };
+
+    if let Ok(mut ip_guard) = state.paired_peer_ip.lock() {
+        *ip_guard = Some(resolved_ip.clone());
+    }
 
     let target_addr: SocketAddr = format!("{resolved_ip}:48100")
         .parse()
@@ -298,23 +323,23 @@ async fn start_host(
                 width: w,
                 height: h,
                 fps: 60,
-                bitrate_bps: 15_000_000,
+                bitrate_bps: 10_000_000,
                 keyframe_interval: 120,
             };
-
             let encoder = match HardwareVideoEncoder::new(encoder_config) {
                 Ok(enc) => enc,
                 Err(e) => {
-                    error!("HardwareVideoEncoder error: {:?}", e);
+                    error!("Encoder error: {:?}", e);
                     return;
                 }
             };
 
-            let mut frames_streamed = 0u64;
-            let mut bytes_streamed = 0usize;
+            let mut frame_count = 0u64;
+            let mut total_bytes = 0u64;
             let mut last_report = Instant::now();
 
             while is_running_vid.load(Ordering::SeqCst) {
+                let start_frame = Instant::now();
                 let now_us = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
                     .unwrap_or_default()
@@ -322,30 +347,41 @@ async fn start_host(
 
                 match duplicator.acquire_frame() {
                     Ok(Some(frame)) => {
-                        if let Ok(encoded) = encoder.encode_frame(&frame.texture, now_us, false) {
-                            if let Ok(sent) = video_sender.send_frame(&encoded).await {
-                                frames_streamed += 1;
-                                bytes_streamed += sent;
+                        let is_key = frame_count % 120 == 0;
+                        match encoder.encode_frame(&frame.texture, now_us, is_key) {
+                            Ok(encoded_frame) => {
+                                if let Ok(sent_bytes) = video_sender.send_frame(&encoded_frame).await {
+                                    total_bytes += sent_bytes as u64;
+                                    frame_count += 1;
+                                }
                             }
+                            Err(_) => {}
                         }
                     }
                     Ok(None) => {
                         tokio::time::sleep(Duration::from_millis(1)).await;
                     }
                     Err(_) => {
-                        tokio::time::sleep(Duration::from_millis(50)).await;
+                        tokio::time::sleep(Duration::from_millis(16)).await;
                     }
                 }
 
                 if last_report.elapsed() >= Duration::from_secs(1) {
-                    let sec = last_report.elapsed().as_secs_f64();
-                    let fps = frames_streamed as f64 / sec;
-                    let mbps = (bytes_streamed as f64 * 8.0) / (sec * 1_000_000.0);
+                    let elapsed = last_report.elapsed().as_secs_f64();
+                    let fps = (frame_count as f64) / elapsed;
+                    let mbps = ((total_bytes * 8) as f64) / (elapsed * 1_000_000.0);
+
                     fps_holder.store((fps * 10.0) as u64, Ordering::Relaxed);
                     mbps_holder.store((mbps * 10.0) as u64, Ordering::Relaxed);
-                    frames_streamed = 0;
-                    bytes_streamed = 0;
+
+                    frame_count = 0;
+                    total_bytes = 0;
                     last_report = Instant::now();
+                }
+
+                let frame_time = start_frame.elapsed();
+                if frame_time < Duration::from_millis(16) {
+                    tokio::time::sleep(Duration::from_millis(16) - frame_time).await;
                 }
             }
         });
@@ -353,13 +389,23 @@ async fn start_host(
         workers.push(vid_worker);
     }
 
-    *state.mode.lock().unwrap() = "Host".into();
-    *state.peer_device.lock().unwrap() = Some(target_ip.clone());
     *state.hook_manager.lock().unwrap() = Some(hook_manager);
     *state.active_workers.lock().unwrap() = workers;
     state.is_running.store(true, Ordering::SeqCst);
+    *state.mode.lock().unwrap() = if stream_video { "Cast & KVM".into() } else { "KVM Active".into() };
 
-    Ok(format!("Host mode active -> streaming to {target_ip}"))
+    let display_name = if let Ok(guard) = state.discovered_devices.lock() {
+        if let Some(d) = guard.get(&target_addr.ip().to_string()) {
+            d.name.clone()
+        } else {
+            target_ip.clone()
+        }
+    } else {
+        target_ip.clone()
+    };
+    *state.peer_device.lock().unwrap() = Some(display_name);
+
+    Ok(format!("Host service active -> {}", target_addr))
 }
 
 #[command]
@@ -371,10 +417,11 @@ async fn start_client(
 
     let input_bind: SocketAddr = format!("0.0.0.0:{bind_port}")
         .parse()
-        .map_err(|e| format!("Invalid bind address: {e}"))?;
+        .map_err(|e| format!("Invalid input port: {e}"))?;
+
     let video_bind: SocketAddr = format!("0.0.0.0:{}", bind_port + 1)
         .parse()
-        .map_err(|e| format!("Invalid bind address: {e}"))?;
+        .map_err(|e| format!("Invalid video port: {e}"))?;
 
     info!("Starting internal Client engine on input={}, video={}", input_bind, video_bind);
 
@@ -385,11 +432,27 @@ async fn start_client(
     let emulator = InputEmulator::new();
     let is_running_in = state.is_running.clone();
     let rtt_holder = state.live_rtt_us.clone();
+    let kb_sharing = state.keyboard_sharing.clone();
+    let peer_ip_ref = state.paired_peer_ip.clone();
 
     let input_worker = tokio::spawn(async move {
         while is_running_in.load(Ordering::SeqCst) {
             match input_receiver.recv_event().await {
-                Ok((header, event, _peer)) => {
+                Ok((header, event, peer)) => {
+                    if let Ok(guard) = peer_ip_ref.lock() {
+                        if let Some(ref allowed_ip) = *guard {
+                            if peer.ip().to_string() != *allowed_ip && peer.ip().to_string() != "127.0.0.1" {
+                                continue;
+                            }
+                        }
+                    }
+
+                    if let InputEvent::Keyboard { .. } = event {
+                        if !kb_sharing.load(Ordering::Relaxed) {
+                            continue;
+                        }
+                    }
+
                     let now_us = SystemTime::now()
                         .duration_since(UNIX_EPOCH)
                         .unwrap_or_default()
@@ -431,116 +494,176 @@ async fn start_client(
 
         while is_running_vid.load(Ordering::SeqCst) {
             match video_receiver.recv_frame().await {
-                Ok((frame_id, _key, timestamp_us, data)) => {
-                    frames += 1;
-                    let _ = decoder.decode_frame(frame_id, timestamp_us, &data);
-
-                    if last_rep.elapsed() >= Duration::from_secs(1) {
-                        let fps = frames as f64 / last_rep.elapsed().as_secs_f64();
-                        fps_holder.store((fps * 10.0) as u64, Ordering::Relaxed);
-                        frames = 0;
-                        last_rep = Instant::now();
+                Ok((frame_id, _is_keyframe, timestamp_us, frame_data)) => {
+                    if decoder.decode_frame(frame_id, timestamp_us, &frame_data).is_ok() {
+                        frames += 1;
                     }
                 }
                 Err(_) => {
-                    tokio::time::sleep(Duration::from_millis(10)).await;
+                    tokio::time::sleep(Duration::from_millis(2)).await;
                 }
+            }
+
+            if last_rep.elapsed() >= Duration::from_secs(1) {
+                let el = last_rep.elapsed().as_secs_f64();
+                let fps = (frames as f64) / el;
+                fps_holder.store((fps * 10.0) as u64, Ordering::Relaxed);
+                frames = 0;
+                last_rep = Instant::now();
             }
         }
     });
 
-    *state.mode.lock().unwrap() = "Client".into();
-    *state.peer_device.lock().unwrap() = Some(format!("0.0.0.0:{bind_port}"));
     *state.active_workers.lock().unwrap() = vec![input_worker, video_worker];
     state.is_running.store(true, Ordering::SeqCst);
+    *state.mode.lock().unwrap() = "Client Listening".into();
+    *state.peer_device.lock().unwrap() = Some(format!("0.0.0.0:{bind_port}"));
 
-    Ok(format!("Client mode active -> listening on port {bind_port}"))
+    Ok(format!("Client receiver active on port {}", bind_port))
 }
 
 #[command]
 fn stop_service(state: State<'_, AppState>) -> Result<String, String> {
     stop_service_internal(&state);
-    Ok("Service stopped".into())
+    Ok("Engine safely terminated".into())
 }
 
 #[command]
 fn set_screen_edge(edge: String, state: State<'_, AppState>) -> Result<String, String> {
-    info!("Setting screen transition edge to {}", edge);
-    *state.screen_edge.lock().unwrap() = edge.clone();
     let screen_edge = match edge.as_str() {
         "Left" => input::ScreenEdge::Left,
         "Right" => input::ScreenEdge::Right,
         "Top" => input::ScreenEdge::Top,
         "Bottom" => input::ScreenEdge::Bottom,
-        _ => input::ScreenEdge::Right,
+        _ => return Err("Invalid edge value. Use Left, Right, Top, or Bottom".into()),
     };
-    input::set_active_edge(screen_edge);
-    Ok(format!("Edge set to {}", edge))
+
+    let (mut client_w, mut client_h) = (0, 0);
+    if let Ok(guard) = state.discovered_devices.lock() {
+        if let Ok(peer_guard) = state.peer_device.lock() {
+            if let Some(ref peer) = *peer_guard {
+                if let Some(dev) = guard.get(peer) {
+                    client_w = dev.screen_width as i32;
+                    client_h = dev.screen_height as i32;
+                }
+            }
+        }
+    }
+
+    input::set_active_edge_and_resolution(screen_edge, client_w, client_h);
+    *state.screen_edge.lock().unwrap() = edge.clone();
+    info!("Active crossing boundary adjusted to: {}", edge);
+    Ok(format!("Screen edge set to {}", edge))
 }
 
 #[command]
-fn toggle_virtual_display(enable: bool, state: State<'_, AppState>) -> Result<bool, String> {
-    if enable {
-        state.display_manager.plug_display().map_err(|e| e.to_string())?;
-    } else {
+fn toggle_virtual_display(state: State<'_, AppState>) -> Result<bool, String> {
+    if state.display_manager.is_plugged() {
         state.display_manager.unplug_display().map_err(|e| e.to_string())?;
+        Ok(false)
+    } else {
+        state.display_manager.plug_display().map_err(|e| e.to_string())?;
+        Ok(true)
     }
-    Ok(state.display_manager.is_plugged())
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
+#[command]
+fn set_keyboard_sharing_enabled(enabled: bool, state: State<'_, AppState>) {
+    state.keyboard_sharing.store(enabled, Ordering::SeqCst);
+    input::set_keyboard_sharing(enabled);
+}
+
+#[command]
+fn set_clipboard_sharing_enabled(enabled: bool, state: State<'_, AppState>) {
+    state.clipboard_sharing.store(enabled, Ordering::SeqCst);
+}
+
+#[command]
+fn get_feature_settings(state: State<'_, AppState>) -> FeatureSettings {
+    FeatureSettings {
+        keyboard_sharing: state.keyboard_sharing.load(Ordering::SeqCst),
+        clipboard_sharing: state.clipboard_sharing.load(Ordering::SeqCst),
+    }
+}
+
+#[command]
+fn open_display_settings() {
+    let _ = std::process::Command::new("cmd")
+        .args(["/c", "start", "ms-settings:display"])
+        .spawn();
+}
+
+#[command]
+async fn start_virtual_display_cast(
+    target_name: String,
+    extend_mode: bool,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    if extend_mode {
+        let _ = state.display_manager.plug_display();
+    }
+    start_host(target_name, true, state).await
+}
+
+#[command]
+fn stop_virtual_display_cast(state: State<'_, AppState>) {
+    let _ = state.display_manager.unplug_display();
+    stop_service_internal(&state);
+}
+
 pub fn run() {
-    let discovered_cache = Arc::new(Mutex::new(HashMap::new()));
-    let discovered_cache_clone = discovered_cache.clone();
-    let discovered_for_rx = discovered_cache.clone();
-
-    let peer_device_arc = Arc::new(Mutex::new(None));
-    let peer_device_for_rx = peer_device_arc.clone();
-    let peer_device_for_disc = peer_device_arc.clone();
-
-    let live_rtt_arc = Arc::new(AtomicU64::new(0));
-    let live_rtt_for_rx = live_rtt_arc.clone();
-
     let state = AppState {
         is_running: Arc::new(AtomicBool::new(false)),
         mode: Mutex::new("Idle".into()),
-        peer_device: peer_device_arc,
+        peer_device: Arc::new(Mutex::new(None)),
         screen_edge: Mutex::new("Right".into()),
         display_manager: VirtualDisplayManager::new(),
         hook_manager: Mutex::new(None),
         active_workers: Mutex::new(Vec::new()),
-        live_rtt_us: live_rtt_arc,
+        live_rtt_us: Arc::new(AtomicU64::new(0)),
         live_fps_x10: Arc::new(AtomicU64::new(0)),
         live_mbps_x10: Arc::new(AtomicU64::new(0)),
-        discovered_devices: discovered_cache,
+        discovered_devices: Arc::new(Mutex::new(HashMap::new())),
+        keyboard_sharing: Arc::new(AtomicBool::new(true)),
+        clipboard_sharing: Arc::new(AtomicBool::new(true)),
+        paired_security_key: Arc::new(Mutex::new(None)),
+        paired_peer_ip: Arc::new(Mutex::new(None)),
+        clipboard_hash: Arc::new(AtomicU64::new(0)),
     };
 
-    let my_name = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "NerveDesk-PC".into());
-    let my_name_emitter = my_name.clone();
-    let my_name_listener = my_name.clone();
-
-    let sw = unsafe { windows::Win32::UI::WindowsAndMessaging::GetSystemMetrics(windows::Win32::UI::WindowsAndMessaging::SM_CXSCREEN) } as u32;
-    let sh = unsafe { windows::Win32::UI::WindowsAndMessaging::GetSystemMetrics(windows::Win32::UI::WindowsAndMessaging::SM_CYSCREEN) } as u32;
-
-    tauri::async_runtime::spawn(async move {
-        let beacon = DiscoveryBeacon::new(my_name_emitter, DeviceRole::Host, 48100, 48101, sw, sh);
-        if let Ok(emitter) = DiscoveryBeaconEmitter::new(beacon).await {
-            let _ = emitter.spawn_loop(Duration::from_secs(1));
-        }
-    });
+    let discovered_for_disc = state.discovered_devices.clone();
+    let peer_device_for_disc = state.peer_device.clone();
+    let discovered_for_rx = state.discovered_devices.clone();
+    let peer_device_for_rx = state.peer_device.clone();
+    let live_rtt_for_rx = state.live_rtt_us.clone();
+    let paired_ip_for_rx = state.paired_peer_ip.clone();
+    let keyboard_sharing_for_rx = state.keyboard_sharing.clone();
 
     tauri::async_runtime::spawn(async move {
         if let Ok(listener) = DiscoveryListener::bind().await {
             loop {
                 if let Ok((beacon, peer_addr)) = listener.recv_beacon().await {
+                    let my_name = std::env::var("COMPUTERNAME").unwrap_or_default();
+                    if !my_name.is_empty() && beacon.device_name.eq_ignore_ascii_case(&my_name) {
+                        continue;
+                    }
                     let ip = peer_addr.ip().to_string();
-                    if beacon.device_name != my_name_listener {
-                        if let Ok(mut cache) = discovered_cache_clone.lock() {
-                            cache.insert(
+                    if let Ok(mut map) = discovered_for_disc.lock() {
+                        let role_str = match beacon.role {
+                            DeviceRole::Host => "Host",
+                            DeviceRole::Client => "Client",
+                        };
+                        if let Some(existing) = map.get_mut(&ip) {
+                            existing.name = beacon.device_name.clone();
+                            existing.role = role_str.to_string();
+                            existing.screen_width = beacon.screen_width;
+                            existing.screen_height = beacon.screen_height;
+                        } else {
+                            map.insert(
                                 ip.clone(),
                                 DiscoveredDevice {
                                     name: beacon.device_name.clone(),
-                                    role: format!("{:?}", beacon.role),
+                                    role: role_str.to_string(),
                                     ip: ip.clone(),
                                     input_port: beacon.input_port,
                                     video_port: beacon.video_port,
@@ -576,6 +699,20 @@ pub fn run() {
         loop {
             match receiver.recv_event().await {
                 Ok((header, event, peer)) => {
+                    if let Ok(guard) = paired_ip_for_rx.lock() {
+                        if let Some(ref allowed_ip) = *guard {
+                            if peer.ip().to_string() != *allowed_ip && peer.ip().to_string() != "127.0.0.1" {
+                                continue;
+                            }
+                        }
+                    }
+
+                    if let InputEvent::Keyboard { .. } = event {
+                        if !keyboard_sharing_for_rx.load(Ordering::Relaxed) {
+                            continue;
+                        }
+                    }
+
                     let now_us = SystemTime::now()
                         .duration_since(UNIX_EPOCH)
                         .unwrap_or_default()
@@ -615,6 +752,132 @@ pub fn run() {
         }
     });
 
+    let clipboard_sharing_for_srv = state.clipboard_sharing.clone();
+    let paired_key_for_srv = state.paired_security_key.clone();
+    let paired_ip_for_srv = state.paired_peer_ip.clone();
+    let clipboard_hash_for_srv = state.clipboard_hash.clone();
+
+    tauri::async_runtime::spawn(async move {
+        let listener = match tokio::net::TcpListener::bind("0.0.0.0:48102").await {
+            Ok(l) => l,
+            Err(e) => {
+                warn!("Clipboard TCP listener failed to bind: {:?}", e);
+                return;
+            }
+        };
+
+        while let Ok((mut socket, peer_addr)) = listener.accept().await {
+            if !clipboard_sharing_for_srv.load(Ordering::Relaxed) {
+                continue;
+            }
+
+            if let Ok(guard) = paired_ip_for_srv.lock() {
+                if let Some(ref allowed_ip) = *guard {
+                    if peer_addr.ip().to_string() != *allowed_ip && peer_addr.ip().to_string() != "127.0.0.1" {
+                        continue;
+                    }
+                }
+            }
+
+            let hash_ref = clipboard_hash_for_srv.clone();
+            let key_ref = paired_key_for_srv.clone();
+
+            tokio::spawn(async move {
+                use tokio::io::AsyncReadExt;
+                let mut len_buf = [0u8; 4];
+                if socket.read_exact(&mut len_buf).await.is_err() {
+                    return;
+                }
+                let len = u32::from_be_bytes(len_buf) as usize;
+                if len == 0 || len > 2 * 1024 * 1024 {
+                    return;
+                }
+                let mut payload_buf = vec![0u8; len];
+                if socket.read_exact(&mut payload_buf).await.is_err() {
+                    return;
+                }
+
+                if let Ok(clip_packet) = serde_json::from_slice::<ClipboardPacket>(&payload_buf) {
+                    if let Ok(guard) = key_ref.lock() {
+                        if let Some(ref key) = *guard {
+                            if !key.is_empty() && clip_packet.token != *key {
+                                return;
+                            }
+                        }
+                    }
+
+                    let payload = clipboard::ClipboardPayload::Text(clip_packet.text.clone());
+                    let h = payload.compute_hash();
+                    if hash_ref.swap(h, Ordering::SeqCst) != h {
+                        let _ = clipboard::ClipboardWriter::write_text(&clip_packet.text);
+                    }
+                }
+            });
+        }
+    });
+
+    let (clip_tx, clip_rx) = crossbeam_channel::unbounded::<clipboard::ClipboardPayload>();
+    let clipboard_hash_for_listener = state.clipboard_hash.clone();
+    let clipboard_sharing_for_tx = state.clipboard_sharing.clone();
+    let paired_key_for_tx = state.paired_security_key.clone();
+    let paired_ip_for_tx = state.paired_peer_ip.clone();
+
+    if let Ok(listener) = clipboard::ClipboardListener::start(clip_tx, clipboard_hash_for_listener) {
+        std::mem::forget(listener);
+    }
+
+    tauri::async_runtime::spawn(async move {
+        while let Ok(payload) = clip_rx.recv() {
+            if !clipboard_sharing_for_tx.load(Ordering::Relaxed) {
+                continue;
+            }
+
+            let target_ip = {
+                if let Ok(guard) = paired_ip_for_tx.lock() {
+                    guard.clone()
+                } else {
+                    None
+                }
+            };
+
+            if let Some(ip) = target_ip {
+                let token = {
+                    if let Ok(guard) = paired_key_for_tx.lock() {
+                        guard.clone().unwrap_or_default()
+                    } else {
+                        String::new()
+                    }
+                };
+
+                let text = match payload {
+                    clipboard::ClipboardPayload::Text(t) => t,
+                    _ => continue,
+                };
+
+                let packet = ClipboardPacket { token, text };
+                if let Ok(bytes) = serde_json::to_vec(&packet) {
+                    let len = (bytes.len() as u32).to_be_bytes();
+                    let target_addr = format!("{}:48102", ip);
+                    tokio::spawn(async move {
+                        use tokio::io::AsyncWriteExt;
+                        if let Ok(stream_res) = tokio::time::timeout(
+                            Duration::from_secs(1),
+                            tokio::net::TcpStream::connect(&target_addr),
+                        )
+                        .await
+                        {
+                            if let Ok(mut stream) = stream_res {
+                                let _ = stream.write_all(&len).await;
+                                let _ = stream.write_all(&bytes).await;
+                                let _ = stream.flush().await;
+                            }
+                        }
+                    });
+                }
+            }
+        }
+    });
+
     if let Err(e) = tauri::Builder::default()
         .manage(state)
         .setup(|app| {
@@ -648,42 +911,38 @@ pub fn run() {
                                 &caption_color as *const _ as _,
                                 std::mem::size_of::<u32>() as u32,
                             );
-                            let text_color: u32 = 0x00f4f4f5;
-                            let _ = DwmSetWindowAttribute(
-                                hwnd,
-                                DWMWINDOWATTRIBUTE(36),
-                                &text_color as *const _ as _,
-                                std::mem::size_of::<u32>() as u32,
-                            );
                         }
                     }
                 }
             }
 
-            let quit_i = MenuItem::with_id(app, "quit", "Quit NerveDesk", true, None::<&str>)?;
-            let show_i = MenuItem::with_id(app, "show", "Open NerveDesk", true, None::<&str>)?;
+            let quit_i = MenuItem::with_id(app, "quit", "Exit NerveDesk", true, None::<&str>)?;
+            let show_i = MenuItem::with_id(app, "show", "Open Window", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_i, &quit_i])?;
 
             let mut builder = TrayIconBuilder::new()
                 .menu(&menu)
-                .show_menu_on_left_click(false)
-                .on_menu_event(|app, event| {
-                    match event.id.as_ref() {
-                        "quit" => {
-                            app.exit(0);
-                        }
-                        "show" => {
-                            if let Some(window) = app.get_webview_window("main") {
-                                let _ = window.show();
-                                let _ = window.unminimize();
-                                let _ = window.set_focus();
-                            }
-                        }
-                        _ => {}
+                .tooltip("NerveDesk - KVM & Virtual Display")
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "quit" => {
+                        app.exit(0);
                     }
+                    "show" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                        }
+                    }
+                    _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
                         let app = tray.app_handle();
                         if let Some(window) = app.get_webview_window("main") {
                             let _ = window.show();
@@ -717,7 +976,13 @@ pub fn run() {
             start_client,
             stop_service,
             set_screen_edge,
-            toggle_virtual_display
+            toggle_virtual_display,
+            set_keyboard_sharing_enabled,
+            set_clipboard_sharing_enabled,
+            get_feature_settings,
+            open_display_settings,
+            start_virtual_display_cast,
+            stop_virtual_display_cast
         ])
         .run(tauri::generate_context!())
     {

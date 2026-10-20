@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "identifier": "com.nervedesk.app",
   "build": {
-    "frontendDist": "../"
+    "frontendDist": "./"
   },
   "app": {
     "withGlobalTauri": true,

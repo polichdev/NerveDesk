@@ -139,7 +139,7 @@ impl InputEmulator {
         state: KeyState,
         is_extended: bool,
     ) -> Result<()> {
-        let mut flags = KEYEVENTF_SCANCODE;
+        let mut flags = windows::Win32::UI::Input::KeyboardAndMouse::KEYBD_EVENT_FLAGS(0);
         if state == KeyState::KeyUp {
             flags |= KEYEVENTF_KEYUP;
         }
@@ -147,12 +147,21 @@ impl InputEmulator {
             flags |= KEYEVENTF_EXTENDEDKEY;
         }
 
+        let (vk, scan) = if vk_code != 0 {
+            (VIRTUAL_KEY(vk_code), scan_code)
+        } else if scan_code != 0 {
+            flags |= KEYEVENTF_SCANCODE;
+            (VIRTUAL_KEY(0), scan_code)
+        } else {
+            return Ok(());
+        };
+
         let input = INPUT {
             r#type: INPUT_KEYBOARD,
             Anonymous: INPUT_0 {
                 ki: KEYBDINPUT {
-                    wVk: VIRTUAL_KEY(vk_code),
-                    wScan: scan_code,
+                    wVk: vk,
+                    wScan: scan,
                     dwFlags: flags,
                     time: 0,
                     dwExtraInfo: 0,
