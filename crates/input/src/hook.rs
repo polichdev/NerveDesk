@@ -47,10 +47,14 @@ pub fn set_active_edge(edge: ScreenEdge) {
 pub fn set_active_edge_and_resolution(edge: ScreenEdge, client_w: i32, client_h: i32) {
     let (w, h) = unsafe {
         use windows::Win32::Graphics::Gdi::{GetDC, ReleaseDC, GetDeviceCaps, DESKTOPHORZRES, DESKTOPVERTRES};
-        let hdc = GetDC(HWND(std::ptr::null_mut()));
-        let dw = GetDeviceCaps(hdc, DESKTOPHORZRES);
-        let dh = GetDeviceCaps(hdc, DESKTOPVERTRES);
-        ReleaseDC(HWND(std::ptr::null_mut()), hdc);
+        let hdc = GetDC(HWND::default());
+        let mut dw = 0;
+        let mut dh = 0;
+        if !hdc.is_invalid() {
+            dw = GetDeviceCaps(hdc, DESKTOPHORZRES);
+            dh = GetDeviceCaps(hdc, DESKTOPVERTRES);
+            let _ = ReleaseDC(HWND::default(), hdc);
+        }
         if dw > 0 && dh > 0 {
             (dw, dh)
         } else {

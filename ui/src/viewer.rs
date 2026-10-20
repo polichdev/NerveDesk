@@ -6,15 +6,12 @@ use windows::Win32::Graphics::Gdi::{
     GetDC, ReleaseDC, SetBrushOrgEx, SetStretchBltMode, StretchDIBits, BITMAPINFO,
     BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HALFTONE, RGBQUAD, SRCCOPY,
 };
-use windows::Win32::UI::HiDpi::{
-    SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
-};
 use windows::Win32::UI::Input::KeyboardAndMouse::VK_ESCAPE;
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DispatchMessageW, GetClientRect, GetSystemMetrics,
     PeekMessageW, RegisterClassW, SetWindowPos, ShowWindow, TranslateMessage, MSG, PM_REMOVE,
-    SM_CXSCREEN, SM_CYSCREEN, SWP_SHOWWINDOW, SW_HIDE, SW_SHOW, WM_DESTROY, WM_KEYDOWN,
-    WNDCLASSW, WS_EX_TOPMOST, WS_POPUP, HWND_TOPMOST,
+    SM_CXSCREEN, SM_CYSCREEN, SWP_HIDEWINDOW, SWP_NOACTIVATE, SWP_SHOWWINDOW, SW_HIDE, SW_SHOW,
+    WM_DESTROY, WM_KEYDOWN, WNDCLASSW, WS_EX_TOPMOST, WS_POPUP, HWND_TOPMOST,
 };
 
 pub struct ProjectionViewer {
@@ -36,8 +33,6 @@ impl ProjectionViewer {
         std::thread::Builder::new()
             .name("nerve-projection-viewer".into())
             .spawn(move || unsafe {
-                let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-
                 let class_name = windows::core::w!("NerveDeskProjectionWindowClass");
                 let wnd_class = WNDCLASSW {
                     lpfnWndProc: Some(projection_wnd_proc),
@@ -76,8 +71,9 @@ impl ProjectionViewer {
                     0,
                     sw,
                     sh,
-                    SWP_SHOWWINDOW,
+                    SWP_HIDEWINDOW | SWP_NOACTIVATE,
                 );
+                let _ = ShowWindow(hwnd, SW_HIDE);
 
                 let mut is_shown = false;
 

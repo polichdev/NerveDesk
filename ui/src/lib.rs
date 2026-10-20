@@ -206,10 +206,14 @@ fn get_screen_dimensions() -> (u32, u32) {
     unsafe {
         use windows::Win32::Graphics::Gdi::{GetDC, ReleaseDC, GetDeviceCaps, DESKTOPHORZRES, DESKTOPVERTRES};
         use windows::Win32::Foundation::HWND;
-        let hdc = GetDC(HWND(std::ptr::null_mut()));
-        let mut w = GetDeviceCaps(hdc, DESKTOPHORZRES) as u32;
-        let mut h = GetDeviceCaps(hdc, DESKTOPVERTRES) as u32;
-        ReleaseDC(HWND(std::ptr::null_mut()), hdc);
+        let hdc = GetDC(HWND::default());
+        let mut w = 0;
+        let mut h = 0;
+        if !hdc.is_invalid() {
+            w = GetDeviceCaps(hdc, DESKTOPHORZRES) as u32;
+            h = GetDeviceCaps(hdc, DESKTOPVERTRES) as u32;
+            let _ = ReleaseDC(HWND::default(), hdc);
+        }
         if w == 0 || h == 0 {
             w = windows::Win32::UI::WindowsAndMessaging::GetSystemMetrics(windows::Win32::UI::WindowsAndMessaging::SM_CXSCREEN) as u32;
             h = windows::Win32::UI::WindowsAndMessaging::GetSystemMetrics(windows::Win32::UI::WindowsAndMessaging::SM_CYSCREEN) as u32;
