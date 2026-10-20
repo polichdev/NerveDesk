@@ -367,24 +367,24 @@
     </div>
     <div class="status-badge" id="statusBadge">
       <div class="pulse"></div>
-      <span id="statusText">Active / Ready</span>
+      <span id="statusText">Ready</span>
     </div>
   </header>
 
   <section class="metrics-bar">
     <div class="metric-card">
       <div class="metric-label">Input Latency</div>
-      <div class="metric-value" id="rttVal">0.85 ms</div>
+      <div class="metric-value" id="rttVal">0.00 ms</div>
       <div class="metric-sub">UDP Direct</div>
     </div>
     <div class="metric-card">
       <div class="metric-label">Display Stream</div>
-      <div class="metric-value" id="fpsVal">60.0 FPS</div>
+      <div class="metric-value" id="fpsVal">0.0 FPS</div>
       <div class="metric-sub">Zero-Copy GPU</div>
     </div>
     <div class="metric-card">
       <div class="metric-label">Throughput</div>
-      <div class="metric-value" id="bitrateVal">18.5 Mbps</div>
+      <div class="metric-value" id="bitrateVal">0.0 Mbps</div>
       <div class="metric-sub">Low-Latency CBR</div>
     </div>
     <div class="metric-card">
@@ -438,8 +438,8 @@
 
     <div class="panel">
       <div class="panel-title">
-        <span>Nearby Devices (Subnet Discovery)</span>
-        <button class="btn btn-secondary" style="font-size: 0.75rem; padding: 4px 10px;" onclick="refreshDevices()">Scan LAN</button>
+        <span>Devices</span>
+        <button class="btn btn-secondary" id="scanBtn" style="font-size: 0.75rem; padding: 4px 10px;" onclick="refreshDevices()">Scan</button>
       </div>
 
       <div class="device-list" id="deviceList">
@@ -448,14 +448,18 @@
   </main>
 
   <script>
-    const sampleDevices = [
-      { name: "Example-Laptop", ip: "192.0.2.10", role: "Client", inputPort: 48100, videoPort: 48101 },
-      { name: "Example-Desktop", ip: "192.0.2.10", role: "Client", inputPort: 48100, videoPort: 48101 }
-    ];
-
     function renderDevices(devices) {
       const container = document.getElementById('deviceList');
       container.innerHTML = '';
+      if (!devices || devices.length === 0) {
+        container.innerHTML = `
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 45px 12px; color: var(--text-muted); text-align: center; gap: 8px;">
+            <div style="font-size: 0.95rem; font-weight: 500; color: #cbd5e1;">No devices found</div>
+            <div style="font-size: 0.75rem; color: #64748b; max-width: 260px;">Ensure NerveDesk is running on your other device in the same local network, then click Scan.</div>
+          </div>
+        `;
+        return;
+      }
       devices.forEach(dev => {
         const item = document.createElement('div');
         item.className = 'device-item';
@@ -464,7 +468,7 @@
             <div class="device-name">${dev.name}</div>
             <div class="device-sub">${dev.ip} &bull; ${dev.role} mode</div>
           </div>
-          <button class="btn" onclick="connectTo('${dev.ip}')">Connect</button>
+          <button class="btn" data-ip="${dev.ip}" onclick="connectTo('${dev.ip}')">Connect</button>
         `;
         container.appendChild(item);
       });
@@ -493,7 +497,16 @@
     }
 
     function startHost() {
-      connectTo("192.0.2.10");
+      const container = document.getElementById('deviceList');
+      const firstConnectBtn = container.querySelector('button[data-ip]');
+      if (firstConnectBtn) {
+        connectTo(firstConnectBtn.getAttribute('data-ip'));
+      } else {
+        const ip = prompt("Enter target client IP address (or leave 127.0.0.1 for local test):", "127.0.0.1");
+        if (ip) {
+          connectTo(ip);
+        }
+      }
     }
 
     function stopService() {
@@ -506,11 +519,32 @@
       document.getElementById('bitrateVal').innerText = "0.0 Mbps";
     }
 
-    function refreshDevices() {
-      renderDevices(sampleDevices);
+    async function refreshDevices() {
+      const container = document.getElementById('deviceList');
+      const scanBtn = document.getElementById('scanBtn');
+      scanBtn.disabled = true;
+      scanBtn.innerText = 'Scanning...';
+      container.innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: center; padding: 45px 10px; color: var(--accent); font-size: 0.85rem;">
+          Scanning local network...
+        </div>
+      `;
+      try {
+        if (window.__TAURI__) {
+          const devices = await window.__TAURI__.core.invoke('discover_devices');
+          renderDevices(devices);
+        } else {
+          renderDevices([]);
+        }
+      } catch (e) {
+        renderDevices([]);
+      } finally {
+        scanBtn.disabled = false;
+        scanBtn.innerText = 'Scan';
+      }
     }
 
-    renderDevices(sampleDevices);
+    refreshDevices();
   </script>
 </body>
 </html>

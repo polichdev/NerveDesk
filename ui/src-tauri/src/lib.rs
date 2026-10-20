@@ -57,23 +57,46 @@ fn get_metrics(state: State<AppState>) -> AppMetrics {
 
 #[command]
 async fn discover_devices() -> Result<Vec<DiscoveredDevice>, String> {
-    let sample_devices = vec![
-        DiscoveredDevice {
-            name: "Example-Laptop".into(),
-            role: "Client".into(),
-            ip: "192.0.2.10".into(),
-            input_port: 48100,
-            video_port: 48101,
-        },
-        DiscoveredDevice {
-            name: "Workstation-PC".into(),
-            role: "Host".into(),
-            ip: "192.0.2.10".into(),
-            input_port: 48100,
-            video_port: 48101,
-        },
-    ];
-    Ok(sample_devices)
+    use std::collections::HashSet;
+    use std::time::Duration;
+    use tokio::time::timeout;
+    use net::{DeviceRole, DiscoveryBeacon, DiscoveryBeaconEmitter, DiscoveryListener};
+
+    let my_name = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Host-PC".into());
+    let beacon = DiscoveryBeacon::new(my_name.clone(), DeviceRole::Host, 48100, 48101);
+
+    if let Ok(emitter) = DiscoveryBeaconEmitter::new(beacon).await {
+        let _ = emitter.emit_beacon().await;
+    }
+
+    let listener = match DiscoveryListener::bind().await {
+        Ok(l) => l,
+        Err(_) => return Ok(Vec::new()),
+    };
+
+    let mut discovered = Vec::new();
+    let mut seen_ips = HashSet::new();
+    let start = std::time::Instant::now();
+
+    while start.elapsed() < Duration::from_millis(600) {
+        let remaining = Duration::from_millis(600).saturating_sub(start.elapsed());
+        if let Ok(Ok((beacon, peer_addr))) = timeout(remaining, listener.recv_beacon()).await {
+            let ip = peer_addr.ip().to_string();
+            if beacon.device_name != my_name && seen_ips.insert(ip.clone()) {
+                discovered.push(DiscoveredDevice {
+                    name: beacon.device_name,
+                    role: format!("{:?}", beacon.role),
+                    ip,
+                    input_port: beacon.input_port,
+                    video_port: beacon.video_port,
+                });
+            }
+        } else {
+            break;
+        }
+    }
+
+    Ok(discovered)
 }
 
 #[command]
@@ -134,6 +157,16 @@ pub fn run() {
         screen_edge: Mutex::new("Right".into()),
         display_manager: VirtualDisplayManager::new(),
     };
+
+    tauri::async_runtime::spawn(async move {
+        use std::time::Duration;
+        use net::{DeviceRole, DiscoveryBeacon, DiscoveryBeaconEmitter};
+        let my_name = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "NerveDesk-PC".into());
+        let beacon = DiscoveryBeacon::new(my_name, DeviceRole::Host, 48100, 48101);
+        if let Ok(emitter) = DiscoveryBeaconEmitter::new(beacon).await {
+            let _ = emitter.spawn_loop(Duration::from_secs(2));
+        }
+    });
 
     if let Err(e) = tauri::Builder::default()
         .manage(state)
