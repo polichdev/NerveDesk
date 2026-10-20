@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 use socket2::{Domain, Protocol, Socket, Type};
 use tokio::net::UdpSocket;
-use tracing::{debug, trace, warn};
+use tracing::trace;
 
 use codec::{EncodedVideoFrame, VideoFrameChunker, VideoFrameReassembler};
 use common::{NerveError, Result, VideoChunkHeader, MAX_VIDEO_PAYLOAD_SIZE};

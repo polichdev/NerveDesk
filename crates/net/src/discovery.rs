@@ -3,7 +3,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use socket2::{Domain, Protocol, Socket, Type};
 use tokio::net::UdpSocket;
-use tracing::{debug, info, trace, warn};
+use tracing::{info, trace, warn};
 
 use common::{NerveError, Result};
 

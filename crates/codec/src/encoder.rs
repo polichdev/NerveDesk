@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
-use tracing::{debug, info, trace, warn};
+use tracing::{info, trace};
 
-use common::{NerveError, Result};
+use common::Result;
 use windows::Win32::Graphics::Direct3D11::ID3D11Texture2D;
 
 #[derive(Debug, Clone)]

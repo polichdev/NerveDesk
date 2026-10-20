@@ -26,6 +26,7 @@ ARM64/
 
 node_modules/
 ui/src-tauri/target/
+ui/src-tauri/gen/
 .pnpm-store/
 dist/
 

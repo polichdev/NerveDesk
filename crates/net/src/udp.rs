@@ -4,7 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use socket2::{Domain, Protocol, Socket, Type};
 use tokio::net::UdpSocket;
-use tracing::{debug, trace, warn};
+use tracing::{trace, warn};
 
 use common::{
     decode_packet, encode_packet, InputEvent, NerveError, PacketHeader, Result,

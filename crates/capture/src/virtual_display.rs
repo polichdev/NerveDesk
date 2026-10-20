@@ -1,8 +1,8 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tracing::{debug, error, info, warn};
+use tracing::info;
 
-use common::{NerveError, Result};
+use common::Result;
 
 pub const NERVEDESK_HARDWARE_ID: &str = "Root\\NerveDeskDisplay";
 pub const NERVEDESK_DEVICE_DESC: &str = "NerveDesk Virtual Display";

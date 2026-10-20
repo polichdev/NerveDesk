@@ -3,7 +3,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 
 use capture::{DxgiCaptureConfig, DxgiOutputDuplicator};
 use codec::{HardwareVideoEncoder, VideoEncoderConfig};

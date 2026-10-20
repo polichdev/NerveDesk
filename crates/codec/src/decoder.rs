@@ -1,4 +1,4 @@
-use tracing::{debug, info, trace, warn};
+use tracing::{info, trace};
 
 use common::{NerveError, Result};
 

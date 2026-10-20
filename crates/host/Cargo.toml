@@ -12,6 +12,7 @@ net = { path = "../net" }
 capture = { path = "../capture" }
 codec = { path = "../codec" }
 clipboard = { path = "../clipboard" }
+crossbeam-channel = { workspace = true }
 tokio = { workspace = true }
 clap = { workspace = true }
 tracing = { workspace = true }

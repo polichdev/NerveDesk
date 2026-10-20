@@ -2,11 +2,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use serde::{Deserialize, Serialize};
 use tauri::{command, State};
-use tracing::{info, warn};
+use tracing::info;
 
 use capture::VirtualDisplayManager;
-use input::{EdgeConfig, ScreenEdge};
-use net::{DeviceRole, DiscoveryBeacon, DiscoveryListener};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppMetrics {

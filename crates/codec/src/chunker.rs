@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::time::Instant;
-use tracing::{debug, trace, warn};
+use tracing::trace;
 
 use common::{
     NerveError, Result, VideoChunkHeader, MAX_VIDEO_PAYLOAD_SIZE,

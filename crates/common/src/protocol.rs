@@ -16,6 +16,7 @@ pub struct VideoChunkHeader {
     pub chunk_index: u16,
     pub total_chunks: u16,
     pub payload_size: u16,
+    pub _reserved: [u8; 4],
     pub frame_id: u64,
     pub timestamp_us: u64,
 }
@@ -45,6 +46,7 @@ impl VideoChunkHeader {
             chunk_index,
             total_chunks,
             payload_size,
+            _reserved: [0; 4],
             frame_id,
             timestamp_us,
         }

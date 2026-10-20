@@ -1,8 +1,8 @@
 use crossbeam_channel::Sender;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
-use tracing::{debug, error, info, warn};
+use tracing::{info, warn};
 
 use common::{
     ButtonState, InputEvent, KeyState, MouseButton, NerveError, Result,
@@ -18,12 +18,15 @@ use windows::Win32::UI::WindowsAndMessaging::{
     MSLLHOOKSTRUCT, MSG, PM_NOREMOVE, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_APP,
     WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP,
     WM_MOUSEHWHEEL, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_RBUTTONDOWN, WM_RBUTTONUP,
-    WM_SYSKEYDOWN, WM_SYSKEYUP, WM_XBUTTONDOWN, WM_XBUTTONUP, XBUTTON1, XBUTTON2,
+    WM_SYSKEYDOWN, WM_SYSKEYUP, WM_XBUTTONDOWN, WM_XBUTTONUP,
 };
 
-static mut HOOK_SENDER: Option<Sender<InputEvent>> = None;
+const XBUTTON1: u32 = 0x0001;
+const XBUTTON2: u32 = 0x0002;
+
+static HOOK_SENDER: Mutex<Option<Sender<InputEvent>>> = Mutex::new(None);
 static CAPTURE_ACTIVE: AtomicBool = AtomicBool::new(false);
-static mut LAST_CURSOR_POS: Option<POINT> = None;
+static LAST_CURSOR_POS: Mutex<Option<POINT>> = Mutex::new(None);
 
 const WM_STOP_HOOK: u32 = WM_APP + 42;
 
@@ -38,14 +41,16 @@ unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: LPAR
         match msg {
             WM_MOUSEMOVE => {
                 let current_pt = hook_struct.pt;
-                if let Some(last_pt) = LAST_CURSOR_POS {
-                    let dx = current_pt.x - last_pt.x;
-                    let dy = current_pt.y - last_pt.y;
-                    if dx != 0 || dy != 0 {
-                        event_to_send = Some(InputEvent::MouseMove { dx, dy });
+                if let Ok(mut guard) = LAST_CURSOR_POS.lock() {
+                    if let Some(last_pt) = *guard {
+                        let dx = current_pt.x - last_pt.x;
+                        let dy = current_pt.y - last_pt.y;
+                        if dx != 0 || dy != 0 {
+                            event_to_send = Some(InputEvent::MouseMove { dx, dy });
+                        }
                     }
+                    *guard = Some(current_pt);
                 }
-                LAST_CURSOR_POS = Some(current_pt);
                 block_event = true;
             }
             WM_LBUTTONDOWN => {
@@ -94,6 +99,8 @@ unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: LPAR
                 let hiword = ((hook_struct.mouseData >> 16) & 0xFFFF) as u16;
                 let btn = if hiword == XBUTTON1 as u16 {
                     MouseButton::X1
+                } else if hiword == XBUTTON2 as u16 {
+                    MouseButton::X2
                 } else {
                     MouseButton::X2
                 };
@@ -107,6 +114,8 @@ unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: LPAR
                 let hiword = ((hook_struct.mouseData >> 16) & 0xFFFF) as u16;
                 let btn = if hiword == XBUTTON1 as u16 {
                     MouseButton::X1
+                } else if hiword == XBUTTON2 as u16 {
+                    MouseButton::X2
                 } else {
                     MouseButton::X2
                 };
@@ -136,8 +145,10 @@ unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: LPAR
         }
 
         if let Some(event) = event_to_send {
-            if let Some(sender) = &HOOK_SENDER {
-                let _ = sender.try_send(event);
+            if let Ok(guard) = HOOK_SENDER.lock() {
+                if let Some(sender) = guard.as_ref() {
+                    let _ = sender.try_send(event);
+                }
             }
         }
 
@@ -169,8 +180,10 @@ unsafe extern "system" fn keyboard_proc(n_code: i32, w_param: WPARAM, l_param: L
                 is_extended,
             };
 
-            if let Some(sender) = &HOOK_SENDER {
-                let _ = sender.try_send(event);
+            if let Ok(guard) = HOOK_SENDER.lock() {
+                if let Some(sender) = guard.as_ref() {
+                    let _ = sender.try_send(event);
+                }
             }
 
             return LRESULT(1);
@@ -201,7 +214,9 @@ impl InputHookManager {
                 }
 
                 let tid = windows::Win32::System::Threading::GetCurrentThreadId();
-                HOOK_SENDER = Some(event_sender);
+                if let Ok(mut guard) = HOOK_SENDER.lock() {
+                    *guard = Some(event_sender);
+                }
                 CAPTURE_ACTIVE.store(true, Ordering::SeqCst);
 
                 let mouse_hook = match SetWindowsHookExW(
@@ -252,9 +267,13 @@ impl InputHookManager {
 
                 let _ = UnhookWindowsHookEx(mouse_hook);
                 let _ = UnhookWindowsHookEx(kbd_hook);
-                HOOK_SENDER = None;
+                if let Ok(mut guard) = HOOK_SENDER.lock() {
+                    *guard = None;
+                }
                 CAPTURE_ACTIVE.store(false, Ordering::SeqCst);
-                LAST_CURSOR_POS = None;
+                if let Ok(mut guard) = LAST_CURSOR_POS.lock() {
+                    *guard = None;
+                }
                 is_capturing_clone.store(false, Ordering::SeqCst);
                 info!("NerveDesk input hooks safely removed");
             })
@@ -275,8 +294,8 @@ impl InputHookManager {
         CAPTURE_ACTIVE.store(active, Ordering::SeqCst);
         self.is_capturing.store(active, Ordering::SeqCst);
         if !active {
-            unsafe {
-                LAST_CURSOR_POS = None;
+            if let Ok(mut guard) = LAST_CURSOR_POS.lock() {
+                *guard = None;
             }
         }
     }

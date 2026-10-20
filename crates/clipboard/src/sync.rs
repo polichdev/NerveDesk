@@ -2,19 +2,19 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread::JoinHandle;
 use crossbeam_channel::Sender;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{info, trace};
 
 use crate::format::ClipboardPayload;
 use common::{NerveError, Result};
 
-use windows::core::{s, PCWSTR};
+use windows::core::s;
 use windows::Win32::Foundation::{HANDLE, HGLOBAL, HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::DataExchange::{
     AddClipboardFormatListener, CloseClipboard, EmptyClipboard, GetClipboardData,
     OpenClipboard, RemoveClipboardFormatListener, SetClipboardData,
 };
 use windows::Win32::System::Memory::{
-    GlobalAlloc, GlobalLock, GlobalUnlock, GHND, GMEM_MOVEABLE,
+    GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExA, DefWindowProcA, DestroyWindow, DispatchMessageA, GetMessageA,
@@ -28,7 +28,7 @@ const WM_STOP_CLIPBOARD: u32 = WM_USER + 101;
 pub struct ClipboardListener {
     thread_handle: Option<JoinHandle<()>>,
     hwnd_val: usize,
-    last_seen_hash: Arc<AtomicU64>,
+    _last_seen_hash: Arc<AtomicU64>,
 }
 
 impl ClipboardListener {
@@ -45,7 +45,7 @@ impl ClipboardListener {
                 let class_name = s!("NerveDeskClipboardClass");
                 let wnd_class = WNDCLASSA {
                     lpfnWndProc: Some(clipboard_wnd_proc),
-                    hInstance: HINSTANCE::default(),
+                    hInstance: HINSTANCE::default().into(),
                     lpszClassName: class_name,
                     ..Default::default()
                 };
@@ -57,7 +57,7 @@ impl ClipboardListener {
                     return;
                 }
 
-                let hwnd = CreateWindowExA(
+                let hwnd = match CreateWindowExA(
                     windows::Win32::UI::WindowsAndMessaging::WINDOW_EX_STYLE(0),
                     class_name,
                     s!("NerveDeskClipboardWindow"),
@@ -67,14 +67,15 @@ impl ClipboardListener {
                     None,
                     HINSTANCE::default(),
                     None,
-                );
-
-                if hwnd.0 == 0 {
-                    let _ = init_tx.send(Err(NerveError::Platform(
-                        "Failed to create clipboard window".into(),
-                    )));
-                    return;
-                }
+                ) {
+                    Ok(h) => h,
+                    Err(e) => {
+                        let _ = init_tx.send(Err(NerveError::Platform(format!(
+                            "Failed to create clipboard window: {e}"
+                        ))));
+                        return;
+                    }
+                };
 
                 if let Err(e) = AddClipboardFormatListener(hwnd) {
                     let _ = DestroyWindow(hwnd);
@@ -118,7 +119,7 @@ impl ClipboardListener {
         Ok(Self {
             thread_handle: Some(handle),
             hwnd_val,
-            last_seen_hash,
+            _last_seen_hash: last_seen_hash,
         })
     }
 
@@ -150,7 +151,7 @@ unsafe extern "system" fn clipboard_wnd_proc(
 
 fn read_clipboard_content() -> Option<ClipboardPayload> {
     unsafe {
-        if !OpenClipboard(HWND::default()).as_bool() {
+        if OpenClipboard(HWND::default()).is_err() {
             return None;
         }
 
@@ -168,16 +169,13 @@ fn read_clipboard_content() -> Option<ClipboardPayload> {
             return None;
         }
 
-        let wide_slice = {
-            let mut len = 0;
-            let mut p = ptr as *const u16;
-            while *p != 0 {
-                len += 1;
-                p = p.add(1);
-            }
-            std::slice::from_raw_parts(ptr as *const u16, len)
-        };
-
+        let mut len = 0;
+        let mut p = ptr as *const u16;
+        while *p != 0 {
+            len += 1;
+            p = p.add(1);
+        }
+        let wide_slice = std::slice::from_raw_parts(ptr as *const u16, len);
         let text = String::from_utf16_lossy(wide_slice);
 
         let _ = GlobalUnlock(HGLOBAL(handle.0));
@@ -195,7 +193,7 @@ impl ClipboardWriter {
         let bytes_len = wide.len() * std::mem::size_of::<u16>();
 
         unsafe {
-            if !OpenClipboard(HWND::default()).as_bool() {
+            if OpenClipboard(HWND::default()).is_err() {
                 return Err(NerveError::Platform("Failed to open clipboard for writing".into()));
             }
 

@@ -34,6 +34,7 @@ windows = { version = "0.58", features = [
     "Win32_System_Threading",
     "Win32_System_LibraryLoader",
     "Win32_System_Memory",
+    "Win32_Graphics_Gdi",
 ] }
 crossbeam-channel = "0.5"
 bytemuck = { version = "1.18", features = ["derive"] }
