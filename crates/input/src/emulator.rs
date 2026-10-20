@@ -23,6 +23,7 @@ impl InputEmulator {
     pub fn inject(&self, event: &InputEvent) -> Result<()> {
         match event {
             InputEvent::MouseMove { dx, dy } => self.inject_mouse_move(*dx, *dy),
+            InputEvent::CursorPosition { x, y } => self.inject_cursor_position(*x, *y),
             InputEvent::MouseButton { button, state } => {
                 self.inject_mouse_button(*button, *state)
             }
@@ -59,6 +60,13 @@ impl InputEmulator {
             if sent == 0 {
                 warn!("SendInput (MouseMove) returned 0 injected events");
             }
+        }
+        Ok(())
+    }
+
+    fn inject_cursor_position(&self, x: i32, y: i32) -> Result<()> {
+        unsafe {
+            let _ = windows::Win32::UI::WindowsAndMessaging::SetCursorPos(x, y);
         }
         Ok(())
     }

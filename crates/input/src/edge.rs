@@ -16,7 +16,7 @@ pub enum ScreenEdge {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TransitionResult {
-    CrossedToClient,
+    CrossedToClient { client_x: i32, client_y: i32 },
     ReturnedToHost { return_x: i32, return_y: i32 },
 }
 
@@ -60,6 +60,21 @@ impl EdgeDetector {
         }
     }
 
+    pub fn set_dimensions(&mut self, host_w: i32, host_h: i32, client_w: i32, client_h: i32) {
+        if host_w > 0 {
+            self.config.host_width = host_w;
+        }
+        if host_h > 0 {
+            self.config.host_height = host_h;
+        }
+        if client_w > 0 {
+            self.config.client_width = client_w;
+        }
+        if client_h > 0 {
+            self.config.client_height = client_h;
+        }
+    }
+
     pub fn evaluate_motion(
         &mut self,
         current_x: i32,
@@ -93,30 +108,37 @@ impl EdgeDetector {
                     );
                     self.active_location = ActiveLocation::Client;
 
-                    match self.config.client_edge {
+                    let (cx, cy) = match self.config.client_edge {
                         ScreenEdge::Right => {
-                            self.virtual_client_x = 0;
-                            self.virtual_client_y = (current_y * self.config.client_height / self.config.host_height)
+                            let cx = 2;
+                            let cy = (current_y * self.config.client_height / self.config.host_height)
                                 .clamp(0, self.config.client_height - 1);
+                            (cx, cy)
                         }
                         ScreenEdge::Left => {
-                            self.virtual_client_x = self.config.client_width - 1;
-                            self.virtual_client_y = (current_y * self.config.client_height / self.config.host_height)
+                            let cx = self.config.client_width - 3;
+                            let cy = (current_y * self.config.client_height / self.config.host_height)
                                 .clamp(0, self.config.client_height - 1);
+                            (cx, cy)
                         }
                         ScreenEdge::Top => {
-                            self.virtual_client_x = (current_x * self.config.client_width / self.config.host_width)
+                            let cx = (current_x * self.config.client_width / self.config.host_width)
                                 .clamp(0, self.config.client_width - 1);
-                            self.virtual_client_y = self.config.client_height - 1;
+                            let cy = self.config.client_height - 3;
+                            (cx, cy)
                         }
                         ScreenEdge::Bottom => {
-                            self.virtual_client_x = (current_x * self.config.client_width / self.config.host_width)
+                            let cx = (current_x * self.config.client_width / self.config.host_width)
                                 .clamp(0, self.config.client_width - 1);
-                            self.virtual_client_y = 0;
+                            let cy = 2;
+                            (cx, cy)
                         }
-                    }
+                    };
 
-                    return Some(TransitionResult::CrossedToClient);
+                    self.virtual_client_x = cx;
+                    self.virtual_client_y = cy;
+
+                    return Some(TransitionResult::CrossedToClient { client_x: cx, client_y: cy });
                 }
             }
             ActiveLocation::Client => {
@@ -220,7 +242,7 @@ mod tests {
         assert_eq!(detector.active_location(), ActiveLocation::Host);
 
         let switch = detector.evaluate_motion(1919, 500, 5, 0);
-        assert_eq!(switch, Some(TransitionResult::CrossedToClient));
+        assert!(matches!(switch, Some(TransitionResult::CrossedToClient { .. })));
         assert_eq!(detector.active_location(), ActiveLocation::Client);
 
         assert_eq!(detector.evaluate_motion(1919, 500, 50, 0), None);

@@ -6,14 +6,21 @@
   <title>NerveDesk</title>
   <style>
     :root {
-      --bg: #0c0e14;
+      --bg: #090b10;
+      --sidebar-bg: #0f121b;
       --card-bg: #141824;
-      --card-border: #232b40;
+      --card-bg-hover: #191f30;
+      --card-border: #212738;
+      --card-border-active: #38bdf8;
       --accent: #38bdf8;
       --accent-glow: rgba(56, 189, 248, 0.25);
+      --purple: #818cf8;
       --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
       --text: #f1f5f9;
-      --text-muted: #94a3b8;
+      --text-muted: #8b99ad;
+      --text-dark: #64748b;
       --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
 
@@ -30,60 +37,168 @@
       font-family: var(--font);
       height: 100vh;
       display: flex;
+      overflow: hidden;
+    }
+
+    aside {
+      width: 250px;
+      background: var(--sidebar-bg);
+      border-right: 1px solid var(--card-border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .brand-section {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    .brand-icon {
+      width: 34px;
+      height: 34px;
+      background: linear-gradient(135deg, #38bdf8, #818cf8);
+      border-radius: 9px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 1.1rem;
+      color: #090b10;
+      box-shadow: 0 0 16px var(--accent-glow);
+    }
+
+    .brand-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-sub {
+      font-size: 0.68rem;
+      color: var(--text-dark);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .nav-group-title {
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: var(--text-dark);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 16px 20px 8px;
+    }
+
+    .nav-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 0 10px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      border-radius: 9px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      border: 1px solid transparent;
+    }
+
+    .nav-item:hover {
+      background: #171b28;
+      color: var(--text);
+    }
+
+    .nav-item.active {
+      background: rgba(56, 189, 248, 0.12);
+      border-color: rgba(56, 189, 248, 0.25);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .nav-icon {
+      font-size: 1.05rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+    }
+
+    .sidebar-footer {
+      margin-top: auto;
+      border-top: 1px solid var(--card-border);
+      padding: 12px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .ip-indicator {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: #131724;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      font-size: 0.73rem;
+      color: var(--accent);
+    }
+
+    .main-wrap {
+      flex: 1;
+      display: flex;
       flex-direction: column;
       overflow: hidden;
     }
 
     header {
+      height: 58px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 16px 24px;
+      padding: 0 24px;
       border-bottom: 1px solid var(--card-border);
-      background: rgba(20, 24, 36, 0.6);
-      backdrop-filter: blur(8px);
+      background: rgba(15, 18, 27, 0.7);
+      backdrop-filter: blur(10px);
+      flex-shrink: 0;
     }
 
-    .brand {
+    .breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .breadcrumb strong {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .header-actions {
       display: flex;
       align-items: center;
       gap: 12px;
-    }
-
-    .brand-logo {
-      width: 32px;
-      height: 32px;
-      background: linear-gradient(135deg, #38bdf8, #818cf8);
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 800;
-      color: #0c0e14;
-      box-shadow: 0 0 16px var(--accent-glow);
-    }
-
-    .brand-title {
-      font-size: 1.15rem;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-    }
-
-    .brand-badge {
-      font-size: 0.75rem;
-      background: rgba(56, 189, 248, 0.1);
-      color: var(--accent);
-      padding: 2px 8px;
-      border-radius: 999px;
-      border: 1px solid rgba(56, 189, 248, 0.25);
     }
 
     .status-badge {
       display: flex;
       align-items: center;
       gap: 8px;
-      font-size: 0.85rem;
-      padding: 6px 14px;
+      font-size: 0.8rem;
+      padding: 5px 12px;
       border-radius: 20px;
       background: rgba(16, 185, 129, 0.1);
       border: 1px solid rgba(16, 185, 129, 0.25);
@@ -92,8 +207,8 @@
     }
 
     .pulse {
-      width: 8px;
-      height: 8px;
+      width: 7px;
+      height: 7px;
       border-radius: 50%;
       background: var(--success);
       box-shadow: 0 0 8px var(--success);
@@ -109,73 +224,99 @@
     .metrics-bar {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
-      gap: 16px;
-      padding: 16px 24px;
+      gap: 14px;
+      padding: 14px 24px;
       border-bottom: 1px solid var(--card-border);
+      background: rgba(20, 24, 36, 0.35);
+      flex-shrink: 0;
     }
 
     .metric-card {
       background: var(--card-bg);
       border: 1px solid var(--card-border);
-      border-radius: 12px;
-      padding: 14px 18px;
+      border-radius: 10px;
+      padding: 12px 16px;
     }
 
     .metric-label {
-      font-size: 0.75rem;
-      color: var(--text-muted);
+      font-size: 0.7rem;
+      color: var(--text-dark);
       text-transform: uppercase;
       letter-spacing: 0.05em;
-      margin-bottom: 6px;
+      margin-bottom: 4px;
     }
 
     .metric-value {
-      font-size: 1.4rem;
+      font-size: 1.25rem;
       font-weight: 700;
       color: var(--text);
     }
 
     .metric-sub {
-      font-size: 0.75rem;
+      font-size: 0.72rem;
       color: var(--accent);
       margin-top: 2px;
     }
 
-    main {
+    .content-area {
       flex: 1;
-      display: grid;
-      grid-template-columns: 1fr 1.2fr;
-      gap: 20px;
       padding: 24px;
       overflow-y: auto;
+    }
+
+    .view-container {
+      display: none;
+      flex-direction: column;
+      gap: 20px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .view-container.active {
+      display: flex;
+    }
+
+    .view-header {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .view-title {
+      font-size: 1.3rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .view-desc {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1.15fr;
+      gap: 20px;
     }
 
     .panel {
       background: var(--card-bg);
       border: 1px solid var(--card-border);
       border-radius: 14px;
-      padding: 20px;
+      padding: 22px;
       display: flex;
       flex-direction: column;
       gap: 18px;
     }
 
     .panel-title {
-      font-size: 1rem;
+      font-size: 0.95rem;
       font-weight: 600;
       display: flex;
       justify-content: space-between;
       align-items: center;
       border-bottom: 1px solid var(--card-border);
       padding-bottom: 12px;
-    }
-
-    .edge-selector-container {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 12px;
-      padding: 6px 10px;
     }
 
     .edge-grid {
@@ -187,16 +328,18 @@
       gap: 10px;
       align-items: center;
       justify-items: center;
+      padding: 10px 0;
     }
 
     .edge-btn {
-      background: #1c2336;
+      background: #191f30;
       border: 1px solid var(--card-border);
       color: var(--text-muted);
-      padding: 8px 16px;
+      padding: 8px 18px;
       border-radius: 8px;
       cursor: pointer;
       font-size: 0.8rem;
+      font-weight: 500;
       transition: all 0.2s;
     }
 
@@ -210,7 +353,7 @@
       border-color: var(--accent);
       color: var(--accent);
       font-weight: 600;
-      box-shadow: 0 0 12px var(--accent-glow);
+      box-shadow: 0 0 14px var(--accent-glow);
     }
 
     .btn-top { grid-area: top; }
@@ -220,73 +363,38 @@
 
     .host-screen-box {
       grid-area: host;
-      width: 130px;
-      height: 80px;
-      background: #0f131d;
-      border: 2px solid #334155;
-      border-radius: 8px;
+      width: 140px;
+      height: 85px;
+      background: #0d1019;
+      border: 2px solid #283147;
+      border-radius: 9px;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       gap: 4px;
-      font-size: 0.8rem;
+      font-size: 0.82rem;
       font-weight: 600;
-    }
-
-    .device-list {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      overflow-y: auto;
-      max-height: 280px;
-    }
-
-    .device-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 14px 16px;
-      background: #181f30;
-      border: 1px solid var(--card-border);
-      border-radius: 10px;
-      transition: border 0.2s;
-    }
-
-    .device-item:hover {
-      border-color: #3b4765;
-    }
-
-    .device-info {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .device-name {
-      font-weight: 600;
-      font-size: 0.95rem;
-    }
-
-    .device-sub {
-      font-size: 0.75rem;
-      color: var(--text-muted);
     }
 
     .btn {
       background: var(--accent);
-      color: #0c0e14;
+      color: #090b10;
       border: none;
-      padding: 8px 16px;
+      padding: 9px 18px;
       border-radius: 8px;
       font-weight: 600;
       font-size: 0.85rem;
       cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
       transition: filter 0.2s, transform 0.1s;
     }
 
     .btn:hover {
-      filter: brightness(1.1);
+      filter: brightness(1.12);
     }
 
     .btn:active {
@@ -294,31 +402,61 @@
     }
 
     .btn-secondary {
-      background: #222b40;
+      background: #1c2336;
       color: var(--text);
       border: 1px solid var(--card-border);
     }
 
     .btn-secondary:hover {
       border-color: var(--accent);
+      background: #232c42;
+    }
+
+    .btn-danger {
+      background: rgba(239, 68, 68, 0.15);
+      color: #fca5a5;
+      border: 1px solid rgba(239, 68, 68, 0.35);
+    }
+
+    .btn-danger:hover {
+      background: rgba(239, 68, 68, 0.25);
+    }
+
+    .btn-glow {
+      background: linear-gradient(135deg, #38bdf8, #818cf8);
+      color: #090b10;
+      box-shadow: 0 0 20px var(--accent-glow);
     }
 
     .toggle-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 4px 0;
+      padding: 10px 0;
+      border-bottom: 1px solid #1a2030;
     }
 
-    .toggle-label {
+    .toggle-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .toggle-title {
       font-size: 0.85rem;
+      font-weight: 500;
+    }
+
+    .toggle-sub {
+      font-size: 0.72rem;
+      color: var(--text-dark);
     }
 
     .switch {
       position: relative;
       display: inline-block;
-      width: 44px;
-      height: 24px;
+      width: 42px;
+      height: 22px;
     }
 
     .switch input {
@@ -331,20 +469,20 @@
       position: absolute;
       cursor: pointer;
       top: 0; left: 0; right: 0; bottom: 0;
-      background-color: #263147;
-      transition: .3s;
-      border-radius: 24px;
+      background-color: #232b40;
+      transition: .25s;
+      border-radius: 22px;
     }
 
     .slider:before {
       position: absolute;
       content: "";
-      height: 18px;
-      width: 18px;
+      height: 16px;
+      width: 16px;
       left: 3px;
       bottom: 3px;
       background-color: white;
-      transition: .3s;
+      transition: .25s;
       border-radius: 50%;
     }
 
@@ -354,7 +492,83 @@
 
     input:checked + .slider:before {
       transform: translateX(20px);
-      background-color: #0c0e14;
+      background-color: #090b10;
+    }
+
+    .info-box {
+      background: #101420;
+      border: 1px solid var(--card-border);
+      border-radius: 9px;
+      padding: 12px 16px;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      line-height: 1.45;
+    }
+
+    .info-box code {
+      background: #181e2e;
+      color: var(--accent);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.72rem;
+    }
+
+    .device-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      overflow-y: auto;
+      max-height: 380px;
+    }
+
+    .device-card {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 18px;
+      background: #171c2c;
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      transition: border 0.2s, background 0.2s;
+    }
+
+    .device-card:hover {
+      border-color: #3b4765;
+      background: #1c2336;
+    }
+
+    .device-info {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .device-name {
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+
+    .device-sub {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .input-field {
+      background: #101420;
+      border: 1px solid var(--card-border);
+      color: #f1f5f9;
+      padding: 9px 14px;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      outline: none;
+      transition: border 0.2s;
+    }
+
+    .input-field:focus {
+      border-color: var(--accent);
     }
 
     #streamViewerModal {
@@ -372,8 +586,8 @@
       left: 0;
       right: 0;
       height: 48px;
-      background: rgba(12, 14, 20, 0.85);
-      backdrop-filter: blur(8px);
+      background: rgba(12, 14, 20, 0.88);
+      backdrop-filter: blur(10px);
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -393,129 +607,294 @@
   </style>
 </head>
 <body>
-  <header>
-    <div class="brand">
-      <div class="brand-logo">N</div>
-      <div class="brand-title">NerveDesk</div>
-      <div class="brand-badge">v0.1.0</div>
-    </div>
-    <div class="status-badge" id="statusBadge">
-      <div class="pulse"></div>
-      <span id="statusText">Ready</span>
-    </div>
-  </header>
-
-  <section class="metrics-bar">
-    <div class="metric-card">
-      <div class="metric-label">Input Latency</div>
-      <div class="metric-value" id="rttVal">0.00 ms</div>
-      <div class="metric-sub">UDP Direct</div>
-    </div>
-    <div class="metric-card">
-      <div class="metric-label">Display Stream</div>
-      <div class="metric-value" id="fpsVal">0.0 FPS</div>
-      <div class="metric-sub">Zero-Copy GPU</div>
-    </div>
-    <div class="metric-card">
-      <div class="metric-label">Throughput</div>
-      <div class="metric-value" id="bitrateVal">0.0 Mbps</div>
-      <div class="metric-sub">Low-Latency CBR</div>
-    </div>
-    <div class="metric-card">
-      <div class="metric-label">Virtual Display</div>
-      <div class="metric-value" id="displayStateVal">Attached</div>
-      <div class="metric-sub">Microsoft IddCx UMDF</div>
-    </div>
-  </section>
-
-  <main>
-    <div class="panel">
-      <div class="panel-title">
-        <span>Monitor Topology</span>
-        <span style="font-size: 0.8rem; color: var(--text-muted);">Active Border</span>
-      </div>
-
-      <div class="edge-selector-container">
-        <div class="edge-grid">
-          <button class="edge-btn btn-top" onclick="setEdge('Top')">Top Border</button>
-          <button class="edge-btn btn-left" onclick="setEdge('Left')">Left</button>
-          <div class="host-screen-box">
-            <span>Primary PC</span>
-            <span style="font-size: 0.65rem; color: var(--text-muted);">1920x1080</span>
-          </div>
-          <button class="edge-btn btn-right active" id="edgeRight" onclick="setEdge('Right')">Right</button>
-          <button class="edge-btn btn-bottom" onclick="setEdge('Bottom')">Bottom</button>
-        </div>
-      </div>
-
-      <div style="background: #111520; border: 1px solid var(--card-border); border-radius: 8px; padding: 10px 14px; font-size: 0.74rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 4px;">
-        <div style="font-weight: 600; color: var(--accent);">KVM & Screen Mode Instructions:</div>
-        <div>1. <strong style="color: var(--text);">KVM Mode:</strong> Move cursor to the active border to jump onto the second PC. Once there, you control the other PC freely. Move back across that border to return. Press <code>Shift+Esc</code> to force return.</div>
-        <div>2. <strong style="color: var(--text);">Screen Streaming:</strong> On Client, click <strong>Open Stream Display</strong> to view the extended monitor.</div>
-      </div>
-
-      <button class="btn btn-secondary" style="font-size: 0.8rem; padding: 7px 12px; display: flex; align-items: center; justify-content: center; gap: 6px;" onclick="openStreamDisplay()">
-        <span>🖥️</span> Open Stream Display Window
-      </button>
-
-      <div class="toggle-row">
-        <span class="toggle-label">Virtual Display Driver (IddCx)</span>
-        <label class="switch">
-          <input type="checkbox" id="vDisplayToggle" checked onchange="toggleVirtualDisplay(this.checked)">
-          <span class="slider"></span>
-        </label>
-      </div>
-
-      <div class="toggle-row">
-        <span class="toggle-label">Asynchronous Clipboard Isolation</span>
-        <label class="switch">
-          <input type="checkbox" checked disabled>
-          <span class="slider"></span>
-        </label>
-      </div>
-
-      <div style="display: flex; gap: 10px; margin-top: auto;">
-        <button class="btn btn-secondary" style="flex: 0.8;" onclick="stopService()">Stop</button>
-        <button class="btn btn-secondary" style="flex: 1.1;" onclick="startClient()">Receive (Client)</button>
-        <button class="btn" style="flex: 1.1;" onclick="startHost()">Stream (Host)</button>
+  <aside>
+    <div class="brand-section">
+      <div class="brand-icon">N</div>
+      <div>
+        <div class="brand-title">NerveDesk</div>
+        <div class="brand-sub">Ultra-Low Latency</div>
       </div>
     </div>
 
-    <div class="panel">
-      <div class="panel-title">
+    <div class="nav-group-title">Engines</div>
+    <div class="nav-list">
+      <div class="nav-item active" id="navKvm" onclick="switchTab('kvm')">
+        <span class="nav-icon">⚡</span>
+        <span>KVM Switch</span>
+      </div>
+      <div class="nav-item" id="navCast" onclick="switchTab('cast')">
+        <span class="nav-icon">🖥️</span>
+        <span>Screen Cast</span>
+      </div>
+      <div class="nav-item" id="navDevices" onclick="switchTab('devices')">
+        <span class="nav-icon">📡</span>
         <span>Devices</span>
-        <div style="display: flex; gap: 8px; align-items: center;">
-          <span id="myIpBadge" style="font-size: 0.72rem; color: var(--accent); background: rgba(56, 189, 248, 0.12); padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(56, 189, 248, 0.25);">IP: loading...</span>
-          <button class="btn btn-secondary" id="scanBtn" style="font-size: 0.75rem; padding: 4px 10px;" onclick="refreshDevices()">Scan</button>
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="nav-item" id="navSettings" onclick="switchTab('settings')" style="margin: 0; padding: 8px 12px;">
+        <span class="nav-icon">⚙️</span>
+        <span>Settings</span>
+      </div>
+      <div class="ip-indicator">
+        <span style="color: var(--text-dark);">Local IP</span>
+        <span id="myIpBadge" style="font-weight: 600;">127.0.0.1</span>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main-wrap">
+    <header>
+      <div class="breadcrumb">
+        <span>NerveDesk</span>
+        <span>/</span>
+        <strong id="breadcrumbTitle">KVM Switch</strong>
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-secondary" style="font-size: 0.78rem; padding: 5px 12px;" onclick="stopService()">Stop Service</button>
+        <div class="status-badge" id="statusBadge">
+          <div class="pulse"></div>
+          <span id="statusText">Ready</span>
+        </div>
+      </div>
+    </header>
+
+    <section class="metrics-bar">
+      <div class="metric-card">
+        <div class="metric-label">Input Latency</div>
+        <div class="metric-value" id="rttVal">0.00 ms</div>
+        <div class="metric-sub">Direct UDP Transport</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Display Stream</div>
+        <div class="metric-value" id="fpsVal">0.0 FPS</div>
+        <div class="metric-sub">Zero-Copy GPU Capture</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Bandwidth</div>
+        <div class="metric-value" id="bitrateVal">0.0 Mbps</div>
+        <div class="metric-sub">H.264 Hardware Stream</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Virtual Display</div>
+        <div class="metric-value" id="displayStateVal">Attached</div>
+        <div class="metric-sub">Microsoft IddCx UMDF</div>
+      </div>
+    </section>
+
+    <div class="content-area">
+      <div class="view-container active" id="viewKvm">
+        <div class="view-header">
+          <div class="view-title">KVM Cursor & Keyboard Sharing</div>
+          <div class="view-desc">Move your mouse cursor across screens between PC and Laptop seamlessly. When entering the secondary PC, the cursor jumps to the edge and gives you 100% full screen movement.</div>
+        </div>
+
+        <div class="grid-2">
+          <div class="panel">
+            <div class="panel-title">
+              <span>Monitor Topology</span>
+              <span style="font-size: 0.78rem; color: var(--accent);">Active Border</span>
+            </div>
+
+            <div class="edge-grid">
+              <button class="edge-btn btn-top" onclick="setEdge('Top')">Top Border</button>
+              <button class="edge-btn btn-left" onclick="setEdge('Left')">Left Border</button>
+              <div class="host-screen-box">
+                <span>Primary PC</span>
+                <span style="font-size: 0.65rem; color: var(--text-dark);">24" Host Display</span>
+              </div>
+              <button class="edge-btn btn-right active" id="edgeRight" onclick="setEdge('Right')">Right Border</button>
+              <button class="edge-btn btn-bottom" onclick="setEdge('Bottom')">Bottom Border</button>
+            </div>
+
+            <div class="info-box">
+              <div style="font-weight: 600; color: var(--accent);">KVM Movement Logic:</div>
+              <div>• <strong>To enter Laptop:</strong> move your mouse to the chosen active border. The cursor snaps to the laptop's entry edge and you can move across the entire laptop screen freely.</div>
+              <div>• <strong>To return to PC:</strong> pull the mouse back to the same border facing the PC.</div>
+              <div>• <strong>Emergency Escape:</strong> press <code>Shift + Esc</code> or <code>Ctrl + Esc</code> at any time.</div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-title">
+              <span>KVM Connection</span>
+              <span style="font-size: 0.78rem; color: var(--text-dark);">UDP Port 48100</span>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <div style="font-size: 0.82rem; color: var(--text-muted);">Quick Connect to Secondary Device:</div>
+              <div style="display: flex; gap: 8px;">
+                <input type="text" id="kvmTargetIp" class="input-field" placeholder="Target IP (e.g. 192.0.2.10)" style="flex: 1;">
+                <button class="btn" onclick="startKvmHost()">Connect Host</button>
+              </div>
+            </div>
+
+            <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 10px;">
+              <div style="font-size: 0.82rem; color: var(--text-muted);">Start as Receiver on this Device:</div>
+              <button class="btn btn-secondary" onclick="startKvmClient()" style="padding: 12px;">
+                <span>📥</span> Receive KVM Input on this PC
+              </button>
+            </div>
+
+            <div style="margin-top: auto; display: flex; gap: 10px;">
+              <button class="btn btn-secondary" style="flex: 1;" onclick="stopService()">Stop KVM</button>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div style="display: flex; gap: 8px;">
-        <input type="text" id="manualIpInput" placeholder="Direct Connect IP (e.g. 192.0.2.10)" style="flex: 1; background: #111520; border: 1px solid var(--card-border); color: #f1f5f9; padding: 8px 12px; border-radius: 8px; font-size: 0.8rem; outline: none;">
-        <button class="btn" style="font-size: 0.8rem; padding: 8px 16px;" onclick="connectManual()">Connect</button>
+      <div class="view-container" id="viewCast">
+        <div class="view-header">
+          <div class="view-title">Virtual Display & Screen Casting</div>
+          <div class="view-desc">Stream zero-copy DirectX 11 GPU frames to turn your laptop into an ultra-low latency second monitor.</div>
+        </div>
+
+        <div class="grid-2">
+          <div class="panel">
+            <div class="panel-title">
+              <span>Virtual Monitor Driver</span>
+              <span style="font-size: 0.78rem; color: var(--text-dark);">Microsoft IddCx UMDF</span>
+            </div>
+
+            <div class="toggle-row">
+              <div class="toggle-info">
+                <div class="toggle-title">Virtual Display Device</div>
+                <div class="toggle-sub">Creates an additional hardware monitor in Windows Display Settings</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="vDisplayToggle" checked onchange="toggleVirtualDisplay(this.checked)">
+                <span class="slider"></span>
+              </label>
+            </div>
+
+            <div class="info-box">
+              <div style="font-weight: 600; color: var(--accent);">How to use extended display:</div>
+              <div>1. Press <code>Win + P</code> on your Host PC and select <strong>«Extend»</strong>.</div>
+              <div>2. Windows will automatically attach the virtual display. Drag any window or app into it.</div>
+              <div>3. On the Laptop (Client), click <strong>Open Fullscreen Display Viewer</strong> below to view the stream.</div>
+            </div>
+
+            <button class="btn btn-glow" style="padding: 14px; font-size: 0.95rem; margin-top: auto;" onclick="openStreamDisplay()">
+              <span>🖥️</span> Open Fullscreen Display Viewer
+            </button>
+          </div>
+
+          <div class="panel">
+            <div class="panel-title">
+              <span>Display Stream Transport</span>
+              <span style="font-size: 0.78rem; color: var(--text-dark);">UDP Port 48101</span>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <div style="font-size: 0.82rem; color: var(--text-muted);">Stream Host Screen to Target IP:</div>
+              <div style="display: flex; gap: 8px;">
+                <input type="text" id="castTargetIp" class="input-field" placeholder="Target Laptop IP (e.g. 192.0.2.10)" style="flex: 1;">
+                <button class="btn" onclick="startCastHost()">Start Stream</button>
+              </div>
+            </div>
+
+            <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 10px;">
+              <div style="font-size: 0.82rem; color: var(--text-muted);">Receive Display Stream on this Device:</div>
+              <button class="btn btn-secondary" onclick="startCastClient()" style="padding: 12px;">
+                <span>📡</span> Start Video Receiver (Client)
+              </button>
+            </div>
+
+            <div style="margin-top: auto; display: flex; gap: 10px;">
+              <button class="btn btn-secondary" style="flex: 1;" onclick="stopService()">Stop Stream</button>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div class="device-list" id="deviceList">
+      <div class="view-container" id="viewDevices">
+        <div class="view-header">
+          <div class="view-title">Network Devices</div>
+          <div class="view-desc">Automatic 24/7 background UDP discovery finds all NerveDesk devices on your local Wi-Fi or Ethernet.</div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">
+            <span>Discovered Peers</span>
+            <button class="btn btn-secondary" id="scanBtn" style="font-size: 0.78rem; padding: 4px 14px;" onclick="refreshDevices()">Scan Network</button>
+          </div>
+
+          <div style="display: flex; gap: 10px;">
+            <input type="text" id="manualIpInput" class="input-field" placeholder="Direct IP (e.g. 192.0.2.10)" style="flex: 1;">
+            <button class="btn btn-secondary" onclick="connectManualKvm()">Connect KVM</button>
+            <button class="btn" onclick="connectManualCast()">Connect Cast</button>
+          </div>
+
+          <div class="device-list" id="deviceList">
+          </div>
+        </div>
+      </div>
+
+      <div class="view-container" id="viewSettings">
+        <div class="view-header">
+          <div class="view-title">Settings & Hardware Configuration</div>
+          <div class="view-desc">Configure input hooks, emergency escape hotkeys, and hardware acceleration options.</div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">
+            <span>Hardware & Performance</span>
+            <span style="font-size: 0.78rem; color: var(--accent);">DirectX 11 Zero-Copy</span>
+          </div>
+
+          <div class="toggle-row">
+            <div class="toggle-info">
+              <div class="toggle-title">Emergency Cursor Escape</div>
+              <div class="toggle-sub">Press Shift+Esc or Ctrl+Esc to break out of client screen instantly</div>
+            </div>
+            <span style="font-size: 0.8rem; font-weight: 600; color: var(--accent);">Shift + Esc</span>
+          </div>
+
+          <div class="toggle-row">
+            <div class="toggle-info">
+              <div class="toggle-title">Hardware Video Encoding</div>
+              <div class="toggle-sub">Zero-copy D3D11 GPU NVENC/AMF hardware accelerated H.264</div>
+            </div>
+            <span style="font-size: 0.8rem; font-weight: 600; color: var(--success);">Active (60+ FPS)</span>
+          </div>
+
+          <div class="toggle-row">
+            <div class="toggle-info">
+              <div class="toggle-title">Asynchronous Clipboard Isolation</div>
+              <div class="toggle-sub">Protects system clipboard buffers during active transitions</div>
+            </div>
+            <span style="font-size: 0.8rem; font-weight: 600; color: var(--success);">Enabled</span>
+          </div>
+
+          <div class="toggle-row">
+            <div class="toggle-info">
+              <div class="toggle-title">Static CRT Binary Architecture</div>
+              <div class="toggle-sub">No external MSVC Visual C++ runtimes required on peer systems</div>
+            </div>
+            <span style="font-size: 0.8rem; font-weight: 600; color: var(--accent);">x86_64-pc-windows-msvc</span>
+          </div>
+        </div>
       </div>
     </div>
-  </main>
+  </div>
 
   <div id="streamViewerModal">
     <div class="viewer-toolbar">
-      <div style="display: flex; align-items: center; gap: 12px;">
+      <div style="display: flex; align-items: center; gap: 14px;">
         <span style="font-weight: 700; font-size: 0.95rem; color: #fff;">NerveDesk Display Stream</span>
         <span id="viewerFpsBadge" style="font-size: 0.75rem; background: rgba(56,189,248,0.2); color: var(--accent); padding: 2px 8px; border-radius: 4px;">60.0 FPS</span>
       </div>
       <div style="display: flex; gap: 10px;">
-        <button class="btn btn-secondary" style="font-size: 0.8rem; padding: 4px 12px;" onclick="toggleViewerFullscreen()">Fullscreen (F11)</button>
-        <button class="btn" style="font-size: 0.8rem; padding: 4px 12px; background: #ef4444; color: #fff;" onclick="closeStreamDisplay()">Close (Esc)</button>
+        <button class="btn btn-secondary" style="font-size: 0.8rem; padding: 4px 14px;" onclick="toggleViewerFullscreen()">Fullscreen (F11)</button>
+        <button class="btn btn-danger" style="font-size: 0.8rem; padding: 4px 14px;" onclick="closeStreamDisplay()">Close Viewer (Esc)</button>
       </div>
     </div>
     <div class="viewer-canvas-wrap">
-      <div id="viewerPlaceholder" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--text-muted); text-align: center;">
-        <div style="width: 56px; height: 56px; border-radius: 12px; background: #141824; border: 1px solid #232b40; display: flex; align-items: center; justify-content: center; font-size: 1.6rem;">🖥️</div>
-        <div style="font-size: 1.1rem; font-weight: 600; color: #f1f5f9;">Live Display Receiver Active</div>
-        <div style="font-size: 0.8rem; max-width: 420px; line-height: 1.4;">Receiving ultra-low latency Direct3D 11 video frames from Host PC. In Windows Settings (Win+P), select 'Extend' to place windows onto this display.</div>
+      <div id="viewerPlaceholder" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; color: var(--text-muted); text-align: center;">
+        <div style="width: 60px; height: 60px; border-radius: 14px; background: #141824; border: 1px solid #232b40; display: flex; align-items: center; justify-content: center; font-size: 1.8rem;">🖥️</div>
+        <div style="font-size: 1.15rem; font-weight: 600; color: #f1f5f9;">Live Display Receiver Active</div>
+        <div style="font-size: 0.82rem; max-width: 440px; line-height: 1.5;">Receiving zero-copy Direct3D 11 video frames from Host PC. In Windows Settings on Host (Win+P), select 'Extend' to drag windows onto this display.</div>
       </div>
     </div>
   </div>
@@ -534,6 +913,29 @@
       throw new Error("Tauri API not accessible");
     }
 
+    function switchTab(tabId) {
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.view-container').forEach(el => el.classList.remove('active'));
+
+      if (tabId === 'kvm') {
+        document.getElementById('navKvm').classList.add('active');
+        document.getElementById('viewKvm').classList.add('active');
+        document.getElementById('breadcrumbTitle').innerText = 'KVM Switch';
+      } else if (tabId === 'cast') {
+        document.getElementById('navCast').classList.add('active');
+        document.getElementById('viewCast').classList.add('active');
+        document.getElementById('breadcrumbTitle').innerText = 'Screen Cast';
+      } else if (tabId === 'devices') {
+        document.getElementById('navDevices').classList.add('active');
+        document.getElementById('viewDevices').classList.add('active');
+        document.getElementById('breadcrumbTitle').innerText = 'Devices';
+      } else if (tabId === 'settings') {
+        document.getElementById('navSettings').classList.add('active');
+        document.getElementById('viewSettings').classList.add('active');
+        document.getElementById('breadcrumbTitle').innerText = 'Settings';
+      }
+    }
+
     function renderDevices(devices) {
       const container = document.getElementById('deviceList');
       container.innerHTML = '';
@@ -548,13 +950,17 @@
       }
       devices.forEach(dev => {
         const item = document.createElement('div');
-        item.className = 'device-item';
+        item.className = 'device-card';
+        const resText = (dev.screen_width && dev.screen_height) ? `${dev.screen_width}x${dev.screen_height}` : '1920x1080';
         item.innerHTML = `
           <div class="device-info">
             <div class="device-name">${dev.name}</div>
-            <div class="device-sub">${dev.ip} &bull; ${dev.role} mode</div>
+            <div class="device-sub">${dev.ip} &bull; ${dev.role} mode &bull; ${resText}</div>
           </div>
-          <button class="btn" data-ip="${dev.ip}" onclick="connectTo('${dev.ip}')">Connect</button>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-secondary" style="font-size: 0.78rem; padding: 6px 12px;" onclick="connectKvmTo('${dev.ip}')">KVM</button>
+            <button class="btn" style="font-size: 0.78rem; padding: 6px 12px;" onclick="connectCastTo('${dev.ip}')">Cast</button>
+          </div>
         `;
         container.appendChild(item);
       });
@@ -571,26 +977,63 @@
       callTauri('toggle_virtual_display', { enable: checked }).catch(() => {});
     }
 
-    function connectTo(ip) {
+    function connectKvmTo(ip) {
+      callTauri('start_host', { targetIp: ip + ":48100", streamVideo: false }).catch(() => {});
+      document.getElementById('statusText').innerText = "KVM Sharing with " + ip;
+    }
+
+    function connectCastTo(ip) {
       callTauri('start_host', { targetIp: ip + ":48100", streamVideo: true }).catch(() => {});
-      document.getElementById('statusText').innerText = "Streaming to " + ip;
+      document.getElementById('statusText').innerText = "Streaming Cast to " + ip;
     }
 
-    function startClient() {
-      callTauri('start_client', { bindPort: 48100 }).catch(() => {});
-      document.getElementById('statusText').innerText = "Client Active (Listening on port 48100)";
-    }
-
-    function startHost() {
-      const container = document.getElementById('deviceList');
-      const firstConnectBtn = container.querySelector('button[data-ip]');
-      if (firstConnectBtn) {
-        connectTo(firstConnectBtn.getAttribute('data-ip'));
+    function startKvmHost() {
+      const input = document.getElementById('kvmTargetIp');
+      const ip = input.value.trim();
+      if (ip) {
+        connectKvmTo(ip);
       } else {
-        const ip = prompt("Enter target client IP address (or leave 127.0.0.1 for local test):", "127.0.0.1");
-        if (ip) {
-          connectTo(ip);
-        }
+        alert("Please enter target IP address.");
+      }
+    }
+
+    function startKvmClient() {
+      callTauri('start_client', { bindPort: 48100 }).catch(() => {});
+      document.getElementById('statusText').innerText = "KVM Client Active (Listening on port 48100)";
+    }
+
+    function startCastHost() {
+      const input = document.getElementById('castTargetIp');
+      const ip = input.value.trim();
+      if (ip) {
+        connectCastTo(ip);
+      } else {
+        alert("Please enter target IP address.");
+      }
+    }
+
+    function startCastClient() {
+      callTauri('start_client', { bindPort: 48100 }).catch(() => {});
+      document.getElementById('statusText').innerText = "Screen Cast Client Active (Port 48100/48101)";
+    }
+
+    function connectManualKvm() {
+      const input = document.getElementById('manualIpInput');
+      const ip = input.value.trim();
+      if (ip) {
+        connectKvmTo(ip);
+      } else {
+        alert("Please enter IP address.");
+      }
+    }
+
+    function connectManualCast() {
+      const input = document.getElementById('manualIpInput');
+      const ip = input.value.trim();
+      if (ip) {
+        connectCastTo(ip);
+      } else {
+        alert("Please enter IP address.");
       }
     }
 
@@ -619,26 +1062,16 @@
         renderDevices([]);
       } finally {
         scanBtn.disabled = false;
-        scanBtn.innerText = 'Scan';
+        scanBtn.innerText = 'Scan Network';
       }
     }
 
     async function loadMyIp() {
       try {
         const ip = await callTauri('get_my_ip');
-        document.getElementById('myIpBadge').innerText = "This Device: " + ip;
+        document.getElementById('myIpBadge').innerText = ip;
       } catch (e) {
-        document.getElementById('myIpBadge').innerText = "IP: Local";
-      }
-    }
-
-    function connectManual() {
-      const input = document.getElementById('manualIpInput');
-      const ip = input.value.trim();
-      if (ip) {
-        connectTo(ip);
-      } else {
-        alert("Please enter the IP address of your other device.");
+        document.getElementById('myIpBadge').innerText = "127.0.0.1";
       }
     }
 

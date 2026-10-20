@@ -24,10 +24,19 @@ pub struct DiscoveryBeacon {
     pub role: DeviceRole,
     pub input_port: u16,
     pub video_port: u16,
+    pub screen_width: u32,
+    pub screen_height: u32,
 }
 
 impl DiscoveryBeacon {
-    pub fn new(device_name: String, role: DeviceRole, input_port: u16, video_port: u16) -> Self {
+    pub fn new(
+        device_name: String,
+        role: DeviceRole,
+        input_port: u16,
+        video_port: u16,
+        screen_width: u32,
+        screen_height: u32,
+    ) -> Self {
         Self {
             magic: DISCOVERY_MAGIC,
             version: 1,
@@ -35,6 +44,8 @@ impl DiscoveryBeacon {
             role,
             input_port,
             video_port,
+            screen_width,
+            screen_height,
         }
     }
 }
@@ -107,14 +118,10 @@ impl DiscoveryListener {
         let std_socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))
             .map_err(|e| NerveError::Io(e))?;
 
-        let _ = std_socket.set_broadcast(true);
         let _ = std_socket.set_reuse_address(true);
         let _ = std_socket.set_nonblocking(true);
 
-        let bind_addr: SocketAddr = format!("0.0.0.0:{}", DISCOVERY_PORT)
-            .parse()
-            .unwrap();
-
+        let bind_addr: SocketAddr = format!("0.0.0.0:{}", DISCOVERY_PORT).parse().unwrap();
         std_socket
             .bind(&bind_addr.into())
             .map_err(|e| NerveError::Io(e))?;
@@ -122,26 +129,26 @@ impl DiscoveryListener {
         let socket = UdpSocket::from_std(std_socket.into())
             .map_err(|e| NerveError::Io(e))?;
 
-        info!("Discovery listener listening on 0.0.0.0:{}", DISCOVERY_PORT);
-
+        info!("Discovery listener bound to {}", bind_addr);
         Ok(Self { socket })
     }
 
     pub async fn recv_beacon(&self) -> Result<(DiscoveryBeacon, SocketAddr)> {
         let mut buf = [0u8; 1024];
+        let (len, peer_addr) = self
+            .socket
+            .recv_from(&mut buf)
+            .await
+            .map_err(|e| NerveError::Io(e))?;
 
-        loop {
-            let (len, peer) = self
-                .socket
-                .recv_from(&mut buf)
-                .await
-                .map_err(|e| NerveError::Io(e))?;
+        let beacon: DiscoveryBeacon = serde_json::from_slice(&buf[..len])
+            .map_err(|e| NerveError::Serialization(e.to_string()))?;
 
-            if let Ok(beacon) = serde_json::from_slice::<DiscoveryBeacon>(&buf[..len]) {
-                if beacon.magic == DISCOVERY_MAGIC {
-                    return Ok((beacon, peer));
-                }
-            }
+        if beacon.magic != DISCOVERY_MAGIC {
+            return Err(NerveError::Protocol("Invalid discovery beacon magic".into()));
         }
+
+        trace!("Received beacon from {}: {:?}", peer_addr, beacon);
+        Ok((beacon, peer_addr))
     }
 }

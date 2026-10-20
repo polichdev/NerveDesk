@@ -35,6 +35,8 @@ pub struct DiscoveredDevice {
     pub ip: String,
     pub input_port: u16,
     pub video_port: u16,
+    pub screen_width: u32,
+    pub screen_height: u32,
 }
 
 pub struct AppState {
@@ -111,7 +113,9 @@ fn get_metrics(state: State<AppState>) -> AppMetrics {
 #[command]
 async fn discover_devices(state: State<'_, AppState>) -> Result<Vec<DiscoveredDevice>, String> {
     let my_name = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Host-PC".into());
-    let beacon = DiscoveryBeacon::new(my_name, DeviceRole::Host, 48100, 48101);
+    let sw = unsafe { windows::Win32::UI::WindowsAndMessaging::GetSystemMetrics(windows::Win32::UI::WindowsAndMessaging::SM_CXSCREEN) } as u32;
+    let sh = unsafe { windows::Win32::UI::WindowsAndMessaging::GetSystemMetrics(windows::Win32::UI::WindowsAndMessaging::SM_CYSCREEN) } as u32;
+    let beacon = DiscoveryBeacon::new(my_name, DeviceRole::Host, 48100, 48101, sw, sh);
 
     if let Ok(emitter) = DiscoveryBeaconEmitter::new(beacon).await {
         let _ = emitter.emit_beacon().await;
@@ -164,7 +168,15 @@ async fn start_host(
         "Bottom" => input::ScreenEdge::Bottom,
         _ => input::ScreenEdge::Right,
     };
-    input::set_active_edge(screen_edge);
+
+    let (mut client_w, mut client_h) = (0, 0);
+    if let Ok(guard) = state.discovered_devices.lock() {
+        if let Some(dev) = guard.get(&target_addr.ip().to_string()) {
+            client_w = dev.screen_width as i32;
+            client_h = dev.screen_height as i32;
+        }
+    }
+    input::set_active_edge_and_resolution(screen_edge, client_w, client_h);
 
     let is_running_in = state.is_running.clone();
 
@@ -426,8 +438,11 @@ pub fn run() {
     let my_name_emitter = my_name.clone();
     let my_name_listener = my_name.clone();
 
+    let sw = unsafe { windows::Win32::UI::WindowsAndMessaging::GetSystemMetrics(windows::Win32::UI::WindowsAndMessaging::SM_CXSCREEN) } as u32;
+    let sh = unsafe { windows::Win32::UI::WindowsAndMessaging::GetSystemMetrics(windows::Win32::UI::WindowsAndMessaging::SM_CYSCREEN) } as u32;
+
     tauri::async_runtime::spawn(async move {
-        let beacon = DiscoveryBeacon::new(my_name_emitter, DeviceRole::Host, 48100, 48101);
+        let beacon = DiscoveryBeacon::new(my_name_emitter, DeviceRole::Host, 48100, 48101, sw, sh);
         if let Ok(emitter) = DiscoveryBeaconEmitter::new(beacon).await {
             let _ = emitter.spawn_loop(Duration::from_secs(1));
         }
@@ -448,6 +463,8 @@ pub fn run() {
                                     ip,
                                     input_port: beacon.input_port,
                                     video_port: beacon.video_port,
+                                    screen_width: beacon.screen_width,
+                                    screen_height: beacon.screen_height,
                                 },
                             );
                         }

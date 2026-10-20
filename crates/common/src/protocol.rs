@@ -81,6 +81,7 @@ pub enum PacketType {
     Ping = 5,
     Pong = 6,
     Heartbeat = 7,
+    CursorPosition = 8,
 }
 
 impl TryFrom<u8> for PacketType {
@@ -95,6 +96,7 @@ impl TryFrom<u8> for PacketType {
             5 => Ok(Self::Ping),
             6 => Ok(Self::Pong),
             7 => Ok(Self::Heartbeat),
+            8 => Ok(Self::CursorPosition),
             other => Err(NerveError::Protocol(format!("Unknown packet type: {other}"))),
         }
     }
@@ -146,6 +148,13 @@ pub struct MouseMovePayload {
     pub dx: i32,
     pub dy: i32,
     pub flags: u32,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+pub struct CursorPositionPayload {
+    pub x: i32,
+    pub y: i32,
 }
 
 #[repr(u8)]
@@ -246,6 +255,10 @@ pub enum InputEvent {
         dx: i32,
         dy: i32,
     },
+    CursorPosition {
+        x: i32,
+        y: i32,
+    },
     MouseButton {
         button: MouseButton,
         state: ButtonState,
@@ -292,6 +305,21 @@ pub fn encode_packet(
                 return Err(NerveError::Protocol("Buffer too small for MouseMove".into()));
             }
             let header = PacketHeader::new(PacketType::MouseMove, sequence, timestamp_us);
+            buf[..header_size].copy_from_slice(bytemuck::bytes_of(&header));
+            buf[header_size..total].copy_from_slice(bytemuck::bytes_of(&payload));
+            Ok(total)
+        }
+        InputEvent::CursorPosition { x, y } => {
+            let payload = CursorPositionPayload {
+                x: *x,
+                y: *y,
+            };
+            let payload_size = std::mem::size_of::<CursorPositionPayload>();
+            let total = header_size + payload_size;
+            if buf.len() < total {
+                return Err(NerveError::Protocol("Buffer too small for CursorPosition".into()));
+            }
+            let header = PacketHeader::new(PacketType::CursorPosition, sequence, timestamp_us);
             buf[..header_size].copy_from_slice(bytemuck::bytes_of(&header));
             buf[header_size..total].copy_from_slice(bytemuck::bytes_of(&payload));
             Ok(total)
@@ -414,6 +442,17 @@ pub fn decode_packet(buf: &[u8]) -> Result<(PacketHeader, InputEvent)> {
                 dy: payload.dy,
             }
         }
+        PacketType::CursorPosition => {
+            let payload_size = std::mem::size_of::<CursorPositionPayload>();
+            if payload_bytes.len() < payload_size {
+                return Err(NerveError::Protocol("Truncated CursorPosition payload".into()));
+            }
+            let payload: CursorPositionPayload = *bytemuck::from_bytes(&payload_bytes[..payload_size]);
+            InputEvent::CursorPosition {
+                x: payload.x,
+                y: payload.y,
+            }
+        }
         PacketType::MouseButton => {
             let payload_size = std::mem::size_of::<MouseButtonPayload>();
             if payload_bytes.len() < payload_size {
@@ -492,6 +531,20 @@ mod tests {
         let (header, decoded_event) = decode_packet(&buf[..len]).expect("Decode failed");
         assert_eq!(header.sequence, seq);
         assert_eq!(header.timestamp_us, ts);
+        assert_eq!(decoded_event, original_event);
+    }
+
+    #[test]
+    fn test_cursor_position_roundtrip() {
+        let mut buf = [0u8; MAX_PACKET_SIZE];
+        let original_event = InputEvent::CursorPosition { x: 1919, y: 1079 };
+        let seq = 999;
+        let ts = 123456789;
+
+        let len = encode_packet(&original_event, seq, ts, &mut buf).expect("Encode failed");
+        let (header, decoded_event) = decode_packet(&buf[..len]).expect("Decode failed");
+
+        assert_eq!(header.packet_type, PacketType::CursorPosition as u8);
         assert_eq!(decoded_event, original_event);
     }
 

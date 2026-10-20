@@ -32,10 +32,17 @@ static EDGE_DETECTOR: Mutex<Option<EdgeDetector>> = Mutex::new(None);
 static CENTER_PT: Mutex<POINT> = Mutex::new(POINT { x: 960, y: 540 });
 
 pub fn set_active_edge(edge: ScreenEdge) {
+    set_active_edge_and_resolution(edge, 0, 0);
+}
+
+pub fn set_active_edge_and_resolution(edge: ScreenEdge, client_w: i32, client_h: i32) {
     let w = unsafe { GetSystemMetrics(SM_CXSCREEN) };
     let h = unsafe { GetSystemMetrics(SM_CYSCREEN) };
     let host_w = if w > 0 { w } else { 1920 };
     let host_h = if h > 0 { h } else { 1080 };
+    let cw = if client_w > 0 { client_w } else { host_w };
+    let ch = if client_h > 0 { client_h } else { host_h };
+
     if let Ok(mut center) = CENTER_PT.lock() {
         *center = POINT {
             x: host_w / 2,
@@ -45,8 +52,8 @@ pub fn set_active_edge(edge: ScreenEdge) {
     let config = EdgeConfig {
         host_width: host_w,
         host_height: host_h,
-        client_width: host_w,
-        client_height: host_h,
+        client_width: cw,
+        client_height: ch,
         client_edge: edge,
         trigger_threshold: 4,
     };
@@ -122,9 +129,10 @@ unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: LPAR
                     }
                 }
 
-                if let Some(TransitionResult::CrossedToClient) = transition {
+                if let Some(TransitionResult::CrossedToClient { client_x, client_y }) = transition {
                     CAPTURE_ACTIVE.store(true, Ordering::SeqCst);
                     let _ = SetCursorPos(center.x, center.y);
+                    event_to_send = Some(InputEvent::CursorPosition { x: client_x, y: client_y });
                     block_event = true;
                 }
             }
