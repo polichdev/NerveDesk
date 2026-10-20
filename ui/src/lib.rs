@@ -623,12 +623,43 @@ fn open_display_settings() {
 
 #[command]
 fn install_virtual_display_driver() -> Result<String, String> {
+    let ps_cmd = r#"
+$s = {
+    $pkg = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\VirtualDrivers.Virtual-Display-Driver*" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $pkg) {
+        $w = (Get-Command winget.exe -ErrorAction SilentlyContinue).Source
+        if (-not $w) { $w = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe" }
+        & "$w" install --id=VirtualDrivers.Virtual-Display-Driver -e --accept-source-agreements --accept-package-agreements
+        $pkg = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\VirtualDrivers.Virtual-Display-Driver*" -ErrorAction SilentlyContinue | Select-Object -First 1
+    }
+    if ($pkg) {
+        $devcon = Join-Path $pkg.FullName "Dependencies\devcon.exe"
+        $inf = Join-Path $pkg.FullName "SignedDrivers\x86\VDD\MttVDD.inf"
+        $xml = Join-Path $pkg.FullName "SignedDrivers\x86\VDD\vdd_settings.xml"
+        New-Item -ItemType Directory -Path "C:\VirtualDisplayDriver" -Force -ErrorAction SilentlyContinue | Out-Null
+        if (Test-Path $xml) {
+            Copy-Item $xml "C:\VirtualDisplayDriver\vdd_settings.xml" -Force -ErrorAction SilentlyContinue
+        }
+        if ((Test-Path $devcon) -and (Test-Path $inf)) {
+            $dir = Split-Path $inf
+            Set-Location $dir
+            pnputil /add-driver "$inf" /install
+            & "$devcon" install "$inf" "Root\MttVDD"
+            & "$devcon" enable "Root\MttVDD"
+        }
+        $ctrl = Join-Path $pkg.FullName "VDD Control.exe"
+        if (Test-Path $ctrl) {
+            Start-Process "$ctrl"
+        }
+    }
+    displayswitch.exe /extend
+    Write-Host 'Virtual Display Driver installed and activated!' -ForegroundColor Green
+}
+$b = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($s.ToString()))
+Start-Process powershell -ArgumentList "-NoExit -EncodedCommand $b" -Verb RunAs
+"#;
     let _ = std::process::Command::new("powershell")
-        .args([
-            "-NoProfile",
-            "-Command",
-            "$w = (Get-Command winget.exe -ErrorAction SilentlyContinue).Source; if (-not $w) { $w = \"$env:LOCALAPPDATA\\Microsoft\\WindowsApps\\winget.exe\" }; Start-Process powershell -ArgumentList \"-NoExit -Command & `\"$w`\" install --id=VirtualDrivers.Virtual-Display-Driver -e --accept-source-agreements --accept-package-agreements\" -Verb RunAs",
-        ])
+        .args(["-NoProfile", "-Command", ps_cmd])
         .spawn()
         .map_err(|e| e.to_string())?;
     Ok("Installer started".into())
