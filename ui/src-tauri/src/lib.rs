@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{command, Manager, State};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use capture::{DxgiCaptureConfig, DxgiOutputDuplicator, VirtualDisplayManager};
 use codec::{HardwareVideoDecoder, HardwareVideoEncoder, VideoDecoderConfig, VideoEncoderConfig};
@@ -44,7 +44,7 @@ pub struct DiscoveredDevice {
 pub struct AppState {
     pub is_running: Arc<AtomicBool>,
     pub mode: Mutex<String>,
-    pub peer_device: Mutex<Option<String>>,
+    pub peer_device: Arc<Mutex<Option<String>>>,
     pub screen_edge: Mutex<String>,
     pub display_manager: VirtualDisplayManager,
     pub hook_manager: Mutex<Option<InputHookManager>>,
@@ -230,6 +230,8 @@ async fn start_host(
     input::set_active_edge_and_resolution(screen_edge, client_w, client_h);
 
     let is_running_in = state.is_running.clone();
+
+    let _ = input_sender.send_event(&InputEvent::Heartbeat).await;
 
     let input_worker = tokio::spawn(async move {
         while is_running_in.load(Ordering::SeqCst) {
@@ -470,16 +472,23 @@ fn toggle_virtual_display(enable: bool, state: State<'_, AppState>) -> Result<bo
 pub fn run() {
     let discovered_cache = Arc::new(Mutex::new(HashMap::new()));
     let discovered_cache_clone = discovered_cache.clone();
+    let discovered_for_rx = discovered_cache.clone();
+
+    let peer_device_arc = Arc::new(Mutex::new(None));
+    let peer_device_for_rx = peer_device_arc.clone();
+
+    let live_rtt_arc = Arc::new(AtomicU64::new(0));
+    let live_rtt_for_rx = live_rtt_arc.clone();
 
     let state = AppState {
         is_running: Arc::new(AtomicBool::new(false)),
         mode: Mutex::new("Idle".into()),
-        peer_device: Mutex::new(None),
+        peer_device: peer_device_arc,
         screen_edge: Mutex::new("Right".into()),
         display_manager: VirtualDisplayManager::new(),
         hook_manager: Mutex::new(None),
         active_workers: Mutex::new(Vec::new()),
-        live_rtt_us: Arc::new(AtomicU64::new(0)),
+        live_rtt_us: live_rtt_arc,
         live_fps_x10: Arc::new(AtomicU64::new(0)),
         live_mbps_x10: Arc::new(AtomicU64::new(0)),
         discovered_devices: discovered_cache,
@@ -520,6 +529,53 @@ pub fn run() {
                             );
                         }
                     }
+                }
+            }
+        }
+    });
+
+    tauri::async_runtime::spawn(async move {
+        let bind_addr: SocketAddr = "0.0.0.0:48100".parse().unwrap();
+        let mut receiver = match UdpInputReceiver::bind(bind_addr).await {
+            Ok(r) => r,
+            Err(e) => {
+                warn!("Auto background receiver bind failed: {:?}", e);
+                return;
+            }
+        };
+
+        let emulator = InputEmulator::new();
+        loop {
+            match receiver.recv_event().await {
+                Ok((header, event, peer)) => {
+                    let now_us = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_micros() as u64;
+                    let latency_us = now_us.saturating_sub(header.timestamp_us);
+                    live_rtt_for_rx.store(latency_us, Ordering::Relaxed);
+
+                    let peer_ip = peer.ip().to_string();
+                    let peer_name = if let Ok(guard) = discovered_for_rx.lock() {
+                        if let Some(d) = guard.get(&peer_ip) {
+                            d.name.clone()
+                        } else {
+                            peer_ip.clone()
+                        }
+                    } else {
+                        peer_ip.clone()
+                    };
+
+                    if let Ok(mut cur) = peer_device_for_rx.lock() {
+                        if cur.as_deref() != Some(&peer_name) {
+                            *cur = Some(peer_name);
+                        }
+                    }
+
+                    let _ = emulator.inject(&event);
+                }
+                Err(_) => {
+                    tokio::time::sleep(Duration::from_millis(5)).await;
                 }
             }
         }

@@ -131,12 +131,7 @@ impl UdpInputReceiver {
 
             match decode_packet(&buf[..len]) {
                 Ok((header, event)) => {
-                    if header.sequence <= self.last_sequence {
-                        trace!(
-                            "Dropped stale/duplicate packet: seq={} <= last={}",
-                            header.sequence,
-                            self.last_sequence
-                        );
+                    if header.sequence <= self.last_sequence && self.last_sequence.saturating_sub(header.sequence) < 5000 && header.sequence > 10 {
                         continue;
                     }
 

@@ -7,7 +7,7 @@
   <style>
     :root {
       --bg: #121214;
-      --sidebar-bg: #18181b;
+      --sidebar-bg: #121214;
       --card-bg: #1c1c20;
       --card-bg-hover: #222227;
       --card-border: #27272a;
@@ -63,36 +63,11 @@
 
     aside {
       width: 250px;
-      background: var(--sidebar-bg);
-      border-right: 1px solid var(--card-border);
+      background: var(--bg);
+      border-right: 1px solid #1c1c20;
       display: flex;
       flex-direction: column;
       flex-shrink: 0;
-    }
-
-    .brand-section {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 16px 20px;
-      border-bottom: 1px solid var(--card-border);
-    }
-
-    .brand-logo-wrap {
-      width: 30px;
-      height: 30px;
-      background: #202025;
-      border: 1px solid #33333a;
-      border-radius: 7px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .brand-title {
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--text);
     }
 
     .nav-group-title {
@@ -101,7 +76,7 @@
       color: var(--text-dark);
       text-transform: uppercase;
       letter-spacing: 0.06em;
-      padding: 16px 18px 6px;
+      padding: 20px 18px 8px;
     }
 
     .nav-list {
@@ -624,19 +599,6 @@
 </head>
 <body>
   <aside>
-    <div class="brand-section">
-      <div class="brand-logo-wrap">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-          <rect x="2" y="4" width="12" height="9" rx="2" stroke="#38bdf8" stroke-width="1.8"/>
-          <rect x="10" y="11" width="12" height="9" rx="2" stroke="#818cf8" stroke-width="1.8"/>
-          <circle cx="10" cy="11" r="2" fill="#38bdf8"/>
-        </svg>
-      </div>
-      <div>
-        <div class="brand-title">NerveDesk</div>
-      </div>
-    </div>
-
     <div class="nav-group-title">Navigation</div>
     <div class="nav-list">
       <div class="nav-item active" id="navKvm" onclick="switchTab('kvm')">
@@ -757,9 +719,13 @@
               <div class="monitor-sub">Primary Device</div>
             </div>
 
-            <div class="monitor-box" id="monitorBoxPeer" onclick="selectMonitorBox('peer')">
+            <div class="monitor-box empty" id="peerAvailableSlot">
+              <div style="font-size: 11px; color: var(--text-dark);">Available</div>
+            </div>
+
+            <div class="monitor-box" id="monitorBoxPeer" style="display: none;" onclick="selectMonitorBox('peer')">
               <svg class="monitor-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-              <div class="monitor-label" id="peerBoxLabel">Laptop</div>
+              <div class="monitor-label" id="peerBoxLabel"></div>
               <div class="monitor-sub" id="peerBoxSub">Connected</div>
             </div>
 
@@ -1103,6 +1069,8 @@
         await callTauri('pair_device', { targetName: name, securityKey: key });
         localStorage.setItem('paired_device_name', name);
         localStorage.setItem('paired_security_key', key);
+        document.getElementById('peerAvailableSlot').style.display = 'none';
+        document.getElementById('monitorBoxPeer').style.display = 'flex';
         document.getElementById('peerBoxLabel').innerText = name.toUpperCase();
         document.getElementById('peerBoxSub').innerText = "Connected";
         document.getElementById('pairDrawer').style.display = 'none';
@@ -1197,8 +1165,13 @@
 
       const savedPeer = localStorage.getItem('paired_device_name');
       if (savedPeer) {
+        document.getElementById('peerAvailableSlot').style.display = 'none';
+        document.getElementById('monitorBoxPeer').style.display = 'flex';
         document.getElementById('peerBoxLabel').innerText = savedPeer.toUpperCase();
         document.getElementById('peerBoxSub').innerText = "Connected";
+      } else {
+        document.getElementById('peerAvailableSlot').style.display = 'flex';
+        document.getElementById('monitorBoxPeer').style.display = 'none';
       }
       const savedKey = localStorage.getItem('paired_security_key');
       if (savedKey) {
@@ -1216,6 +1189,13 @@
         document.getElementById('diagBitrate').innerText = m.bandwidth_mbps.toFixed(1) + " Mbps";
         document.getElementById('diagDisplay').innerText = m.virtual_display_active ? "Attached" : "Detached";
         document.getElementById('viewerFpsBadge').innerText = m.video_fps.toFixed(1) + " FPS";
+        if (m.peer_device) {
+          document.getElementById('peerAvailableSlot').style.display = 'none';
+          document.getElementById('monitorBoxPeer').style.display = 'flex';
+          document.getElementById('peerBoxLabel').innerText = m.peer_device.toUpperCase();
+          document.getElementById('peerBoxSub').innerText = "Connected";
+          localStorage.setItem('paired_device_name', m.peer_device);
+        }
       } catch (e) {}
     }, 1000);
   </script>
