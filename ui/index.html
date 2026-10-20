@@ -567,9 +567,18 @@
 </head>
 <body>
   <aside>
+    <div class="nav-list" style="margin-bottom: 12px;">
+      <div class="nav-item active" id="navHome" onclick="switchTab('home')">
+        <div class="nav-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        </div>
+        <span>Home</span>
+      </div>
+    </div>
+
     <div class="nav-group-title">Navigation</div>
     <div class="nav-list">
-      <div class="nav-item active" id="navKvm" onclick="switchTab('kvm')">
+      <div class="nav-item" id="navKvm" onclick="switchTab('kvm')">
         <div class="nav-icon">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 0-4 4v12a4 4 0 0 0 8 0V6a4 4 0 0 0-4-4z"/><path d="M12 2v6"/></svg>
         </div>
@@ -581,13 +590,6 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
         </div>
         <span>Virtual Display Cast</span>
-      </div>
-
-      <div class="nav-item" id="navMetrics" onclick="switchTab('metrics')">
-        <div class="nav-icon">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-        </div>
-        <span>Metrics & Diagnostics</span>
       </div>
     </div>
 
@@ -603,7 +605,191 @@
 
   <div class="main-wrap">
     <div class="content-area">
-      <div class="view-container active" id="viewKvm">
+      <div class="view-container active" id="viewHome">
+        <div class="view-header" style="margin-bottom: 18px;">
+          <div class="view-title">Home</div>
+          <div class="view-desc">Central dashboard for telemetry, metrics, and managing active NerveDesk modules.</div>
+        </div>
+
+        <div style="background: linear-gradient(135deg, #18181b 0%, #222226 100%); border: 1px solid #333338; border-radius: 8px; padding: 14px 18px; margin-bottom: 22px; display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <div style="width: 38px; height: 38px; border-radius: 8px; background: rgba(56, 189, 248, 0.15); display: flex; align-items: center; justify-content: center; color: #38bdf8;">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            </div>
+            <div>
+              <div style="font-size: 15px; font-weight: 600; color: #f4f4f5;">NerveDesk v0.1.0</div>
+              <div style="font-size: 12px; color: var(--text-muted); display: flex; gap: 10px; align-items: center; margin-top: 2px;">
+                <span>Host: <strong id="homeHostDeviceLabel" style="color: #e4e4e7;">PC</strong></span>
+                <span>&bull;</span>
+                <span>Peer: <strong id="homePeerDeviceLabel" style="color: #38bdf8;">None</strong></span>
+              </div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <span class="badge" id="homeOverallStatusBadge" style="background: #15803d; color: #f0fdf4; padding: 4px 10px; font-size: 12px;">System Ready</span>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1.25fr; gap: 20px; align-items: start; margin-bottom: 24px;">
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <div class="section-title" style="margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dark);">System Metrics</div>
+            
+            <div class="diag-card" style="padding: 12px 14px;">
+              <div class="diag-label">Input Latency</div>
+              <div class="diag-val" id="diagRtt">0.00 ms</div>
+              <div class="diag-sub">Sub-millisecond Direct UDP</div>
+            </div>
+
+            <div class="diag-card" style="padding: 12px 14px;">
+              <div class="diag-label">Display Stream Framerate</div>
+              <div class="diag-val" id="diagFps">0.0 FPS</div>
+              <div class="diag-sub">DirectX 11 Zero-Copy Pipeline</div>
+            </div>
+
+            <div class="diag-card" style="padding: 12px 14px;">
+              <div class="diag-label">Network Throughput</div>
+              <div class="diag-val" id="diagBitrate">0.0 Mbps</div>
+              <div class="diag-sub">H.264 Low-Latency CBR</div>
+            </div>
+
+            <div class="diag-card" style="padding: 12px 14px;">
+              <div class="diag-label">Virtual Display Device</div>
+              <div class="diag-val" id="diagDisplay" style="font-size: 18px;">Attached</div>
+              <div class="diag-sub">Microsoft IddCx UMDF Driver</div>
+            </div>
+
+            <div class="diag-card" style="padding: 12px 14px;">
+              <div class="diag-label">Active Transition Edge</div>
+              <div class="diag-val" id="diagEdge" style="font-size: 18px;">Right Edge</div>
+              <div class="diag-sub">Screen Boundary Crossing</div>
+            </div>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <div class="section-title" style="margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dark);">Active Modules & Services</div>
+
+            <div class="setting-card" style="margin: 0; padding: 14px 16px; border-radius: 8px;">
+              <div class="setting-left">
+                <div class="setting-icon" style="color: #38bdf8;">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 0-4 4v12a4 4 0 0 0 8 0V6a4 4 0 0 0-4-4z"/><path d="M12 2v6"/></svg>
+                </div>
+                <div class="setting-text">
+                  <div class="setting-name" style="font-size: 14px;">Mouse Without Borders</div>
+                  <div class="setting-desc" style="font-size: 12px;">Share keyboard and mouse seamlessly between computers</div>
+                  <div style="display: flex; gap: 14px; margin-top: 8px;">
+                    <label style="font-size: 11px; color: var(--text-muted); display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                      <input type="checkbox" id="homeKbSharing" checked onchange="onKeyboardSharingToggle(this.checked)"> Keyboard
+                    </label>
+                    <label style="font-size: 11px; color: var(--text-muted); display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                      <input type="checkbox" id="homeClipSharing" checked onchange="onClipboardSharingToggle(this.checked)"> Clipboard
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <div class="setting-right" style="display: flex; align-items: center; gap: 10px;">
+                <span class="badge" id="homeKvmBadge" style="font-size: 11px; padding: 3px 8px;">Idle</span>
+                <label class="switch">
+                  <input type="checkbox" id="homeKvmToggle" onchange="toggleHomeKvm(this.checked)">
+                  <span class="slider"></span>
+                </label>
+                <button class="btn btn-secondary" onclick="switchTab('kvm')" title="Open Mouse Without Borders" style="padding: 6px 8px; border-radius: 6px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="setting-card" style="margin: 0; padding: 14px 16px; border-radius: 8px;">
+              <div class="setting-left">
+                <div class="setting-icon" style="color: #a855f7;">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                </div>
+                <div class="setting-text">
+                  <div class="setting-name" style="font-size: 14px;">Virtual Display Projection</div>
+                  <div class="setting-desc" style="font-size: 12px;">Extend or duplicate desktop to secondary screen</div>
+                </div>
+              </div>
+              <div class="setting-right" style="display: flex; align-items: center; gap: 10px;">
+                <span class="badge" id="homeCastBadge" style="font-size: 11px; padding: 3px 8px;">Idle</span>
+                <label class="switch">
+                  <input type="checkbox" id="homeCastToggle" onchange="toggleHomeCast(this.checked)">
+                  <span class="slider"></span>
+                </label>
+                <button class="btn btn-secondary" onclick="switchTab('cast')" title="Open Virtual Display Cast" style="padding: 6px 8px; border-radius: 6px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="setting-card" style="margin: 0; padding: 14px 16px; border-radius: 8px;">
+              <div class="setting-left">
+                <div class="setting-icon" style="color: #10b981;">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m10 15 5-3-5-3v6z"/></svg>
+                </div>
+                <div class="setting-text">
+                  <div class="setting-name" style="font-size: 14px;">IddCx Virtual Display Driver</div>
+                  <div class="setting-desc" style="font-size: 12px;" id="vDisplayStatusDescHome">Secondary virtual monitor adapter for Windows</div>
+                </div>
+              </div>
+              <div class="setting-right" style="display: flex; align-items: center; gap: 8px;">
+                <span class="badge" id="vDisplayBadgeHome" style="font-size: 11px; padding: 3px 8px;">Checking...</span>
+                <button class="btn btn-secondary" id="btnHomeInstallDriver" onclick="installDriver()" style="display: none; padding: 4px 8px; font-size: 11px; border-color: #f59e0b; color: #fbbf24;">Install</button>
+                <button class="btn btn-secondary" id="btnHomeUninstallDriver" onclick="uninstallDriver()" style="display: none; padding: 4px 8px; font-size: 11px; border-color: rgba(239,68,68,0.4); color: #ef4444;">Uninstall</button>
+              </div>
+            </div>
+
+            <div class="setting-card" style="margin: 0; padding: 14px 16px; border-radius: 8px;">
+              <div class="setting-left">
+                <div class="setting-icon" style="color: #eab308;">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                </div>
+                <div class="setting-text">
+                  <div class="setting-name" style="font-size: 14px;">Emergency Escape Hotkey</div>
+                  <div class="setting-desc" style="font-size: 12px;">Release input focus back to host instantly</div>
+                </div>
+              </div>
+              <div class="setting-right">
+                <span style="font-family: var(--font-mono); font-size: 11px; background: #27272a; padding: 3px 8px; border-radius: 4px; border: 1px solid #3f3f46;">Shift + Esc</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-title" style="font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dark);">Network Socket Topology</div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Protocol Service</th>
+                <th>Socket Port</th>
+                <th>Transport</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Input Sharing (KVM)</td>
+                <td>UDP 48100</td>
+                <td>Low-latency raw input datagrams</td>
+                <td>Active</td>
+              </tr>
+              <tr>
+                <td>Display Stream</td>
+                <td>UDP 48101</td>
+                <td>Direct3D 11 packetized chunks</td>
+                <td>Active</td>
+              </tr>
+              <tr>
+                <td>Background Discovery</td>
+                <td>UDP 48103</td>
+                <td>Subnet broadcast beaconing</td>
+                <td>Broadcasting</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="view-container" id="viewKvm">
         <div class="view-header">
           <div class="view-title">Mouse Without Borders</div>
           <div class="view-desc">Seamless mouse and keyboard sharing between computers using local network pairing and encryption.</div>
@@ -840,72 +1026,7 @@
         </div>
       </div>
 
-      <div class="view-container" id="viewMetrics">
-        <div class="view-header">
-          <div class="view-title">Metrics & Diagnostics</div>
-          <div class="view-desc">Real-time network transport latency, video pipeline framerates, and driver state telemetry.</div>
-        </div>
 
-        <div class="metrics-grid">
-          <div class="diag-card">
-            <div class="diag-label">Input Latency</div>
-            <div class="diag-val" id="diagRtt">0.00 ms</div>
-            <div class="diag-sub">Sub-millisecond Direct UDP</div>
-          </div>
-
-          <div class="diag-card">
-            <div class="diag-label">Display Stream Framerate</div>
-            <div class="diag-val" id="diagFps">0.0 FPS</div>
-            <div class="diag-sub">DirectX 11 Zero-Copy Pipeline</div>
-          </div>
-
-          <div class="diag-card">
-            <div class="diag-label">Network Throughput</div>
-            <div class="diag-val" id="diagBitrate">0.0 Mbps</div>
-            <div class="diag-sub">H.264 Low-Latency CBR</div>
-          </div>
-
-          <div class="diag-card">
-            <div class="diag-label">Virtual Display Device</div>
-            <div class="diag-val" id="diagDisplay" style="font-size: 20px;">Attached</div>
-            <div class="diag-sub">Microsoft IddCx UMDF Driver</div>
-          </div>
-        </div>
-
-        <div class="section-title">Network Socket Topology</div>
-        <div class="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th>Protocol Service</th>
-                <th>Socket Port</th>
-                <th>Transport</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Input Sharing (KVM)</td>
-                <td>UDP 48100</td>
-                <td>Low-latency raw input datagrams</td>
-                <td>Active</td>
-              </tr>
-              <tr>
-                <td>Display Stream</td>
-                <td>UDP 48101</td>
-                <td>Direct3D 11 packetized chunks</td>
-                <td>Active</td>
-              </tr>
-              <tr>
-                <td>Background Discovery</td>
-                <td>UDP 48103</td>
-                <td>Subnet broadcast beaconing</td>
-                <td>Broadcasting</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
 
       <div class="view-container" id="viewSettings">
         <div class="view-header">
@@ -1023,20 +1144,41 @@
       document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
       document.querySelectorAll('.view-container').forEach(el => el.classList.remove('active'));
 
-      if (tabId === 'kvm') {
+      if (tabId === 'home') {
+        document.getElementById('navHome').classList.add('active');
+        document.getElementById('viewHome').classList.add('active');
+        checkDriverStatus();
+      } else if (tabId === 'kvm') {
         document.getElementById('navKvm').classList.add('active');
         document.getElementById('viewKvm').classList.add('active');
-        document.getElementById('breadcrumbTitle').innerText = 'Mouse Without Borders';
       } else if (tabId === 'cast') {
         document.getElementById('navCast').classList.add('active');
         document.getElementById('viewCast').classList.add('active');
         checkDriverStatus();
-      } else if (tabId === 'metrics') {
-        document.getElementById('navMetrics').classList.add('active');
-        document.getElementById('viewMetrics').classList.add('active');
       } else if (tabId === 'settings') {
         document.getElementById('navSettings').classList.add('active');
         document.getElementById('viewSettings').classList.add('active');
+      }
+    }
+
+    async function toggleHomeKvm(checked) {
+      if (checked) {
+        const saved = localStorage.getItem('paired_device_name');
+        if (saved) {
+          await reconnectCurrentPeer();
+        } else {
+          switchTab('kvm');
+        }
+      } else {
+        try {
+          await callTauri('stop_service');
+        } catch (_) {}
+      }
+    }
+
+    async function toggleHomeCast(checked) {
+      if (checked !== isProjecting) {
+        await toggleCastProjection();
       }
     }
 
@@ -1287,7 +1429,7 @@
           try {
             const hasSecondDisplay = await callTauri('get_display_driver_status');
             if (!hasSecondDisplay) {
-              const ok = confirm("У системі виявлено лише 1 монітор. Щоб монітор ноутбука став окремим незалежним 2-м монітором, потрібен драйвер віртуального дисплея IddCx.\n\nВстановити IddCx Driver зараз?");
+              const ok = confirm("Only 1 monitor was detected. To use the secondary screen as an independent 2nd monitor, the IddCx virtual display driver is required.\n\nInstall IddCx Driver now?");
               if (ok) {
                 installDriver();
                 return;
@@ -1322,22 +1464,44 @@
       try {
         const hasSecondDisplay = await callTauri('get_display_driver_status');
         const badge = document.getElementById('vDisplayBadge');
+        const badgeHome = document.getElementById('vDisplayBadgeHome');
         const desc = document.getElementById('vDisplayStatusDesc');
+        const descHome = document.getElementById('vDisplayStatusDescHome');
         const installBtn = document.getElementById('btnInstallDriver');
+        const installBtnHome = document.getElementById('btnHomeInstallDriver');
         const uninstallBtn = document.getElementById('btnUninstallDriver');
+        const uninstallBtnHome = document.getElementById('btnHomeUninstallDriver');
         if (isProjecting) return;
         if (hasSecondDisplay) {
-          badge.innerText = 'Virtual Display Ready';
-          badge.style.background = '#15803d';
-          desc.innerText = 'Secondary virtual monitor active. Windows desktop extended independently.';
+          if (badge) {
+            badge.innerText = 'Virtual Display Ready';
+            badge.style.background = '#15803d';
+          }
+          if (badgeHome) {
+            badgeHome.innerText = 'Driver Ready';
+            badgeHome.style.background = '#15803d';
+          }
+          if (desc) desc.innerText = 'Secondary virtual monitor active. Windows desktop extended independently.';
+          if (descHome) descHome.innerText = 'Secondary virtual monitor active and ready for projection.';
           if (installBtn) installBtn.style.display = 'none';
+          if (installBtnHome) installBtnHome.style.display = 'none';
           if (uninstallBtn) uninstallBtn.style.display = 'inline-block';
+          if (uninstallBtnHome) uninstallBtnHome.style.display = 'inline-block';
         } else {
-          badge.innerText = 'Driver Not Installed';
-          badge.style.background = '#d97706';
-          desc.innerText = 'Single display detected. Install IddCx driver to create an independent 2nd monitor.';
+          if (badge) {
+            badge.innerText = 'Driver Not Installed';
+            badge.style.background = '#d97706';
+          }
+          if (badgeHome) {
+            badgeHome.innerText = 'Not Installed';
+            badgeHome.style.background = '#d97706';
+          }
+          if (desc) desc.innerText = 'Single display detected. Install IddCx driver to create an independent 2nd monitor.';
+          if (descHome) descHome.innerText = 'Single display detected. Install driver to create virtual monitor.';
           if (installBtn) installBtn.style.display = 'inline-block';
+          if (installBtnHome) installBtnHome.style.display = 'inline-block';
           if (uninstallBtn) uninstallBtn.style.display = 'none';
+          if (uninstallBtnHome) uninstallBtnHome.style.display = 'none';
         }
       } catch (e) {}
     }
@@ -1351,7 +1515,7 @@
     }
 
     async function uninstallDriver() {
-      const ok = confirm("Ви впевнені, що хочете повністю видалити драйвер віртуального дисплея IddCx та всі його компоненти?");
+      const ok = confirm("Are you sure you want to completely uninstall the IddCx virtual display driver and all associated components?");
       if (!ok) return;
       try {
         await callTauri('uninstall_virtual_display_driver');
@@ -1459,6 +1623,44 @@
           activeEdge = m.screen_edge;
           document.getElementById('edgeToggleBtn').innerText = activeEdge + ' Edge';
         }
+        const edgeEl = document.getElementById('diagEdge');
+        if (edgeEl) edgeEl.innerText = activeEdge + ' Edge';
+
+        const myName = document.getElementById('hostBoxLabel')?.innerText;
+        if (myName && document.getElementById('homeHostDeviceLabel')) {
+          document.getElementById('homeHostDeviceLabel').innerText = myName;
+        }
+        const homePeerLabel = document.getElementById('homePeerDeviceLabel');
+        if (homePeerLabel) {
+          homePeerLabel.innerText = localStorage.getItem('paired_device_name') || 'None';
+        }
+
+        const kvmToggle = document.getElementById('homeKvmToggle');
+        const kvmBadge = document.getElementById('homeKvmBadge');
+        if (kvmToggle && kvmToggle !== document.activeElement) {
+          kvmToggle.checked = m.is_active;
+        }
+        if (kvmBadge) {
+          kvmBadge.innerText = m.is_active ? 'Connected' : 'Idle';
+          kvmBadge.style.background = m.is_active ? '#15803d' : '';
+        }
+
+        const castToggle = document.getElementById('homeCastToggle');
+        const castBadge = document.getElementById('homeCastBadge');
+        if (castToggle && castToggle !== document.activeElement) {
+          castToggle.checked = isProjecting;
+        }
+        if (castBadge) {
+          castBadge.innerText = isProjecting ? 'Projecting' : 'Idle';
+          castBadge.style.background = isProjecting ? '#15803d' : '';
+        }
+
+        const homeKb = document.getElementById('homeKbSharing');
+        const homeClip = document.getElementById('homeClipSharing');
+        const kbSharing = localStorage.getItem('keyboard_sharing_enabled') !== 'false';
+        const clipSharing = localStorage.getItem('clipboard_sharing_enabled') !== 'false';
+        if (homeKb && homeKb !== document.activeElement) homeKb.checked = kbSharing;
+        if (homeClip && homeClip !== document.activeElement) homeClip.checked = clipSharing;
         const savedPeer = localStorage.getItem('paired_device_name');
         if (savedPeer && !isPeerDisabled) {
           let peerName = m.peer_device || savedPeer;
