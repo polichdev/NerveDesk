@@ -95,7 +95,19 @@ fn get_my_ip() -> String {
 #[command]
 fn get_metrics(state: State<AppState>) -> AppMetrics {
     let mode = state.mode.lock().unwrap().clone();
-    let peer = state.peer_device.lock().unwrap().clone();
+    let mut peer = state.peer_device.lock().unwrap().clone();
+
+    if let Some(ref p) = peer {
+        if p.parse::<std::net::IpAddr>().is_ok() {
+            if let Ok(guard) = state.discovered_devices.lock() {
+                if let Some(dev) = guard.get(p) {
+                    peer = Some(dev.name.clone());
+                    *state.peer_device.lock().unwrap() = Some(dev.name.clone());
+                }
+            }
+        }
+    }
+
     let edge = state.screen_edge.lock().unwrap().clone();
     let is_active = state.is_running.load(Ordering::SeqCst);
     let v_display = state.display_manager.is_plugged();
@@ -151,6 +163,14 @@ async fn pair_device(
     }
     if security_key.trim().is_empty() {
         return Err("Security key cannot be empty".into());
+    }
+
+    let my_name = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Desktop-PC".into());
+    let sw = unsafe { windows::Win32::UI::WindowsAndMessaging::GetSystemMetrics(windows::Win32::UI::WindowsAndMessaging::SM_CXSCREEN) } as u32;
+    let sh = unsafe { windows::Win32::UI::WindowsAndMessaging::GetSystemMetrics(windows::Win32::UI::WindowsAndMessaging::SM_CYSCREEN) } as u32;
+    let beacon = DiscoveryBeacon::new(my_name, DeviceRole::Host, 48100, 48101, sw, sh);
+    if let Ok(emitter) = DiscoveryBeaconEmitter::new(beacon).await {
+        let _ = emitter.emit_beacon().await;
     }
 
     start_host(clean_name.to_string(), false, state).await
@@ -476,6 +496,7 @@ pub fn run() {
 
     let peer_device_arc = Arc::new(Mutex::new(None));
     let peer_device_for_rx = peer_device_arc.clone();
+    let peer_device_for_disc = peer_device_arc.clone();
 
     let live_rtt_arc = Arc::new(AtomicU64::new(0));
     let live_rtt_for_rx = live_rtt_arc.clone();
@@ -518,15 +539,22 @@ pub fn run() {
                             cache.insert(
                                 ip.clone(),
                                 DiscoveredDevice {
-                                    name: beacon.device_name,
+                                    name: beacon.device_name.clone(),
                                     role: format!("{:?}", beacon.role),
-                                    ip,
+                                    ip: ip.clone(),
                                     input_port: beacon.input_port,
                                     video_port: beacon.video_port,
                                     screen_width: beacon.screen_width,
                                     screen_height: beacon.screen_height,
                                 },
                             );
+                        }
+                        if let Ok(mut cur) = peer_device_for_disc.lock() {
+                            if let Some(ref existing) = *cur {
+                                if existing == &ip {
+                                    *cur = Some(beacon.device_name);
+                                }
+                            }
                         }
                     }
                 }
@@ -567,7 +595,13 @@ pub fn run() {
                     };
 
                     if let Ok(mut cur) = peer_device_for_rx.lock() {
-                        if cur.as_deref() != Some(&peer_name) {
+                        if let Some(ref existing) = *cur {
+                            if existing.parse::<std::net::IpAddr>().is_ok() && peer_name != peer_ip {
+                                *cur = Some(peer_name);
+                            } else if cur.as_deref() != Some(&peer_name) && peer_name != peer_ip {
+                                *cur = Some(peer_name);
+                            }
+                        } else {
                             *cur = Some(peer_name);
                         }
                     }
