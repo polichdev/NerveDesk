@@ -8,8 +8,8 @@ pub use discovery::{
     DISCOVERY_PORT,
 };
 pub use file_transfer::{
-    get_default_transfer_dir, FileTransferClient, FileTransferServer,
-    FILE_TRANSFER_PORT,
+    get_default_transfer_dir, get_target_dir_at_cursor, FileTransferClient,
+    FileTransferServer, FILE_TRANSFER_PORT,
 };
 pub use udp::{UdpInputReceiver, UdpInputSender};
 pub use video::{VideoReceiver, VideoSender};

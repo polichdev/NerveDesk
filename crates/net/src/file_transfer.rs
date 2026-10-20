@@ -26,6 +26,97 @@ pub fn get_default_transfer_dir() -> PathBuf {
     }
 }
 
+fn url_to_path(url: &str) -> Option<PathBuf> {
+    let clean = url.trim();
+    if let Some(stripped) = clean.strip_prefix("file:///") {
+        let decoded = url_decode(stripped);
+        let path_str = decoded.replace('/', "\\");
+        let path = PathBuf::from(path_str);
+        if path.exists() {
+            return Some(path);
+        }
+    }
+    None
+}
+
+fn url_decode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '%' {
+            let h1 = chars.next();
+            let h2 = chars.next();
+            if let (Some(c1), Some(c2)) = (h1, h2) {
+                let hex_str = format!("{c1}{c2}");
+                if let Ok(byte) = u8::from_str_radix(&hex_str, 16) {
+                    out.push(byte as char);
+                    continue;
+                }
+            }
+        }
+        out.push(c);
+    }
+    out
+}
+
+pub fn get_target_dir_at_cursor() -> PathBuf {
+    #[cfg(target_os = "windows")]
+    unsafe {
+        use windows::Win32::Foundation::POINT;
+        use windows::Win32::UI::WindowsAndMessaging::{
+            GetAncestor, GetClassNameW, GetCursorPos, WindowFromPoint, GA_ROOT,
+        };
+        use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED};
+        use windows::Win32::UI::Shell::{IShellWindows, IWebBrowser2, ShellWindows};
+        use windows::core::{Interface, VARIANT};
+
+        let mut pt = POINT::default();
+        if GetCursorPos(&mut pt).is_ok() {
+            let hwnd = WindowFromPoint(pt);
+            if !hwnd.is_invalid() {
+                let root = GetAncestor(hwnd, GA_ROOT);
+                let target_hwnd = if root.is_invalid() { hwnd } else { root };
+
+                let mut class_buf = [0u16; 256];
+                let len = GetClassNameW(target_hwnd, &mut class_buf);
+                let class_name = String::from_utf16_lossy(&class_buf[..len as usize]);
+
+                if class_name == "Progman" || class_name == "WorkerW" {
+                    if let Some(user_profile) = std::env::var_os("USERPROFILE") {
+                        let desktop = PathBuf::from(user_profile).join("Desktop");
+                        if desktop.exists() {
+                            return desktop;
+                        }
+                    }
+                } else if class_name == "CabinetWClass" || class_name == "ExploreWClass" {
+                    let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+                    if let Ok(sw) = CoCreateInstance::<_, IShellWindows>(&ShellWindows, None, CLSCTX_ALL) {
+                        if let Ok(count) = sw.Count() {
+                            for i in 0..count {
+                                let v = VARIANT::from(i);
+                                if let Ok(item) = sw.Item(&v) {
+                                    if let Ok(wb) = item.cast::<IWebBrowser2>() {
+                                        if let Ok(whwnd) = wb.HWND() {
+                                            if whwnd.0 as isize == target_hwnd.0 as isize {
+                                                if let Ok(url) = wb.LocationURL() {
+                                                    if let Some(path) = url_to_path(&url.to_string()) {
+                                                        return path;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    get_default_transfer_dir()
+}
+
 fn get_unique_path(dir: &Path, name: &str) -> PathBuf {
     let p = dir.join(name);
     if !p.exists() {
@@ -74,7 +165,7 @@ impl FileTransferServer {
                             continue;
                         }
                         info!("Incoming file transfer connection from {addr}");
-                        let dir = get_default_transfer_dir();
+                        let dir = get_target_dir_at_cursor();
                         let key = security_key.clone();
                         let cb = on_files_received.clone();
                         tokio::spawn(async move {
