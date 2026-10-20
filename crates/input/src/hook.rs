@@ -14,8 +14,8 @@ use windows::Win32::System::Threading::{
 };
 use crate::edge::{ActiveLocation, EdgeConfig, EdgeDetector, ScreenEdge, TransitionResult};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, DispatchMessageW, GetMessageW, GetSystemMetrics, PeekMessageW, PostThreadMessageW,
-    SetCursorPos, SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx, HHOOK, KBDLLHOOKSTRUCT,
+    CallNextHookEx, DispatchMessageW, GetDesktopWindow, GetMessageW, GetSystemMetrics, PeekMessageW, PostThreadMessageW,
+    SetCursorPos, SetForegroundWindow, SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx, HHOOK, KBDLLHOOKSTRUCT,
     MSLLHOOKSTRUCT, MSG, PM_NOREMOVE, SM_CXSCREEN, SM_CYSCREEN, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_APP,
     WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP,
     WM_MOUSEHWHEEL, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_RBUTTONDOWN, WM_RBUTTONUP,
@@ -164,6 +164,7 @@ unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: LPAR
                 if let Some(TransitionResult::CrossedToClient { client_x, client_y }) = transition {
                     CAPTURE_ACTIVE.store(true, Ordering::SeqCst);
                     let _ = SetCursorPos(center.x, center.y);
+                    let _ = SetForegroundWindow(GetDesktopWindow());
                     event_to_send = Some(InputEvent::CursorPosition { x: client_x, y: client_y });
                     block_event = true;
                 }
@@ -282,10 +283,6 @@ unsafe extern "system" fn keyboard_proc(n_code: i32, w_param: WPARAM, l_param: L
     if n_code >= 0 && CAPTURE_ACTIVE.load(Ordering::Relaxed) && KEYBOARD_SHARING_ENABLED.load(Ordering::Relaxed) {
         let msg = w_param.0 as u32;
         let hook_struct = *(l_param.0 as *const KBDLLHOOKSTRUCT);
-
-        if (hook_struct.flags.0 & 0x10) != 0 {
-            return CallNextHookEx(HHOOK::default(), n_code, w_param, l_param);
-        }
 
         if hook_struct.vkCode == 0x1B {
             let shift_down = (windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(0x10) as u16 & 0x8000) != 0;
@@ -451,6 +448,7 @@ impl InputHookManager {
             };
             unsafe {
                 let _ = SetCursorPos(center.x, center.y);
+                let _ = SetForegroundWindow(GetDesktopWindow());
             }
         } else {
             if let Ok(mut guard) = LAST_CURSOR_POS.lock() {

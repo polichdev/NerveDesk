@@ -319,6 +319,11 @@ async fn start_host(
 
     let is_running_in = state.is_kvm_active.clone();
     is_running_in.store(true, Ordering::SeqCst);
+    unsafe {
+        let _ = windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow(
+            windows::Win32::UI::WindowsAndMessaging::GetDesktopWindow(),
+        );
+    }
 
     let my_name = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Desktop-PC".into());
     let _ = input_sender
@@ -420,9 +425,18 @@ async fn start_virtual_display_cast(
             output_index: out_idx,
             timeout_ms: 16,
         };
-        let mut duplicator = match DxgiOutputDuplicator::new(config.clone()) {
-            Ok(d) => d,
-            Err(_) => {
+        let mut duplicator = if extend_mode {
+            let mut found = None;
+            for _ in 0..6 {
+                if let Ok(d) = DxgiOutputDuplicator::new(config.clone()) {
+                    found = Some(d);
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(300)).await;
+            }
+            if let Some(d) = found {
+                d
+            } else {
                 config.output_index = 0;
                 match DxgiOutputDuplicator::new(config) {
                     Ok(d) => d,
@@ -430,6 +444,14 @@ async fn start_virtual_display_cast(
                         error!("DxgiDuplicator error: {:?}", e);
                         return;
                     }
+                }
+            }
+        } else {
+            match DxgiOutputDuplicator::new(config) {
+                Ok(d) => d,
+                Err(e) => {
+                    error!("DxgiDuplicator error: {:?}", e);
+                    return;
                 }
             }
         };
@@ -585,6 +607,25 @@ fn open_display_settings() {
     let _ = std::process::Command::new("cmd")
         .args(["/c", "start", "ms-settings:display"])
         .spawn();
+}
+
+#[command]
+fn install_virtual_display_driver() -> Result<String, String> {
+    let _ = std::process::Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-Command",
+            "Start-Process winget -ArgumentList 'install --id=VirtualDrivers.Virtual-Display-Driver -e --accept-source-agreements --accept-package-agreements' -Verb RunAs",
+        ])
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    Ok("Installer started".into())
+}
+
+#[command]
+fn get_display_driver_status() -> bool {
+    let count = unsafe { windows::Win32::UI::WindowsAndMessaging::GetSystemMetrics(windows::Win32::UI::WindowsAndMessaging::SM_CMONITORS) };
+    count > 1
 }
 
 pub fn run() {
@@ -1016,6 +1057,8 @@ pub fn run() {
             set_clipboard_sharing_enabled,
             get_feature_settings,
             open_display_settings,
+            install_virtual_display_driver,
+            get_display_driver_status,
             start_virtual_display_cast,
             stop_virtual_display_cast
         ])

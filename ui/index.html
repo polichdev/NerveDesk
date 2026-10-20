@@ -792,8 +792,8 @@
           </div>
           <div class="setting-right">
             <select id="castModeSelect" class="btn btn-secondary" style="background: #18181b; border: 1px solid #27272a; color: #f4f4f5; padding: 6px 12px; border-radius: 6px; font-size: 13px;">
-              <option value="extend">Extend Desktop (Second Screen)</option>
-              <option value="duplicate">Duplicate Primary Display</option>
+              <option value="extend">Extend Desktop (Independent 2nd Monitor)</option>
+              <option value="duplicate">Duplicate Primary Display (Mirror Screen)</option>
             </select>
           </div>
         </div>
@@ -825,8 +825,9 @@
               <div class="setting-desc" id="vDisplayStatusDesc">Virtual monitor ready. Windows handles resolution, scaling, and positioning natively.</div>
             </div>
           </div>
-          <div class="setting-right">
-            <span class="badge" id="vDisplayBadge">Ready</span>
+          <div class="setting-right" style="display: flex; gap: 8px; align-items: center;">
+            <button class="btn btn-secondary" id="btnInstallDriver" onclick="installDriver()" style="display: none; padding: 4px 10px; font-size: 12px; border-color: #f59e0b; color: #fbbf24;">Install IddCx Driver</button>
+            <span class="badge" id="vDisplayBadge">Checking...</span>
           </div>
         </div>
       </div>
@@ -1021,6 +1022,7 @@
       } else if (tabId === 'cast') {
         document.getElementById('navCast').classList.add('active');
         document.getElementById('viewCast').classList.add('active');
+        checkDriverStatus();
       } else if (tabId === 'metrics') {
         document.getElementById('navMetrics').classList.add('active');
         document.getElementById('viewMetrics').classList.add('active');
@@ -1086,6 +1088,12 @@
         alert("Connection failed: " + err);
       }
     }
+
+    window.addEventListener('mouseleave', () => {
+      if (document.activeElement && typeof document.activeElement.blur === 'function') {
+        document.activeElement.blur();
+      }
+    });
 
     document.addEventListener('contextmenu', (e) => {
       e.preventDefault();
@@ -1225,8 +1233,37 @@
         isProjecting = false;
         btn.innerText = 'Project Display';
         btn.style.background = '';
-        document.getElementById('vDisplayBadge').innerText = 'Ready';
-        document.getElementById('vDisplayBadge').style.background = '';
+        checkDriverStatus();
+      }
+    }
+
+    async function checkDriverStatus() {
+      try {
+        const hasSecondDisplay = await callTauri('get_display_driver_status');
+        const badge = document.getElementById('vDisplayBadge');
+        const desc = document.getElementById('vDisplayStatusDesc');
+        const installBtn = document.getElementById('btnInstallDriver');
+        if (isProjecting) return;
+        if (hasSecondDisplay) {
+          badge.innerText = 'Virtual Display Ready';
+          badge.style.background = '#15803d';
+          desc.innerText = 'Secondary virtual monitor active. Windows desktop extended independently.';
+          if (installBtn) installBtn.style.display = 'none';
+        } else {
+          badge.innerText = 'Driver Not Installed';
+          badge.style.background = '#d97706';
+          desc.innerText = 'Single display detected. Install IddCx driver to create an independent 2nd monitor.';
+          if (installBtn) installBtn.style.display = 'inline-block';
+        }
+      } catch (e) {}
+    }
+
+    async function installDriver() {
+      try {
+        await callTauri('install_virtual_display_driver');
+        alert('Driver installation launched! Please confirm the Windows UAC prompt.');
+      } catch (e) {
+        alert('Failed to launch driver installer: ' + e);
       }
     }
 
@@ -1302,6 +1339,7 @@
       if (kvmClip) kvmClip.checked = clipSharing;
       callTauri('set_keyboard_sharing_enabled', { enabled: kbSharing }).catch(() => {});
       callTauri('set_clipboard_sharing_enabled', { enabled: clipSharing }).catch(() => {});
+      checkDriverStatus();
     }
 
     setTimeout(initSystemInfo, 100);
