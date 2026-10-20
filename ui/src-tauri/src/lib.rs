@@ -135,7 +135,7 @@ pub fn run() {
         display_manager: VirtualDisplayManager::new(),
     };
 
-    tauri::Builder::default()
+    if let Err(e) = tauri::Builder::default()
         .manage(state)
         .invoke_handler(tauri::generate_handler![
             get_metrics,
@@ -147,5 +147,20 @@ pub fn run() {
             toggle_virtual_display
         ])
         .run(tauri::generate_context!())
-        .expect("error while running NerveDesk application");
+    {
+        unsafe {
+            use windows::core::HSTRING;
+            use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
+            let msg = format!(
+                "Failed to launch NerveDesk GUI: {}\n\nNote: If WebView2 is missing, install Microsoft Edge WebView2 Runtime.",
+                e
+            );
+            let _ = MessageBoxW(
+                None,
+                &HSTRING::from(msg),
+                &HSTRING::from("NerveDesk Error"),
+                MB_OK | MB_ICONERROR,
+            );
+        }
+    }
 }
