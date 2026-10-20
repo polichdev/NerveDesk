@@ -4,10 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.nervedesk.app",
   "build": {
-    "frontendDist": "../dist",
-    "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build"
+    "frontendDist": "../"
   },
   "app": {
     "windows": [

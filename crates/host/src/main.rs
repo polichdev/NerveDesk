@@ -22,7 +22,7 @@ struct Args {
     video_target: SocketAddr,
 
     #[arg(long, default_value_t = false)]
-    no_trap: bool,
+    trap: bool,
 
     #[arg(long, default_value_t = false)]
     stream_video: bool,
@@ -53,8 +53,8 @@ async fn main() -> Result<()> {
     let hook_manager = InputHookManager::start(event_tx)
         .context("Failed to install low-level Windows hooks")?;
 
-    if args.no_trap {
-        hook_manager.set_capturing(false);
+    if args.trap {
+        hook_manager.set_capturing(true);
     }
 
     let video_worker = if args.stream_video {

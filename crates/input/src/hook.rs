@@ -165,6 +165,18 @@ unsafe extern "system" fn keyboard_proc(n_code: i32, w_param: WPARAM, l_param: L
         let msg = w_param.0 as u32;
         let hook_struct = *(l_param.0 as *const KBDLLHOOKSTRUCT);
 
+        if hook_struct.vkCode == 0x1B || hook_struct.vkCode == 0x13 || hook_struct.vkCode == 0x91 {
+            let shift_down = (windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(0x10) as u16 & 0x8000) != 0;
+            let ctrl_down = (windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(0x11) as u16 & 0x8000) != 0;
+            if shift_down || ctrl_down || hook_struct.vkCode == 0x13 || hook_struct.vkCode == 0x91 {
+                CAPTURE_ACTIVE.store(false, Ordering::SeqCst);
+                if let Ok(mut guard) = LAST_CURSOR_POS.lock() {
+                    *guard = None;
+                }
+                return CallNextHookEx(HHOOK::default(), n_code, w_param, l_param);
+            }
+        }
+
         let state = match msg {
             WM_KEYDOWN | WM_SYSKEYDOWN => Some(KeyState::KeyDown),
             WM_KEYUP | WM_SYSKEYUP => Some(KeyState::KeyUp),
@@ -202,7 +214,7 @@ pub struct InputHookManager {
 impl InputHookManager {
     pub fn start(event_sender: Sender<InputEvent>) -> Result<Self> {
         let (init_tx, init_rx) = crossbeam_channel::bounded::<Result<u32>>(1);
-        let is_capturing = Arc::new(AtomicBool::new(true));
+        let is_capturing = Arc::new(AtomicBool::new(false));
         let is_capturing_clone = is_capturing.clone();
 
         let handle = std::thread::Builder::new()
@@ -217,7 +229,7 @@ impl InputHookManager {
                 if let Ok(mut guard) = HOOK_SENDER.lock() {
                     *guard = Some(event_sender);
                 }
-                CAPTURE_ACTIVE.store(true, Ordering::SeqCst);
+                CAPTURE_ACTIVE.store(false, Ordering::SeqCst);
 
                 let mouse_hook = match SetWindowsHookExW(
                     WH_MOUSE_LL,
