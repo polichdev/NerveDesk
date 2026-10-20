@@ -175,7 +175,7 @@
       flex-direction: column;
       align-items: center;
       gap: 12px;
-      padding: 10px;
+      padding: 6px 10px;
     }
 
     .edge-grid {
@@ -307,11 +307,11 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 8px 0;
+      padding: 4px 0;
     }
 
     .toggle-label {
-      font-size: 0.9rem;
+      font-size: 0.85rem;
     }
 
     .switch {
@@ -356,6 +356,40 @@
       transform: translateX(20px);
       background-color: #0c0e14;
     }
+
+    #streamViewerModal {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      z-index: 9999;
+      display: none;
+      flex-direction: column;
+    }
+
+    .viewer-toolbar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 48px;
+      background: rgba(12, 14, 20, 0.85);
+      backdrop-filter: blur(8px);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 20px;
+      z-index: 10;
+      border-bottom: 1px solid #232b40;
+    }
+
+    .viewer-canvas-wrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #05060a;
+      position: relative;
+    }
   </style>
 </head>
 <body>
@@ -398,7 +432,7 @@
     <div class="panel">
       <div class="panel-title">
         <span>Monitor Topology</span>
-        <span style="font-size: 0.8rem; color: var(--text-muted);">Border Crossing</span>
+        <span style="font-size: 0.8rem; color: var(--text-muted);">Active Border</span>
       </div>
 
       <div class="edge-selector-container">
@@ -413,6 +447,16 @@
           <button class="edge-btn btn-bottom" onclick="setEdge('Bottom')">Bottom</button>
         </div>
       </div>
+
+      <div style="background: #111520; border: 1px solid var(--card-border); border-radius: 8px; padding: 10px 14px; font-size: 0.74rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 4px;">
+        <div style="font-weight: 600; color: var(--accent);">KVM & Screen Mode Instructions:</div>
+        <div>1. <strong style="color: var(--text);">KVM Mode:</strong> Move cursor to the active border to jump onto the second PC. Once there, you control the other PC freely. Move back across that border to return. Press <code>Shift+Esc</code> to force return.</div>
+        <div>2. <strong style="color: var(--text);">Screen Streaming:</strong> On Client, click <strong>Open Stream Display</strong> to view the extended monitor.</div>
+      </div>
+
+      <button class="btn btn-secondary" style="font-size: 0.8rem; padding: 7px 12px; display: flex; align-items: center; justify-content: center; gap: 6px;" onclick="openStreamDisplay()">
+        <span>🖥️</span> Open Stream Display Window
+      </button>
 
       <div class="toggle-row">
         <span class="toggle-label">Virtual Display Driver (IddCx)</span>
@@ -455,6 +499,26 @@
       </div>
     </div>
   </main>
+
+  <div id="streamViewerModal">
+    <div class="viewer-toolbar">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <span style="font-weight: 700; font-size: 0.95rem; color: #fff;">NerveDesk Display Stream</span>
+        <span id="viewerFpsBadge" style="font-size: 0.75rem; background: rgba(56,189,248,0.2); color: var(--accent); padding: 2px 8px; border-radius: 4px;">60.0 FPS</span>
+      </div>
+      <div style="display: flex; gap: 10px;">
+        <button class="btn btn-secondary" style="font-size: 0.8rem; padding: 4px 12px;" onclick="toggleViewerFullscreen()">Fullscreen (F11)</button>
+        <button class="btn" style="font-size: 0.8rem; padding: 4px 12px; background: #ef4444; color: #fff;" onclick="closeStreamDisplay()">Close (Esc)</button>
+      </div>
+    </div>
+    <div class="viewer-canvas-wrap">
+      <div id="viewerPlaceholder" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--text-muted); text-align: center;">
+        <div style="width: 56px; height: 56px; border-radius: 12px; background: #141824; border: 1px solid #232b40; display: flex; align-items: center; justify-content: center; font-size: 1.6rem;">🖥️</div>
+        <div style="font-size: 1.1rem; font-weight: 600; color: #f1f5f9;">Live Display Receiver Active</div>
+        <div style="font-size: 0.8rem; max-width: 420px; line-height: 1.4;">Receiving ultra-low latency Direct3D 11 video frames from Host PC. In Windows Settings (Win+P), select 'Extend' to place windows onto this display.</div>
+      </div>
+    </div>
+  </div>
 
   <script>
     async function callTauri(cmd, args) {
@@ -578,6 +642,36 @@
       }
     }
 
+    function openStreamDisplay() {
+      const modal = document.getElementById('streamViewerModal');
+      modal.style.display = 'flex';
+    }
+
+    function closeStreamDisplay() {
+      const modal = document.getElementById('streamViewerModal');
+      modal.style.display = 'none';
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+
+    function toggleViewerFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        const modal = document.getElementById('streamViewerModal');
+        if (modal.style.display === 'flex') {
+          closeStreamDisplay();
+        }
+      }
+    });
+
     setTimeout(() => {
       loadMyIp();
       refreshDevices();
@@ -589,6 +683,7 @@
         document.getElementById('rttVal').innerText = m.rtt_ms > 0 ? m.rtt_ms.toFixed(2) + " ms" : "0.00 ms";
         document.getElementById('fpsVal').innerText = m.video_fps.toFixed(1) + " FPS";
         document.getElementById('bitrateVal').innerText = m.bandwidth_mbps.toFixed(1) + " Mbps";
+        document.getElementById('viewerFpsBadge').innerText = m.video_fps.toFixed(1) + " FPS";
         document.getElementById('displayStateVal').innerText = m.virtual_display_active ? "Attached" : "Detached";
         if (m.is_active) {
           document.getElementById('statusText').innerText = m.mode + " Active " + (m.peer_device ? "(" + m.peer_device + ")" : "");

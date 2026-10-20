@@ -12,10 +12,10 @@ use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM
 use windows::Win32::System::Threading::{
     GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_TIME_CRITICAL,
 };
-use crate::edge::{ActiveLocation, EdgeConfig, EdgeDetector, ScreenEdge};
+use crate::edge::{ActiveLocation, EdgeConfig, EdgeDetector, ScreenEdge, TransitionResult};
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, DispatchMessageW, GetMessageW, GetSystemMetrics, PeekMessageW, PostThreadMessageW,
-    SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx, HHOOK, KBDLLHOOKSTRUCT,
+    SetCursorPos, SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx, HHOOK, KBDLLHOOKSTRUCT,
     MSLLHOOKSTRUCT, MSG, PM_NOREMOVE, SM_CXSCREEN, SM_CYSCREEN, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_APP,
     WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP,
     WM_MOUSEHWHEEL, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_RBUTTONDOWN, WM_RBUTTONUP,
@@ -29,13 +29,24 @@ static HOOK_SENDER: Mutex<Option<Sender<InputEvent>>> = Mutex::new(None);
 static CAPTURE_ACTIVE: AtomicBool = AtomicBool::new(false);
 static LAST_CURSOR_POS: Mutex<Option<POINT>> = Mutex::new(None);
 static EDGE_DETECTOR: Mutex<Option<EdgeDetector>> = Mutex::new(None);
+static CENTER_PT: Mutex<POINT> = Mutex::new(POINT { x: 960, y: 540 });
 
 pub fn set_active_edge(edge: ScreenEdge) {
     let w = unsafe { GetSystemMetrics(SM_CXSCREEN) };
     let h = unsafe { GetSystemMetrics(SM_CYSCREEN) };
+    let host_w = if w > 0 { w } else { 1920 };
+    let host_h = if h > 0 { h } else { 1080 };
+    if let Ok(mut center) = CENTER_PT.lock() {
+        *center = POINT {
+            x: host_w / 2,
+            y: host_h / 2,
+        };
+    }
     let config = EdgeConfig {
-        host_width: if w > 0 { w } else { 1920 },
-        host_height: if h > 0 { h } else { 1080 },
+        host_width: host_w,
+        host_height: host_h,
+        client_width: host_w,
+        client_height: host_h,
         client_edge: edge,
         trigger_threshold: 4,
     };
@@ -54,135 +65,162 @@ unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: LPAR
         let mut event_to_send = None;
         let mut block_event = false;
 
+        let center = if let Ok(guard) = CENTER_PT.lock() {
+            *guard
+        } else {
+            POINT { x: 960, y: 540 }
+        };
+
         if msg == WM_MOUSEMOVE {
-            let current_pt = hook_struct.pt;
-            let mut dx = 0;
-            let mut dy = 0;
-            if let Ok(mut guard) = LAST_CURSOR_POS.lock() {
-                if let Some(last_pt) = *guard {
-                    dx = current_pt.x - last_pt.x;
-                    dy = current_pt.y - last_pt.y;
-                }
-                *guard = Some(current_pt);
-            }
+            let is_injected = (hook_struct.flags & 1) != 0;
+            let is_at_center = hook_struct.pt.x == center.x && hook_struct.pt.y == center.y;
 
-            let mut transitioned = None;
-            if let Ok(mut edge_guard) = EDGE_DETECTOR.lock() {
-                if let Some(detector) = edge_guard.as_mut() {
-                    transitioned = detector.evaluate_motion(current_pt.x, current_pt.y, dx, dy);
+            if CAPTURE_ACTIVE.load(Ordering::SeqCst) {
+                if is_injected || is_at_center {
+                    return LRESULT(1);
                 }
-            }
 
-            if let Some(location) = transitioned {
-                match location {
-                    ActiveLocation::Client => {
-                        CAPTURE_ACTIVE.store(true, Ordering::SeqCst);
-                    }
-                    ActiveLocation::Host => {
-                        CAPTURE_ACTIVE.store(false, Ordering::SeqCst);
+                let dx = hook_struct.pt.x - center.x;
+                let dy = hook_struct.pt.y - center.y;
+
+                let _ = SetCursorPos(center.x, center.y);
+
+                let mut transition = None;
+                if let Ok(mut edge_guard) = EDGE_DETECTOR.lock() {
+                    if let Some(detector) = edge_guard.as_mut() {
+                        transition = detector.evaluate_motion(center.x, center.y, dx, dy);
                     }
                 }
-            }
 
-            if CAPTURE_ACTIVE.load(Ordering::Relaxed) {
-                if dx != 0 || dy != 0 {
+                if let Some(TransitionResult::ReturnedToHost { return_x, return_y }) = transition {
+                    CAPTURE_ACTIVE.store(false, Ordering::SeqCst);
+                    let _ = SetCursorPos(return_x, return_y);
+                    if let Ok(mut guard) = LAST_CURSOR_POS.lock() {
+                        *guard = Some(POINT { x: return_x, y: return_y });
+                    }
+                } else if dx != 0 || dy != 0 {
                     event_to_send = Some(InputEvent::MouseMove { dx, dy });
                 }
+
                 block_event = true;
+            } else {
+                let current_pt = hook_struct.pt;
+                let mut dx = 0;
+                let mut dy = 0;
+                if let Ok(mut guard) = LAST_CURSOR_POS.lock() {
+                    if let Some(last_pt) = *guard {
+                        dx = current_pt.x - last_pt.x;
+                        dy = current_pt.y - last_pt.y;
+                    }
+                    *guard = Some(current_pt);
+                }
+
+                let mut transition = None;
+                if let Ok(mut edge_guard) = EDGE_DETECTOR.lock() {
+                    if let Some(detector) = edge_guard.as_mut() {
+                        transition = detector.evaluate_motion(current_pt.x, current_pt.y, dx, dy);
+                    }
+                }
+
+                if let Some(TransitionResult::CrossedToClient) = transition {
+                    CAPTURE_ACTIVE.store(true, Ordering::SeqCst);
+                    let _ = SetCursorPos(center.x, center.y);
+                    block_event = true;
+                }
             }
         } else if CAPTURE_ACTIVE.load(Ordering::Relaxed) {
             match msg {
                 WM_LBUTTONDOWN => {
-                event_to_send = Some(InputEvent::MouseButton {
-                    button: MouseButton::Left,
-                    state: ButtonState::Pressed,
-                });
-                block_event = true;
+                    event_to_send = Some(InputEvent::MouseButton {
+                        button: MouseButton::Left,
+                        state: ButtonState::Pressed,
+                    });
+                    block_event = true;
+                }
+                WM_LBUTTONUP => {
+                    event_to_send = Some(InputEvent::MouseButton {
+                        button: MouseButton::Left,
+                        state: ButtonState::Released,
+                    });
+                    block_event = true;
+                }
+                WM_RBUTTONDOWN => {
+                    event_to_send = Some(InputEvent::MouseButton {
+                        button: MouseButton::Right,
+                        state: ButtonState::Pressed,
+                    });
+                    block_event = true;
+                }
+                WM_RBUTTONUP => {
+                    event_to_send = Some(InputEvent::MouseButton {
+                        button: MouseButton::Right,
+                        state: ButtonState::Released,
+                    });
+                    block_event = true;
+                }
+                WM_MBUTTONDOWN => {
+                    event_to_send = Some(InputEvent::MouseButton {
+                        button: MouseButton::Middle,
+                        state: ButtonState::Pressed,
+                    });
+                    block_event = true;
+                }
+                WM_MBUTTONUP => {
+                    event_to_send = Some(InputEvent::MouseButton {
+                        button: MouseButton::Middle,
+                        state: ButtonState::Released,
+                    });
+                    block_event = true;
+                }
+                WM_XBUTTONDOWN => {
+                    let hiword = ((hook_struct.mouseData >> 16) & 0xFFFF) as u16;
+                    let btn = if hiword == XBUTTON1 as u16 {
+                        MouseButton::X1
+                    } else if hiword == XBUTTON2 as u16 {
+                        MouseButton::X2
+                    } else {
+                        MouseButton::X2
+                    };
+                    event_to_send = Some(InputEvent::MouseButton {
+                        button: btn,
+                        state: ButtonState::Pressed,
+                    });
+                    block_event = true;
+                }
+                WM_XBUTTONUP => {
+                    let hiword = ((hook_struct.mouseData >> 16) & 0xFFFF) as u16;
+                    let btn = if hiword == XBUTTON1 as u16 {
+                        MouseButton::X1
+                    } else if hiword == XBUTTON2 as u16 {
+                        MouseButton::X2
+                    } else {
+                        MouseButton::X2
+                    };
+                    event_to_send = Some(InputEvent::MouseButton {
+                        button: btn,
+                        state: ButtonState::Released,
+                    });
+                    block_event = true;
+                }
+                WM_MOUSEWHEEL => {
+                    let delta = ((hook_struct.mouseData >> 16) as i16) as i16;
+                    event_to_send = Some(InputEvent::MouseWheel {
+                        delta,
+                        horizontal: false,
+                    });
+                    block_event = true;
+                }
+                WM_MOUSEHWHEEL => {
+                    let delta = ((hook_struct.mouseData >> 16) as i16) as i16;
+                    event_to_send = Some(InputEvent::MouseWheel {
+                        delta,
+                        horizontal: true,
+                    });
+                    block_event = true;
+                }
+                _ => {}
             }
-            WM_LBUTTONUP => {
-                event_to_send = Some(InputEvent::MouseButton {
-                    button: MouseButton::Left,
-                    state: ButtonState::Released,
-                });
-                block_event = true;
-            }
-            WM_RBUTTONDOWN => {
-                event_to_send = Some(InputEvent::MouseButton {
-                    button: MouseButton::Right,
-                    state: ButtonState::Pressed,
-                });
-                block_event = true;
-            }
-            WM_RBUTTONUP => {
-                event_to_send = Some(InputEvent::MouseButton {
-                    button: MouseButton::Right,
-                    state: ButtonState::Released,
-                });
-                block_event = true;
-            }
-            WM_MBUTTONDOWN => {
-                event_to_send = Some(InputEvent::MouseButton {
-                    button: MouseButton::Middle,
-                    state: ButtonState::Pressed,
-                });
-                block_event = true;
-            }
-            WM_MBUTTONUP => {
-                event_to_send = Some(InputEvent::MouseButton {
-                    button: MouseButton::Middle,
-                    state: ButtonState::Released,
-                });
-                block_event = true;
-            }
-            WM_XBUTTONDOWN => {
-                let hiword = ((hook_struct.mouseData >> 16) & 0xFFFF) as u16;
-                let btn = if hiword == XBUTTON1 as u16 {
-                    MouseButton::X1
-                } else if hiword == XBUTTON2 as u16 {
-                    MouseButton::X2
-                } else {
-                    MouseButton::X2
-                };
-                event_to_send = Some(InputEvent::MouseButton {
-                    button: btn,
-                    state: ButtonState::Pressed,
-                });
-                block_event = true;
-            }
-            WM_XBUTTONUP => {
-                let hiword = ((hook_struct.mouseData >> 16) & 0xFFFF) as u16;
-                let btn = if hiword == XBUTTON1 as u16 {
-                    MouseButton::X1
-                } else if hiword == XBUTTON2 as u16 {
-                    MouseButton::X2
-                } else {
-                    MouseButton::X2
-                };
-                event_to_send = Some(InputEvent::MouseButton {
-                    button: btn,
-                    state: ButtonState::Released,
-                });
-                block_event = true;
-            }
-            WM_MOUSEWHEEL => {
-                let delta = ((hook_struct.mouseData >> 16) as i16) as i16;
-                event_to_send = Some(InputEvent::MouseWheel {
-                    delta,
-                    horizontal: false,
-                });
-                block_event = true;
-            }
-            WM_MOUSEHWHEEL => {
-                let delta = ((hook_struct.mouseData >> 16) as i16) as i16;
-                event_to_send = Some(InputEvent::MouseWheel {
-                    delta,
-                    horizontal: true,
-                });
-                block_event = true;
-            }
-            _ => {}
         }
-    }
 
         if let Some(event) = event_to_send {
             if let Ok(guard) = HOOK_SENDER.lock() {
@@ -210,9 +248,20 @@ unsafe extern "system" fn keyboard_proc(n_code: i32, w_param: WPARAM, l_param: L
             let ctrl_down = (windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(0x11) as u16 & 0x8000) != 0;
             if shift_down || ctrl_down || hook_struct.vkCode == 0x13 || hook_struct.vkCode == 0x91 {
                 CAPTURE_ACTIVE.store(false, Ordering::SeqCst);
+                if let Ok(mut guard) = EDGE_DETECTOR.lock() {
+                    if let Some(detector) = guard.as_mut() {
+                        detector.set_location(ActiveLocation::Host);
+                    }
+                }
                 if let Ok(mut guard) = LAST_CURSOR_POS.lock() {
                     *guard = None;
                 }
+                let center = if let Ok(guard) = CENTER_PT.lock() {
+                    *guard
+                } else {
+                    POINT { x: 960, y: 540 }
+                };
+                let _ = SetCursorPos(center.x, center.y);
                 return CallNextHookEx(HHOOK::default(), n_code, w_param, l_param);
             }
         }
@@ -351,7 +400,16 @@ impl InputHookManager {
                 detector.set_location(if active { ActiveLocation::Client } else { ActiveLocation::Host });
             }
         }
-        if !active {
+        if active {
+            let center = if let Ok(guard) = CENTER_PT.lock() {
+                *guard
+            } else {
+                POINT { x: 960, y: 540 }
+            };
+            unsafe {
+                let _ = SetCursorPos(center.x, center.y);
+            }
+        } else {
             if let Ok(mut guard) = LAST_CURSOR_POS.lock() {
                 *guard = None;
             }
