@@ -1268,13 +1268,13 @@ pub fn run() {
                 }
             }
 
-            let quit_i = MenuItem::with_id(app, "quit", "Exit NerveDesk", true, None::<&str>)?;
-            let show_i = MenuItem::with_id(app, "show", "Open Window", true, None::<&str>)?;
+            let quit_i = MenuItem::with_id(app, "quit", "Вийти з NerveDesk", true, None::<&str>)?;
+            let show_i = MenuItem::with_id(app, "show", "Відкрити вікно", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_i, &quit_i])?;
 
             let mut builder = TrayIconBuilder::new()
                 .menu(&menu)
-                .tooltip("NerveDesk - KVM & Virtual Display")
+                .tooltip("NerveDesk - KVM та віртуальний дисплей")
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "quit" => {
                         app.exit(0);

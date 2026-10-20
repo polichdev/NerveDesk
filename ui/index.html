@@ -1,13 +1,16 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="uk">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
   <title>NerveDesk</title>
   <style>
     :root {
       --bg: #121214;
+      --bg-secondary: #18181c;
+      --bg-tertiary: #141416;
       --sidebar-bg: #121214;
+      --sidebar-border: #1c1c20;
       --card-bg: #1c1c20;
       --card-bg-hover: #222227;
       --card-border: #27272a;
@@ -17,11 +20,69 @@
       --accent-subtle: rgba(0, 120, 212, 0.15);
       --success: #10b981;
       --danger: #ef4444;
+      --warning: #f59e0b;
       --text: #f4f4f5;
       --text-muted: #a1a1aa;
       --text-dark: #71717a;
-      --font: "Segoe UI Variable Text", "Segoe UI", Inter, -apple-system, BlinkMacSystemFont, sans-serif;
+      --btn-secondary-bg: #27272a;
+      --btn-secondary-border: #3f3f46;
+      --btn-secondary-hover: #333338;
+      --btn-secondary-color: #f4f4f5;
+      --input-bg: #121214;
+      --input-border: #3f3f46;
+      --input-text: #f4f4f5;
+      --switch-bg: #27272a;
+      --switch-border: #3f3f46;
+      --switch-thumb: #a1a1aa;
+      --switch-thumb-checked: #ffffff;
+      --scrollbar-thumb: #27272a;
+      --scrollbar-thumb-hover: #3f3f46;
+      --monitor-box-bg: #222227;
+      --monitor-box-border: #3f3f46;
+      --monitor-selected-bg: #1e2534;
+      --context-menu-bg: #1c1c20;
+      --context-menu-border: #33333a;
+      --font: "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, Inter, sans-serif;
       --font-mono: "Cascadia Code", "Consolas", monospace;
+    }
+
+    body.light-theme {
+      --bg: #f5f6f9;
+      --bg-secondary: #eaecf1;
+      --bg-tertiary: #f0f2f6;
+      --sidebar-bg: #ffffff;
+      --sidebar-border: #e2e5ec;
+      --card-bg: #ffffff;
+      --card-bg-hover: #f8f9fb;
+      --card-border: #e2e6ea;
+      --card-border-subtle: #edf0f5;
+      --accent: #0284c7;
+      --accent-hover: #0369a1;
+      --accent-subtle: rgba(2, 132, 199, 0.12);
+      --success: #16a34a;
+      --danger: #dc2626;
+      --warning: #d97706;
+      --text: #111827;
+      --text-muted: #4b5563;
+      --text-dark: #6b7280;
+      --btn-secondary-bg: #f3f4f6;
+      --btn-secondary-border: #d1d5db;
+      --btn-secondary-hover: #e5e7eb;
+      --btn-secondary-color: #1f2937;
+      --input-bg: #ffffff;
+      --input-border: #d1d5db;
+      --input-text: #111827;
+      --switch-bg: #d1d5db;
+      --switch-border: #9ca3af;
+      --switch-thumb: #4b5563;
+      --switch-thumb-checked: #ffffff;
+      --scrollbar-thumb: #cbd5e1;
+      --scrollbar-thumb-hover: #94a3b8;
+      --monitor-box-bg: #f8fafc;
+      --monitor-box-border: #cbd5e1;
+      --monitor-selected-bg: #e0f2fe;
+      --context-menu-bg: #ffffff;
+      --context-menu-border: #d1d5db;
     }
 
     * {
@@ -30,12 +91,13 @@
       padding: 0;
       user-select: none;
       scrollbar-width: thin;
-      scrollbar-color: #27272a transparent;
+      scrollbar-color: var(--scrollbar-thumb) transparent;
+      -webkit-tap-highlight-color: transparent;
     }
 
     ::-webkit-scrollbar {
-      width: 5px;
-      height: 5px;
+      width: 6px;
+      height: 6px;
     }
 
     ::-webkit-scrollbar-track {
@@ -43,12 +105,12 @@
     }
 
     ::-webkit-scrollbar-thumb {
-      background: #27272a;
+      background: var(--scrollbar-thumb);
       border-radius: 4px;
     }
 
     ::-webkit-scrollbar-thumb:hover {
-      background: #3f3f46;
+      background: var(--scrollbar-thumb-hover);
     }
 
     body {
@@ -59,15 +121,19 @@
       height: 100vh;
       display: flex;
       overflow: hidden;
+      transition: background-color 0.2s ease, color 0.2s ease;
     }
 
+    /* Sidebar Navigation */
     aside {
       width: 250px;
-      background: var(--bg);
-      border-right: 1px solid #1c1c20;
+      background: var(--sidebar-bg);
+      border-right: 1px solid var(--sidebar-border);
       display: flex;
       flex-direction: column;
       flex-shrink: 0;
+      transition: width 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+      z-index: 50;
     }
 
     .nav-group-title {
@@ -76,7 +142,9 @@
       color: var(--text-dark);
       text-transform: uppercase;
       letter-spacing: 0.06em;
-      padding: 20px 18px 8px;
+      padding: 16px 18px 6px;
+      white-space: nowrap;
+      overflow: hidden;
     }
 
     .nav-list {
@@ -97,22 +165,29 @@
       color: var(--text-muted);
       cursor: pointer;
       transition: background 0.12s, color 0.12s;
+      white-space: nowrap;
+      position: relative;
     }
 
     .nav-item:hover {
-      background: #222226;
+      background: var(--card-bg-hover);
       color: var(--text);
     }
 
     .nav-item.active {
-      background: #27272a;
-      color: #ffffff;
+      background: var(--card-border);
+      color: var(--text);
       font-weight: 600;
     }
 
+    body.light-theme .nav-item.active {
+      background: var(--accent-subtle);
+      color: var(--accent);
+    }
+
     .nav-icon {
-      width: 16px;
-      height: 16px;
+      width: 18px;
+      height: 18px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -121,91 +196,33 @@
     }
 
     .nav-item.active .nav-icon {
-      color: #38bdf8;
+      color: var(--accent);
     }
 
     .sidebar-footer {
       margin-top: auto;
-      border-top: 1px solid var(--card-border);
+      border-top: 1px solid var(--card-border-subtle);
       padding: 10px 8px;
       display: flex;
       flex-direction: column;
       gap: 6px;
     }
 
+    /* Main Container */
     .main-wrap {
       flex: 1;
       display: flex;
       flex-direction: column;
       overflow: hidden;
       background: var(--bg);
-    }
-
-    header {
-      height: 52px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 0 28px;
-      border-bottom: 1px solid #1c1c20;
-      background: var(--bg);
-      flex-shrink: 0;
-    }
-
-    .header-title-wrap {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 13px;
-      color: var(--text-muted);
-    }
-
-    .header-title-wrap strong {
-      color: var(--text);
-      font-weight: 600;
-    }
-
-    .header-actions {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .status-badge {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 12px;
-      padding: 4px 10px;
-      border-radius: 4px;
-      background: #1c1c20;
-      border: 1px solid var(--card-border);
-      color: var(--text-muted);
-      font-weight: 500;
-    }
-
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--success);
-    }
-
-    .status-dot.active {
-      box-shadow: 0 0 8px var(--success);
-      animation: pulse 2s infinite;
-    }
-
-    @keyframes pulse {
-      0% { opacity: 1; }
-      50% { opacity: 0.4; }
-      100% { opacity: 1; }
+      min-width: 0; /* Crucial for flex child resizing */
     }
 
     .content-area {
       flex: 1;
-      padding: 24px 32px 32px;
+      padding: 24px 30px 32px;
       overflow-y: auto;
+      overflow-x: hidden;
     }
 
     .view-container {
@@ -214,6 +231,7 @@
       gap: 18px;
       max-width: 960px;
       margin: 0 auto;
+      width: 100%;
     }
 
     .view-container.active {
@@ -224,12 +242,12 @@
       display: flex;
       flex-direction: column;
       gap: 4px;
-      margin-bottom: 4px;
+      margin-bottom: 6px;
     }
 
     .view-title {
       font-size: 22px;
-      font-weight: 600;
+      font-weight: 700;
       letter-spacing: -0.01em;
       color: var(--text);
     }
@@ -237,16 +255,30 @@
     .view-desc {
       font-size: 13px;
       color: var(--text-muted);
+      line-height: 1.4;
     }
 
     .section-title {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--text-muted);
-      margin-top: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-dark);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-top: 10px;
       margin-bottom: 2px;
     }
 
+    /* Responsive Home Grid */
+    .home-grid {
+      display: grid;
+      grid-template-columns: 1fr 1.25fr;
+      gap: 20px;
+      align-items: start;
+      margin-bottom: 24px;
+      width: 100%;
+    }
+
+    /* Cards */
     .setting-card {
       background: var(--card-bg);
       border: 1px solid var(--card-border);
@@ -256,7 +288,7 @@
       align-items: center;
       justify-content: space-between;
       gap: 16px;
-      transition: background 0.12s;
+      transition: background 0.12s, border-color 0.12s;
     }
 
     .setting-card:hover {
@@ -266,13 +298,14 @@
     .setting-left {
       display: flex;
       align-items: center;
-      gap: 16px;
+      gap: 14px;
       flex: 1;
+      min-width: 0;
     }
 
     .setting-icon {
-      width: 20px;
-      height: 20px;
+      width: 22px;
+      height: 22px;
       color: var(--text-muted);
       display: flex;
       align-items: center;
@@ -284,18 +317,21 @@
       display: flex;
       flex-direction: column;
       gap: 2px;
+      min-width: 0;
     }
 
     .setting-name {
       font-size: 13px;
       font-weight: 600;
       color: var(--text);
+      word-break: break-word;
     }
 
     .setting-desc {
       font-size: 12px;
       color: var(--text-dark);
-      line-height: 1.4;
+      line-height: 1.35;
+      word-break: break-word;
     }
 
     .setting-right {
@@ -303,13 +339,16 @@
       align-items: center;
       gap: 10px;
       flex-shrink: 0;
+      flex-wrap: wrap;
     }
 
+    /* Switch */
     .switch {
       position: relative;
       display: inline-block;
-      width: 40px;
-      height: 20px;
+      width: 42px;
+      height: 22px;
+      flex-shrink: 0;
     }
 
     .switch input {
@@ -322,10 +361,10 @@
       position: absolute;
       cursor: pointer;
       top: 0; left: 0; right: 0; bottom: 0;
-      background-color: #27272a;
-      border: 1px solid #3f3f46;
-      transition: .2s;
-      border-radius: 20px;
+      background-color: var(--switch-bg);
+      border: 1px solid var(--switch-border);
+      transition: 0.2s;
+      border-radius: 22px;
     }
 
     .slider:before {
@@ -333,10 +372,10 @@
       content: "";
       height: 14px;
       width: 14px;
-      left: 2px;
-      bottom: 2px;
-      background-color: #a1a1aa;
-      transition: .2s;
+      left: 3px;
+      bottom: 3px;
+      background-color: var(--switch-thumb);
+      transition: 0.2s;
       border-radius: 50%;
     }
 
@@ -347,23 +386,27 @@
 
     input:checked + .slider:before {
       transform: translateX(20px);
-      background-color: #ffffff;
+      background-color: var(--switch-thumb-checked);
     }
 
+    /* Buttons */
     .btn {
       background: var(--accent);
       color: #ffffff;
       border: 1px solid transparent;
       padding: 6px 14px;
-      border-radius: 5px;
+      border-radius: 6px;
       font-size: 12px;
       font-weight: 500;
+      font-family: inherit;
       cursor: pointer;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       gap: 6px;
-      transition: background 0.12s;
+      transition: background 0.12s, opacity 0.12s;
+      white-space: nowrap;
+      min-height: 32px;
     }
 
     .btn:hover {
@@ -371,19 +414,18 @@
     }
 
     .btn-secondary {
-      background: #27272a;
-      color: var(--text);
-      border: 1px solid #3f3f46;
+      background: var(--btn-secondary-bg);
+      color: var(--btn-secondary-color);
+      border: 1px solid var(--btn-secondary-border);
     }
 
     .btn-secondary:hover {
-      background: #333338;
-      border-color: #52525b;
+      background: var(--btn-secondary-hover);
     }
 
     .btn-icon {
       padding: 6px;
-      border-radius: 5px;
+      border-radius: 6px;
       background: transparent;
       border: 1px solid transparent;
       color: var(--text-muted);
@@ -391,35 +433,94 @@
       display: flex;
       align-items: center;
       justify-content: center;
+      min-height: 32px;
+      min-width: 32px;
+      transition: background 0.12s, color 0.12s;
     }
 
     .btn-icon:hover {
-      background: #27272a;
+      background: var(--card-bg-hover);
       color: var(--text);
-      border-color: #3f3f46;
+      border-color: var(--card-border);
     }
 
     .code-input {
-      background: #121214;
-      border: 1px solid #3f3f46;
-      border-radius: 5px;
-      color: var(--text);
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: 6px;
+      color: var(--input-text);
       font-family: var(--font-mono);
       font-size: 13px;
       padding: 6px 10px;
       outline: none;
-      width: 210px;
+      width: 200px;
+      min-height: 32px;
+      transition: border-color 0.15s;
     }
 
     .code-input:focus {
       border-color: var(--accent);
     }
 
+    .select-input {
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      color: var(--input-text);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      outline: none;
+      min-height: 32px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+
+    .select-input:focus {
+      border-color: var(--accent);
+    }
+
+    /* Diagnostics Cards */
+    .diag-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      transition: background 0.12s;
+    }
+
+    .diag-card:hover {
+      background: var(--card-bg-hover);
+    }
+
+    .diag-label {
+      font-size: 11px;
+      color: var(--text-dark);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 600;
+    }
+
+    .diag-val {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text);
+      font-family: var(--font-mono);
+    }
+
+    .diag-sub {
+      font-size: 12px;
+      color: var(--accent);
+    }
+
+    /* Monitor Layout */
     .monitor-layout-card {
       background: var(--card-bg);
       border: 1px solid var(--card-border);
       border-radius: 8px;
-      padding: 20px;
+      padding: 18px;
       display: flex;
       flex-direction: column;
       gap: 16px;
@@ -428,20 +529,22 @@
     .monitors-row {
       display: flex;
       align-items: center;
-      justify-content: center;
+      justify-content: flex-start;
       gap: 12px;
       padding: 16px;
-      background: #141416;
+      background: var(--bg-tertiary);
       border: 1px solid var(--card-border-subtle);
       border-radius: 6px;
       min-height: 120px;
+      overflow-x: auto;
+      max-width: 100%;
     }
 
     .monitor-box {
-      width: 130px;
-      height: 90px;
-      background: #222227;
-      border: 1px solid #3f3f46;
+      width: 125px;
+      height: 88px;
+      background: var(--monitor-box-bg);
+      border: 1px solid var(--monitor-box-border);
       border-radius: 6px;
       display: flex;
       flex-direction: column;
@@ -450,6 +553,7 @@
       gap: 6px;
       padding: 8px;
       cursor: pointer;
+      flex-shrink: 0;
       transition: border 0.15s, background 0.15s;
     }
 
@@ -459,18 +563,18 @@
 
     .monitor-box.selected {
       border-color: var(--accent);
-      background: #1e2534;
+      background: var(--monitor-selected-bg);
     }
 
     .monitor-box.empty {
       background: transparent;
-      border: 1px dashed #333338;
+      border: 1px dashed var(--btn-secondary-border);
       cursor: default;
     }
 
     .monitor-icon-svg {
-      width: 28px;
-      height: 22px;
+      width: 26px;
+      height: 20px;
       color: var(--text-muted);
     }
 
@@ -483,7 +587,7 @@
       font-weight: 600;
       color: var(--text);
       text-align: center;
-      max-width: 110px;
+      max-width: 105px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -494,219 +598,284 @@
       color: var(--text-dark);
     }
 
-    .metrics-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 14px;
-    }
-
-    .diag-card {
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 8px;
-      padding: 18px 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .diag-label {
-      font-size: 12px;
-      color: var(--text-dark);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      font-weight: 600;
-    }
-
-    .diag-val {
-      font-size: 26px;
-      font-weight: 700;
-      color: var(--text);
-      font-family: var(--font-mono);
-    }
-
-    .diag-sub {
-      font-size: 12px;
-      color: var(--accent);
-    }
-
-    .table-container {
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 8px;
-      overflow: hidden;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 13px;
-    }
-
-    th {
-      text-align: left;
-      padding: 10px 16px;
-      background: #18181b;
+    .badge {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: var(--btn-secondary-bg);
+      border: 1px solid var(--btn-secondary-border);
       color: var(--text-muted);
       font-weight: 600;
-      font-size: 12px;
-      border-bottom: 1px solid var(--card-border);
     }
 
-    td {
-      padding: 10px 16px;
-      border-bottom: 1px solid #202024;
-      color: var(--text);
+    /* Pair Drawer Content */
+    .pair-drawer-content {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      width: 100%;
+      flex-wrap: wrap;
     }
 
-    tr:last-child td {
-      border-bottom: none;
+    /* Toast */
+    #fileToast {
+      display: none;
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--card-bg);
+      border: 1px solid var(--success);
+      border-radius: 8px;
+      padding: 12px 16px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+      z-index: 9999;
+      align-items: center;
+      gap: 12px;
+      max-width: 90vw;
     }
 
+    /* Context Menu */
+    #peerContextMenu {
+      display: none;
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--context-menu-bg);
+      border: 1px solid var(--context-menu-border);
+      border-radius: 6px;
+      padding: 4px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+      z-index: 100;
+      min-width: 155px;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    /* RESPONSIVE BREAKPOINTS */
+    @media (max-width: 840px) {
+      aside {
+        width: 64px;
+      }
+      .nav-group-title,
+      .nav-item span {
+        display: none !important;
+      }
+      .nav-item {
+        justify-content: center;
+        padding: 10px 0;
+      }
+      .home-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+      }
+      .content-area {
+        padding: 20px 18px;
+      }
+    }
+
+    @media (max-width: 620px) {
+      .setting-card {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+      }
+      .setting-right {
+        width: 100%;
+        justify-content: flex-start;
+      }
+      .setting-right .code-input {
+        width: 100%;
+      }
+      .pair-drawer-content input {
+        width: 100% !important;
+        flex: none !important;
+      }
+      .pair-drawer-content button {
+        width: 100% !important;
+      }
+      .monitors-row {
+        justify-content: flex-start;
+      }
+    }
+
+    @media (max-width: 460px) {
+      body {
+        flex-direction: column-reverse;
+      }
+      aside {
+        width: 100%;
+        height: 56px;
+        border-right: none;
+        border-top: 1px solid var(--sidebar-border);
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-around;
+        padding: 0 6px;
+      }
+      .nav-group-title, .sidebar-footer {
+        display: none !important;
+      }
+      .nav-list {
+        flex-direction: row;
+        width: 100%;
+        justify-content: space-around;
+        padding: 0;
+      }
+      .nav-item {
+        padding: 8px 14px;
+      }
+      .content-area {
+        padding: 14px 12px;
+      }
+    }
   </style>
 </head>
 <body>
   <aside>
     <div class="nav-list" style="padding-top: 20px; margin-bottom: 12px;">
-      <div class="nav-item active" id="navHome" onclick="switchTab('home')">
+      <div class="nav-item active" id="navHome" onclick="switchTab('home')" title="Головна">
         <div class="nav-icon">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
         </div>
-        <span>Home</span>
+        <span data-i18n="nav_home">Головна</span>
       </div>
     </div>
 
-    <div class="nav-group-title">Navigation</div>
+    <div class="nav-group-title" data-i18n="nav_section_navigation">Навігація</div>
     <div class="nav-list">
-      <div class="nav-item" id="navKvm" onclick="switchTab('kvm')">
+      <div class="nav-item" id="navKvm" onclick="switchTab('kvm')" title="Безмежна миша">
         <div class="nav-icon">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 0-4 4v12a4 4 0 0 0 8 0V6a4 4 0 0 0-4-4z"/><path d="M12 2v6"/></svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 0-4 4v12a4 4 0 0 0 8 0V6a4 4 0 0 0-4-4z"/><path d="M12 2v6"/></svg>
         </div>
-        <span>Mouse Without Borders</span>
+        <span data-i18n="nav_kvm">Безмежна миша</span>
       </div>
 
-      <div class="nav-item" id="navCast" onclick="switchTab('cast')">
+      <div class="nav-item" id="navCast" onclick="switchTab('cast')" title="Трансляція дисплея">
         <div class="nav-icon">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
         </div>
-        <span>Virtual Display Cast</span>
+        <span data-i18n="nav_cast">Трансляція дисплея</span>
       </div>
     </div>
 
     <div class="sidebar-footer">
-      <div class="nav-item" id="navSettings" onclick="switchTab('settings')" style="margin: 0;">
+      <div class="nav-item" id="navSettings" onclick="switchTab('settings')" title="Налаштування" style="margin: 0;">
         <div class="nav-icon">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         </div>
-        <span>Settings</span>
+        <span data-i18n="nav_settings">Налаштування</span>
       </div>
     </div>
   </aside>
 
   <div class="main-wrap">
     <div class="content-area">
+      <!-- VIEW: HOME -->
       <div class="view-container active" id="viewHome">
-        <div class="view-header" style="margin-bottom: 24px;">
-          <div class="view-title">Home</div>
-          <div class="view-desc">Central dashboard for telemetry, metrics, and managing active NerveDesk modules.</div>
+        <div class="view-header">
+          <div class="view-title" data-i18n="home_title">Головна</div>
+          <div class="view-desc" data-i18n="home_desc">Центральна панель телеметрії, метрик та керування активними модулями NerveDesk.</div>
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1.25fr; gap: 20px; align-items: start; margin-bottom: 24px;">
+        <div class="home-grid">
+          <!-- Metrics Column -->
           <div style="display: flex; flex-direction: column; gap: 12px;">
-            <div class="section-title" style="margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dark);">System Metrics</div>
+            <div class="section-title" data-i18n="sec_system_metrics">Системні метрики</div>
             
-            <div class="diag-card" style="padding: 12px 14px;">
-              <div class="diag-label">Input Latency</div>
+            <div class="diag-card">
+              <div class="diag-label" data-i18n="metric_input_latency">Затримка вводу</div>
               <div class="diag-val" id="diagRtt">0.00 ms</div>
-              <div class="diag-sub">Sub-millisecond Direct UDP</div>
+              <div class="diag-sub" data-i18n="metric_input_latency_sub">Субмілісекундний прямий UDP</div>
             </div>
 
-            <div class="diag-card" style="padding: 12px 14px;">
-              <div class="diag-label">Display Stream Framerate</div>
+            <div class="diag-card">
+              <div class="diag-label" data-i18n="metric_framerate">Частота кадрів стріму</div>
               <div class="diag-val" id="diagFps">0.0 FPS</div>
-              <div class="diag-sub">DirectX 11 Zero-Copy Pipeline</div>
+              <div class="diag-sub" data-i18n="metric_framerate_sub">Конвеєр DirectX 11 без копіювання</div>
             </div>
 
-            <div class="diag-card" style="padding: 12px 14px;">
-              <div class="diag-label">Network Throughput</div>
+            <div class="diag-card">
+              <div class="diag-label" data-i18n="metric_bandwidth">Пропускна здатність</div>
               <div class="diag-val" id="diagBitrate">0.0 Mbps</div>
-              <div class="diag-sub">H.264 Low-Latency CBR</div>
+              <div class="diag-sub" data-i18n="metric_bandwidth_sub">H.264 низька затримка CBR</div>
             </div>
 
-            <div class="diag-card" style="padding: 12px 14px;">
-              <div class="diag-label">Virtual Display Device</div>
-              <div class="diag-val" id="diagDisplay" style="font-size: 18px;">Attached</div>
-              <div class="diag-sub">Microsoft IddCx UMDF Driver</div>
+            <div class="diag-card">
+              <div class="diag-label" data-i18n="metric_virtual_display">Віртуальний дисплей</div>
+              <div class="diag-val" id="diagDisplay" style="font-size: 18px;" data-i18n="status_attached">Підключено</div>
+              <div class="diag-sub" data-i18n="metric_virtual_display_sub">Драйвер Microsoft IddCx UMDF</div>
             </div>
 
-            <div class="diag-card" style="padding: 12px 14px;">
-              <div class="diag-label">Active Transition Edge</div>
-              <div class="diag-val" id="diagEdge" style="font-size: 18px;">Right Edge</div>
-              <div class="diag-sub">Screen Boundary Crossing</div>
+            <div class="diag-card">
+              <div class="diag-label" data-i18n="metric_edge">Активна межа переходу</div>
+              <div class="diag-val" id="diagEdge" style="font-size: 18px;" data-i18n="edge_right">Права межа</div>
+              <div class="diag-sub" data-i18n="metric_edge_sub">Перетин межі екрана</div>
             </div>
           </div>
 
+          <!-- Modules Column -->
           <div style="display: flex; flex-direction: column; gap: 12px;">
-            <div class="section-title" style="margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dark);">Active Modules & Services</div>
+            <div class="section-title" data-i18n="sec_active_modules">Активні модулі та служби</div>
 
-            <div class="setting-card" style="margin: 0; padding: 14px 16px; border-radius: 8px;">
+            <div class="setting-card">
               <div class="setting-left">
                 <div class="setting-icon" style="color: #38bdf8;">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 0-4 4v12a4 4 0 0 0 8 0V6a4 4 0 0 0-4-4z"/><path d="M12 2v6"/></svg>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 0-4 4v12a4 4 0 0 0 8 0V6a4 4 0 0 0-4-4z"/><path d="M12 2v6"/></svg>
                 </div>
                 <div class="setting-text">
-                  <div class="setting-name" style="font-size: 14px;">Mouse Without Borders</div>
-                  <div class="setting-desc" style="font-size: 12px;">Share keyboard and mouse seamlessly between computers</div>
+                  <div class="setting-name" data-i18n="mod_kvm_name">Безмежна миша (KVM)</div>
+                  <div class="setting-desc" data-i18n="mod_kvm_desc">Спільне керування мишею та клавіатурою між ПК</div>
                 </div>
               </div>
-              <div class="setting-right" style="display: flex; align-items: center; gap: 10px;">
+              <div class="setting-right">
                 <label class="switch">
                   <input type="checkbox" id="homeKvmToggle" onchange="toggleHomeKvm(this.checked)">
                   <span class="slider"></span>
                 </label>
-                <button class="btn btn-secondary" onclick="switchTab('kvm')" title="Open Mouse Without Borders" style="padding: 6px 8px; border-radius: 6px;">
+                <button class="btn btn-secondary" onclick="switchTab('kvm')" title="Перейти до налаштувань миші">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
                 </button>
               </div>
             </div>
 
-            <div class="setting-card" style="margin: 0; padding: 14px 16px; border-radius: 8px;">
+            <div class="setting-card">
               <div class="setting-left">
                 <div class="setting-icon" style="color: #a855f7;">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/></svg>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
                 </div>
                 <div class="setting-text">
-                  <div class="setting-name" style="font-size: 14px;">Virtual Display Projection</div>
-                  <div class="setting-desc" style="font-size: 12px;">Extend or duplicate desktop to secondary screen</div>
+                  <div class="setting-name" data-i18n="mod_cast_name">Проєкція віртуального дисплея</div>
+                  <div class="setting-desc" data-i18n="mod_cast_desc">Розширення або дублювання робочого столу на додатковий екран</div>
                 </div>
               </div>
-              <div class="setting-right" style="display: flex; align-items: center; gap: 10px;">
+              <div class="setting-right">
                 <label class="switch">
                   <input type="checkbox" id="homeCastToggle" onchange="toggleHomeCast(this.checked)">
                   <span class="slider"></span>
                 </label>
-                <button class="btn btn-secondary" onclick="switchTab('cast')" title="Open Virtual Display Cast" style="padding: 6px 8px; border-radius: 6px;">
+                <button class="btn btn-secondary" onclick="switchTab('cast')" title="Перейти до трансляції">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
                 </button>
               </div>
             </div>
 
-            <div class="setting-card" style="margin: 0; padding: 14px 16px; border-radius: 8px;">
+            <div class="setting-card">
               <div class="setting-left">
                 <div class="setting-icon" style="color: #22c55e;">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
                 </div>
                 <div class="setting-text">
-                  <div class="setting-name" style="font-size: 14px;">File Drag & Drop</div>
-                  <div class="setting-desc" style="font-size: 12px;">Drag files across screen borders with mouse or copy to clipboard</div>
+                  <div class="setting-name" data-i18n="mod_transfer_name">Перетягування файлів (Drag & Drop)</div>
+                  <div class="setting-desc" data-i18n="mod_transfer_desc">Перетягуйте файли через межу екрана або копіюйте через буфер обміну</div>
                 </div>
               </div>
-              <div class="setting-right" style="display: flex; align-items: center; gap: 10px;">
+              <div class="setting-right">
                 <label class="switch">
                   <input type="checkbox" id="homeTransferToggle" checked onchange="toggleFileTransfer(this.checked)">
                   <span class="slider"></span>
                 </label>
-                <button class="btn btn-secondary" onclick="openReceivedFolder()" title="Open Received Files" style="padding: 6px 8px; border-radius: 6px;">
+                <button class="btn btn-secondary" onclick="openReceivedFolder()" title="Відкрити отримані файли" data-i18n-title="open_folder_btn">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
                 </button>
               </div>
@@ -715,21 +884,22 @@
         </div>
       </div>
 
+      <!-- VIEW: KVM (MOUSE WITHOUT BORDERS) -->
       <div class="view-container" id="viewKvm">
         <div class="view-header">
-          <div class="view-title">Mouse Without Borders</div>
-          <div class="view-desc">Seamless mouse and keyboard sharing between computers using local network pairing and encryption.</div>
+          <div class="view-title" data-i18n="kvm_title">Безмежна миша</div>
+          <div class="view-desc" data-i18n="kvm_desc">Безшовне спільне використання миші та клавіатури між комп'ютерами з локальним шифруванням.</div>
         </div>
 
-        <div class="section-title">Activation</div>
+        <div class="section-title" data-i18n="sec_activation">Активація</div>
         <div class="setting-card">
           <div class="setting-left">
             <div class="setting-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 0-4 4v12a4 4 0 0 0 8 0V6a4 4 0 0 0-4-4z"/><path d="M12 2v6"/></svg>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 0-4 4v12a4 4 0 0 0 8 0V6a4 4 0 0 0-4-4z"/><path d="M12 2v6"/></svg>
             </div>
             <div class="setting-text">
-              <div class="setting-name">Mouse Without Borders</div>
-              <div class="setting-desc">Enable seamless border-crossing cursor and keyboard control across paired devices</div>
+              <div class="setting-name" data-i18n="kvm_activation_name">Служба безмежної миші</div>
+              <div class="setting-desc" data-i18n="kvm_activation_desc">Увімкнути безперешкодне переміщення курсору та введення клавіатури між спареними пристроями</div>
             </div>
           </div>
           <div class="setting-right">
@@ -740,113 +910,113 @@
           </div>
         </div>
 
-        <div class="section-title">Encryption Key & Device Name</div>
+        <div class="section-title" data-i18n="sec_encryption">Ключ шифрування та ім'я пристрою</div>
         <div style="display: flex; flex-direction: column; gap: 0;">
-          <div class="setting-card" style="border-radius: 8px 8px 0 0; border-bottom: none; margin-bottom: 0;">
+          <div class="setting-card" style="border-radius: 8px 8px 0 0; border-bottom: none;">
             <div class="setting-left">
               <div class="setting-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>
               </div>
               <div class="setting-text">
-                <div class="setting-name">Security Key</div>
-                <div class="setting-desc">To configure, create a key on one computer and enter it manually on other computers.</div>
+                <div class="setting-name" data-i18n="security_key_name">Ключ безпеки</div>
+                <div class="setting-desc" data-i18n="security_key_desc">Для налаштування згенеруйте ключ на одному ПК та введіть його на іншому пристрої.</div>
               </div>
             </div>
             <div class="setting-right">
               <input type="text" id="securityKeyInput" class="code-input" value="gS7;hJ1(eR3<hG4?" readonly>
-              <button class="btn btn-secondary" onclick="generateNewKey()">New Key</button>
-              <button class="btn btn-primary" onclick="togglePairDrawer()">Connect</button>
-              <button class="btn-icon" id="togglePairDrawerBtn" onclick="togglePairDrawer()" title="Expand connection">
+              <button class="btn btn-secondary" onclick="generateNewKey()" data-i18n="btn_new_key">Новий ключ</button>
+              <button class="btn btn-primary" onclick="togglePairDrawer()" data-i18n="btn_connect">З'єднати</button>
+              <button class="btn-icon" id="togglePairDrawerBtn" onclick="togglePairDrawer()" title="Розгорнути з'єднання" data-i18n-title="btn_expand">
                 <svg id="pairDrawerChevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
               </button>
             </div>
           </div>
 
-          <div id="pairDrawer" style="display: none; background: #18181c; border-left: 1px solid var(--card-border); border-right: 1px solid var(--card-border); border-top: 1px solid #27272a; border-bottom: 1px solid #27272a; padding: 14px 20px;">
-            <div style="display: flex; gap: 12px; align-items: center; width: 100%;">
-              <input type="text" id="peerKeyInput" class="code-input" placeholder="Security Key" style="flex: 1; height: 34px;">
-              <input type="text" id="peerDeviceNameInput" class="code-input" placeholder="Device Name" style="flex: 1; height: 34px;">
-              <button class="btn btn-primary" style="height: 34px; padding: 0 20px;" onclick="connectWithKeyAndDevice()">Connect</button>
+          <div id="pairDrawer" style="display: none; background: var(--bg-tertiary); border-left: 1px solid var(--card-border); border-right: 1px solid var(--card-border); border-top: 1px solid var(--card-border-subtle); border-bottom: 1px solid var(--card-border-subtle); padding: 14px 18px;">
+            <div class="pair-drawer-content">
+              <input type="text" id="peerKeyInput" class="code-input" placeholder="Ключ безпеки" data-i18n-placeholder="placeholder_key" style="flex: 1;">
+              <input type="text" id="peerDeviceNameInput" class="code-input" placeholder="Ім'я пристрою" data-i18n-placeholder="placeholder_device_name" style="flex: 1;">
+              <button class="btn btn-primary" onclick="connectWithKeyAndDevice()" data-i18n="btn_connect">З'єднати</button>
             </div>
           </div>
 
           <div class="setting-card" style="border-radius: 0 0 8px 8px; margin-top: 0;">
             <div class="setting-left">
               <div class="setting-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
               </div>
               <div class="setting-text">
-                <div class="setting-name">This Device Host Name</div>
-                <div class="setting-desc">Hostname used to identify this machine on the local network.</div>
+                <div class="setting-name" data-i18n="host_name_title">Ім'я цього комп'ютера</div>
+                <div class="setting-desc" data-i18n="host_name_desc">Ім'я хоста для ідентифікації цього ПК у локальній мережі.</div>
               </div>
             </div>
             <div class="setting-right">
               <span id="thisDeviceNameText" style="font-family: var(--font-mono); font-size: 13px; font-weight: 600; color: var(--text);">DESKTOP-PC</span>
-              <button class="btn-icon" onclick="copyDeviceName()" title="Copy Name">
+              <button class="btn-icon" onclick="copyDeviceName()" title="Скопіювати ім'я" data-i18n-title="copy_name_title">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
               </button>
             </div>
           </div>
         </div>
 
-        <div class="section-title">Device Layout</div>
+        <div class="section-title" data-i18n="sec_device_layout">Розташування пристроїв</div>
         <div class="monitor-layout-card">
-          <div style="font-size: 12px; color: var(--text-dark);">Arrange computers in the order matching your physical desk setup:</div>
+          <div style="font-size: 12px; color: var(--text-dark);" data-i18n="device_layout_desc">Розташуйте комп'ютери відповідно до їхнього фізичного розміщення на столі:</div>
           <div class="monitors-row" id="monitorsRow">
             <div class="monitor-box selected" id="monitorBoxHost" onclick="selectMonitorBox('host')">
               <svg class="monitor-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-              <div class="monitor-label" id="hostBoxLabel">This PC</div>
-              <div class="monitor-sub">Primary Device</div>
+              <div class="monitor-label" id="hostBoxLabel" data-i18n="this_pc">Цей ПК</div>
+              <div class="monitor-sub" data-i18n="primary_device">Головний пристрій</div>
             </div>
 
             <div class="monitor-box empty" id="peerAvailableSlot">
-              <div style="font-size: 11px; color: var(--text-dark);">Available</div>
+              <div style="font-size: 11px; color: var(--text-dark);" data-i18n="slot_available">Доступно</div>
             </div>
 
             <div class="monitor-box" id="monitorBoxPeer" style="display: none; position: relative;" onclick="togglePeerDisconnectMenu(event)" oncontextmenu="togglePeerDisconnectMenu(event)">
               <svg class="monitor-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
               <div class="monitor-label" id="peerBoxLabel"></div>
-              <div class="monitor-sub" id="peerBoxSub">Connected</div>
-              <div id="peerContextMenu" style="display: none; position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); background: #1c1c20; border: 1px solid #33333a; border-radius: 6px; padding: 4px; box-shadow: 0 8px 24px rgba(0,0,0,0.6); z-index: 100; min-width: 150px; flex-direction: column; gap: 4px;">
-                <button class="btn btn-secondary" id="btnPeerReconnect" style="width: 100%; font-size: 12px; padding: 6px 12px; justify-content: flex-start; color: #38bdf8;" onclick="reconnectCurrentPeer(event)">Reconnect</button>
-                <button class="btn btn-secondary" id="btnPeerToggleDisable" style="width: 100%; font-size: 12px; padding: 6px 12px; justify-content: flex-start;" onclick="togglePeerDisabled(event)">Disable Device</button>
-                <button class="btn btn-secondary" style="width: 100%; color: #ef4444; border-color: rgba(239,68,68,0.3); font-size: 12px; padding: 6px 12px; justify-content: flex-start;" onclick="disconnectCurrentPeer(event)">Forget Device</button>
+              <div class="monitor-sub" id="peerBoxSub" data-i18n="status_connected">Підключено</div>
+              <div id="peerContextMenu">
+                <button class="btn btn-secondary" id="btnPeerReconnect" style="width: 100%; font-size: 12px; padding: 6px 10px; justify-content: flex-start; color: #38bdf8;" onclick="reconnectCurrentPeer(event)" data-i18n="btn_reconnect">Перепідключити</button>
+                <button class="btn btn-secondary" id="btnPeerToggleDisable" style="width: 100%; font-size: 12px; padding: 6px 10px; justify-content: flex-start;" onclick="togglePeerDisabled(event)" data-i18n="btn_disable">Вимкнути пристрій</button>
+                <button class="btn btn-secondary" style="width: 100%; color: #ef4444; border-color: rgba(239,68,68,0.3); font-size: 12px; padding: 6px 10px; justify-content: flex-start;" onclick="disconnectCurrentPeer(event)" data-i18n="btn_forget">Забути пристрій</button>
               </div>
             </div>
 
             <div class="monitor-box empty">
-              <div style="font-size: 11px; color: var(--text-dark);">Available</div>
+              <div style="font-size: 11px; color: var(--text-dark);" data-i18n="slot_available">Доступно</div>
             </div>
 
             <div class="monitor-box empty">
-              <div style="font-size: 11px; color: var(--text-dark);">Available</div>
+              <div style="font-size: 11px; color: var(--text-dark);" data-i18n="slot_available">Доступно</div>
             </div>
           </div>
 
-          <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
             <div style="display: flex; gap: 8px; align-items: center;">
-              <span style="font-size: 12px; color: var(--text-dark);">Transition Edge:</span>
-              <button class="btn btn-secondary" id="edgeToggleBtn" onclick="cycleEdge()">Right Edge</button>
+              <span style="font-size: 12px; color: var(--text-dark);" data-i18n="transition_edge">Межа переходу:</span>
+              <button class="btn btn-secondary" id="edgeToggleBtn" onclick="cycleEdge()">Права межа</button>
             </div>
             <div style="display: flex; gap: 8px; align-items: center;">
-              <button class="btn btn-secondary" id="btnReconnectDevice" onclick="reconnectCurrentPeer()" style="display: none; font-size: 12px; padding: 6px 12px; border-color: #38bdf8; color: #38bdf8; gap: 6px;">
+              <button class="btn btn-secondary" id="btnReconnectDevice" onclick="reconnectCurrentPeer()" style="display: none; font-size: 12px; border-color: #38bdf8; color: #38bdf8; gap: 6px;">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-                Reconnect Device
+                <span data-i18n="btn_reconnect_device">Перепідключити пристрій</span>
               </button>
             </div>
           </div>
         </div>
 
-        <div class="section-title">Behavior</div>
+        <div class="section-title" data-i18n="sec_behavior">Поведінка</div>
         <div style="display: flex; flex-direction: column; gap: 8px;">
           <div class="setting-card">
             <div class="setting-left">
               <div class="setting-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="6" y1="8" x2="6.01" y2="8"/><line x1="10" y1="8" x2="10.01" y2="8"/><line x1="14" y1="8" x2="14.01" y2="8"/><line x1="18" y1="8" x2="18.01" y2="8"/><line x1="6" y1="12" x2="6.01" y2="12"/><line x1="10" y1="12" x2="10.01" y2="12"/><line x1="14" y1="12" x2="14.01" y2="12"/><line x1="18" y1="12" x2="18.01" y2="12"/><line x1="7" y1="16" x2="17" y2="16"/></svg>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="6" y1="8" x2="6.01" y2="8"/><line x1="10" y1="8" x2="10.01" y2="8"/><line x1="14" y1="8" x2="14.01" y2="8"/><line x1="18" y1="8" x2="18.01" y2="8"/><line x1="6" y1="12" x2="6.01" y2="12"/><line x1="10" y1="12" x2="10.01" y2="12"/><line x1="14" y1="12" x2="14.01" y2="12"/><line x1="18" y1="12" x2="18.01" y2="12"/><line x1="7" y1="16" x2="17" y2="16"/></svg>
               </div>
               <div class="setting-text">
-                <div class="setting-name">Share Keyboard across computers</div>
-                <div class="setting-desc">Forward keystrokes seamlessly to the remote computer when cursor crosses screen edges.</div>
+                <div class="setting-name" data-i18n="kb_sharing_name">Спільний доступ до клавіатури</div>
+                <div class="setting-desc" data-i18n="kb_sharing_desc">Передавати натискання клавіш на віддалений ПК, коли курсор переходить межу екрана.</div>
               </div>
             </div>
             <div class="setting-right">
@@ -860,11 +1030,11 @@
           <div class="setting-card">
             <div class="setting-left">
               <div class="setting-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
               </div>
               <div class="setting-text">
-                <div class="setting-name">Share Clipboard across computers</div>
-                <div class="setting-desc">Text copied to the clipboard will be seamlessly available on the other device.</div>
+                <div class="setting-name" data-i18n="clip_sharing_name">Спільний буфер обміну</div>
+                <div class="setting-desc" data-i18n="clip_sharing_desc">Скопійований текст стає автоматично доступним на іншому комп'ютері.</div>
               </div>
             </div>
             <div class="setting-right">
@@ -878,41 +1048,42 @@
           <div class="setting-card">
             <div class="setting-left">
               <div class="setting-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
               </div>
               <div class="setting-text">
-                <div class="setting-name">Emergency Escape Hotkey</div>
-                <div class="setting-desc">Press this combination to immediately release input focus back to the primary computer.</div>
+                <div class="setting-name" data-i18n="hotkey_name">Аварійне повернення керування</div>
+                <div class="setting-desc" data-i18n="hotkey_desc">Натисніть цю комбінацію для миттєвого повернення фокусу на головний комп'ютер.</div>
               </div>
             </div>
             <div class="setting-right">
-              <span style="font-family: var(--font-mono); font-size: 12px; background: #27272a; padding: 4px 8px; border-radius: 4px; border: 1px solid #3f3f46;">Shift + Esc</span>
+              <span style="font-family: var(--font-mono); font-size: 12px; background: var(--btn-secondary-bg); color: var(--text); padding: 4px 8px; border-radius: 4px; border: 1px solid var(--btn-secondary-border);">Shift + Esc</span>
             </div>
           </div>
         </div>
       </div>
 
+      <!-- VIEW: CAST (VIRTUAL DISPLAY PROJECTION) -->
       <div class="view-container" id="viewCast">
         <div class="view-header">
-          <div class="view-title">Virtual Display Projection</div>
-          <div class="view-desc">Project, extend, or duplicate your desktop to a secondary laptop or PC via Microsoft IddCx Virtual Display Driver.</div>
+          <div class="view-title" data-i18n="cast_title">Проєкція віртуального дисплея</div>
+          <div class="view-desc" data-i18n="cast_desc">Проєктуйте, розширюйте або дублюйте екран на додатковий ноутбук чи ПК за допомогою віртуального драйвера Microsoft IddCx.</div>
         </div>
 
-        <div class="section-title">Projection Configuration</div>
+        <div class="section-title" data-i18n="sec_projection_cfg">Конфігурація проєкції</div>
         <div class="setting-card">
           <div class="setting-left">
             <div class="setting-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
             </div>
             <div class="setting-text">
-              <div class="setting-name">Projection Mode</div>
-              <div class="setting-desc">Choose whether to extend the desktop as a secondary monitor or mirror your primary display.</div>
+              <div class="setting-name" data-i18n="projection_mode_name">Режим проєкції</div>
+              <div class="setting-desc" data-i18n="projection_mode_desc">Оберіть спосіб виведення: як додатковий незалежний монітор чи дублювання основного дисплея.</div>
             </div>
           </div>
           <div class="setting-right">
-            <select id="castModeSelect" class="btn btn-secondary" style="background: #18181b; border: 1px solid #27272a; color: #f4f4f5; padding: 6px 12px; border-radius: 6px; font-size: 13px;">
-              <option value="extend">Extend Desktop (Independent 2nd Monitor)</option>
-              <option value="duplicate">Duplicate Primary Display (Mirror Screen)</option>
+            <select id="castModeSelect" class="select-input">
+              <option value="extend" data-i18n="mode_extend">Розширити робочий стіл (незалежний 2-й монітор)</option>
+              <option value="duplicate" data-i18n="mode_duplicate">Дублювати головний екран (дзеркало)</option>
             </select>
           </div>
         </div>
@@ -920,54 +1091,93 @@
         <div class="setting-card">
           <div class="setting-left">
             <div class="setting-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
             </div>
             <div class="setting-text">
-              <div class="setting-name">Virtual Display Projection Stream</div>
-              <div class="setting-desc">Activate low-latency DirectX 11 stream to turn the remote PC into a hardware-accelerated monitor.</div>
+              <div class="setting-name" data-i18n="stream_name">Трансляція віртуального дисплея</div>
+              <div class="setting-desc" data-i18n="stream_desc">Активуйте потік DirectX 11 з наднизькою затримкою для створення апаратно-прискореного монітора.</div>
             </div>
           </div>
-          <div class="setting-right" style="display: flex; gap: 8px;">
-            <button class="btn btn-secondary" onclick="openWindowsDisplaySettings()">Windows Display Settings</button>
-            <button class="btn" id="btnCastToggle" onclick="toggleCastProjection()">Project Display</button>
+          <div class="setting-right">
+            <button class="btn btn-secondary" onclick="openWindowsDisplaySettings()" data-i18n="btn_display_settings">Параметри дисплея Windows</button>
+            <button class="btn" id="btnCastToggle" onclick="toggleCastProjection()" data-i18n="btn_project_start">Почати трансляцію</button>
           </div>
         </div>
 
-        <div class="section-title">Driver & Acceleration</div>
+        <div class="section-title" data-i18n="sec_driver">Драйвер та прискорення</div>
         <div class="setting-card">
           <div class="setting-left">
             <div class="setting-icon" style="color: #38bdf8;">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m10 15 5-3-5-3v6z"/></svg>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m10 15 5-3-5-3v6z"/></svg>
             </div>
             <div class="setting-text">
-              <div class="setting-name">Microsoft IddCx UMDF Driver Status</div>
-              <div class="setting-desc" id="vDisplayStatusDesc">Virtual monitor ready. Windows handles resolution, scaling, and positioning natively.</div>
+              <div class="setting-name" data-i18n="driver_status_name">Стан драйвера Microsoft IddCx UMDF</div>
+              <div class="setting-desc" id="vDisplayStatusDesc" data-i18n="driver_ready">Віртуальний монітор готовий. Windows повністю керує роздільною здатністю та масштабуванням.</div>
             </div>
           </div>
-          <div class="setting-right" style="display: flex; gap: 8px; align-items: center;">
-            <button class="btn btn-secondary" id="btnInstallDriver" onclick="installDriver()" style="display: none; padding: 4px 10px; font-size: 12px; border-color: #f59e0b; color: #fbbf24;">Install IddCx Driver</button>
-            <button class="btn btn-secondary" id="btnUninstallDriver" onclick="uninstallDriver()" style="display: none; padding: 4px 10px; font-size: 12px; border-color: rgba(239,68,68,0.4); color: #ef4444;">Uninstall Driver</button>
-            <span class="badge" id="vDisplayBadge">Checking...</span>
+          <div class="setting-right">
+            <button class="btn btn-secondary" id="btnInstallDriver" onclick="installDriver()" style="display: none; padding: 4px 10px; font-size: 12px; border-color: #f59e0b; color: #fbbf24;" data-i18n="btn_install_driver">Встановити драйвер IddCx</button>
+            <button class="btn btn-secondary" id="btnUninstallDriver" onclick="uninstallDriver()" style="display: none; padding: 4px 10px; font-size: 12px; border-color: rgba(239,68,68,0.4); color: #ef4444;" data-i18n="btn_uninstall_driver">Видалити драйвер</button>
+            <span class="badge" id="vDisplayBadge" data-i18n="badge_checking">Перевірка...</span>
           </div>
         </div>
       </div>
 
-
-
+      <!-- VIEW: SETTINGS -->
       <div class="view-container" id="viewSettings">
         <div class="view-header">
-          <div class="view-title">General Settings</div>
-          <div class="view-desc">Configure application parameters, hardware bindings, and network settings.</div>
+          <div class="view-title" data-i18n="settings_title">Загальні налаштування</div>
+          <div class="view-desc" data-i18n="settings_desc">Налаштування параметрів програми, оформлення, мови та мережевих зв'язків.</div>
         </div>
 
+        <!-- Theme Selection Card -->
+        <div class="setting-card">
+          <div class="setting-left">
+            <div class="setting-icon" style="color: #f59e0b;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+            </div>
+            <div class="setting-text">
+              <div class="setting-name" data-i18n="theme_setting_name">Тема оформлення</div>
+              <div class="setting-desc" data-i18n="theme_setting_desc">Оберіть кольорову гаму інтерфейсу програми: світлу, темну або автоматичну системну.</div>
+            </div>
+          </div>
+          <div class="setting-right">
+            <select id="settingThemeSelect" class="select-input" onchange="setTheme(this.value)">
+              <option value="dark" data-i18n="theme_dark">Темна тема</option>
+              <option value="light" data-i18n="theme_light">Світла тема</option>
+              <option value="system" data-i18n="theme_system">Системна (Авто)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Language Selection Card -->
+        <div class="setting-card">
+          <div class="setting-left">
+            <div class="setting-icon" style="color: #38bdf8;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            </div>
+            <div class="setting-text">
+              <div class="setting-name" data-i18n="lang_setting_name">Мова інтерфейсу</div>
+              <div class="setting-desc" data-i18n="lang_setting_desc">Оберіть бажану мову для всіх екранів та сповіщень програми.</div>
+            </div>
+          </div>
+          <div class="setting-right">
+            <select id="settingLangSelect" class="select-input" onchange="setLanguage(this.value)">
+              <option value="uk">Українська (UK)</option>
+              <option value="en">English (EN)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Startup Card -->
         <div class="setting-card">
           <div class="setting-left">
             <div class="setting-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg>
             </div>
             <div class="setting-text">
-              <div class="setting-name">Run at System Startup</div>
-              <div class="setting-desc">Automatically launch NerveDesk in the background when Windows boots up.</div>
+              <div class="setting-name" data-i18n="autostart_name">Запуск разом із системою</div>
+              <div class="setting-desc" data-i18n="autostart_desc">Автоматично запускати NerveDesk у фоновому режимі під час старту Windows.</div>
             </div>
           </div>
           <div class="setting-right">
@@ -978,14 +1188,15 @@
           </div>
         </div>
 
+        <!-- Subnet Card -->
         <div class="setting-card">
           <div class="setting-left">
             <div class="setting-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
             </div>
             <div class="setting-text">
-              <div class="setting-name">Local Subnet Binding</div>
-              <div class="setting-desc">Only accept pairings from devices located on the same IPv4 subnet mask.</div>
+              <div class="setting-name" data-i18n="subnet_name">Прив'язка до локальної підмережі</div>
+              <div class="setting-desc" data-i18n="subnet_desc">Приймати підключення лише від пристроїв, що розташовані в тій самій підмережі IPv4.</div>
             </div>
           </div>
           <div class="setting-right">
@@ -999,23 +1210,360 @@
     </div>
   </div>
 
-  <div id="fileToast" style="display: none; position: fixed; bottom: 24px; right: 24px; background: #18181b; border: 1px solid #22c55e; border-radius: 8px; padding: 12px 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); z-index: 9999; align-items: center; gap: 12px;">
-    <div style="color: #22c55e;">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+  <!-- Toast Notification -->
+  <div id="fileToast">
+    <div style="color: var(--success); flex-shrink: 0;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
     </div>
-    <div>
-      <div style="font-size: 13px; font-weight: 600; color: #f4f4f5;" id="toastTitle">File Received</div>
-      <div style="font-size: 11px; color: var(--text-muted);" id="toastDesc">Saved to Downloads\NerveDesk</div>
+    <div style="min-width: 0;">
+      <div style="font-size: 13px; font-weight: 600; color: var(--text);" id="toastTitle" data-i18n="toast_file_received">Отримано файл</div>
+      <div style="font-size: 11px; color: var(--text-muted);" id="toastDesc" data-i18n="toast_file_desc">Збережено у Завантаження\NerveDesk та готово до вставки</div>
     </div>
-    <button class="btn btn-secondary" onclick="openReceivedFolder()" style="padding: 4px 8px; font-size: 11px; margin-left: 8px;">Open</button>
+    <button class="btn btn-secondary" onclick="openReceivedFolder()" style="padding: 4px 10px; font-size: 11px; margin-left: 8px;" data-i18n="toast_open_btn">Відкрити</button>
   </div>
 
   <script>
-    let activeEdge = 'Right';
-    let myDeviceName = 'DESKTOP-PC';
-    let peerIp = '';
-    let discoveredPeers = [];
+    // I18N DICTIONARY
+    const translations = {
+      uk: {
+        app_title: "NerveDesk",
+        nav_home: "Головна",
+        nav_section_navigation: "Навігація",
+        nav_kvm: "Безмежна миша",
+        nav_cast: "Трансляція дисплея",
+        nav_settings: "Налаштування",
+        
+        home_title: "Головна",
+        home_desc: "Центральна панель телеметрії, метрик та керування активними модулями NerveDesk.",
+        sec_system_metrics: "Системні метрики",
+        metric_input_latency: "Затримка вводу",
+        metric_input_latency_sub: "Субмілісекундний прямий UDP",
+        metric_framerate: "Частота кадрів стріму",
+        metric_framerate_sub: "Конвеєр DirectX 11 без копіювання",
+        metric_bandwidth: "Пропускна здатність",
+        metric_bandwidth_sub: "H.264 низька затримка CBR",
+        metric_virtual_display: "Віртуальний дисплей",
+        metric_virtual_display_sub: "Драйвер Microsoft IddCx UMDF",
+        metric_edge: "Активна межа переходу",
+        metric_edge_sub: "Перетин межі екрана",
+        
+        sec_active_modules: "Активні модулі та служби",
+        mod_kvm_name: "Безмежна миша (KVM)",
+        mod_kvm_desc: "Спільне керування мишею та клавіатурою між ПК",
+        mod_cast_name: "Проєкція віртуального дисплея",
+        mod_cast_desc: "Розширення або дублювання робочого столу на додатковий екран",
+        mod_transfer_name: "Перетягування файлів (Drag & Drop)",
+        mod_transfer_desc: "Перетягуйте файли через межу екрана або копіюйте через буфер обміну",
+        open_folder_btn: "Відкрити отримані файли",
+        
+        kvm_title: "Безмежна миша",
+        kvm_desc: "Безшовне спільне використання миші та клавіатури між комп'ютерами з локальним шифруванням.",
+        sec_activation: "Активація",
+        kvm_activation_name: "Служба безмежної миші",
+        kvm_activation_desc: "Увімкнути безперешкодне переміщення курсору та введення клавіатури між спареними пристроями",
+        sec_encryption: "Ключ шифрування та ім'я пристрою",
+        security_key_name: "Ключ безпеки",
+        security_key_desc: "Для налаштування згенеруйте ключ на одному ПК та введіть його на іншому пристрої.",
+        btn_new_key: "Новий ключ",
+        btn_connect: "З'єднати",
+        btn_expand: "Розгорнути з'єднання",
+        placeholder_key: "Ключ безпеки",
+        placeholder_device_name: "Ім'я пристрою",
+        host_name_title: "Ім'я цього комп'ютера",
+        host_name_desc: "Ім'я хоста для ідентифікації цього ПК у локальній мережі.",
+        copy_name_title: "Скопіювати ім'я",
+        
+        sec_device_layout: "Розташування пристроїв",
+        device_layout_desc: "Розташуйте комп'ютери відповідно до їхнього фізичного розміщення на столі:",
+        this_pc: "Цей ПК",
+        primary_device: "Головний пристрій",
+        slot_available: "Доступно",
+        status_connected: "Підключено",
+        status_connecting: "З'єднання...",
+        status_disabled: "Вимкнено",
+        status_offline: "Офлайн (Натисніть Перепідключити)",
+        status_attached: "Підключено",
+        status_detached: "Відключено",
+        btn_reconnect: "Перепідключити",
+        btn_disable: "Вимкнути пристрій",
+        btn_enable: "Увімкнути пристрій",
+        btn_forget: "Забути пристрій",
+        transition_edge: "Межа переходу:",
+        edge_right: "Права межа",
+        edge_top: "Верхня межа",
+        edge_left: "Ліва межа",
+        edge_bottom: "Нижня межа",
+        btn_reconnect_device: "Перепідключити пристрій",
+        
+        sec_behavior: "Поведінка",
+        kb_sharing_name: "Спільний доступ до клавіатури",
+        kb_sharing_desc: "Передавати натискання клавіш на віддалений ПК, коли курсор переходить межу екрана.",
+        clip_sharing_name: "Спільний буфер обміну",
+        clip_sharing_desc: "Скопійований текст стає автоматично доступним на іншому комп'ютері.",
+        hotkey_name: "Аварійне повернення керування",
+        hotkey_desc: "Натисніть цю комбінацію для миттєвого повернення фокусу на головний комп'ютер.",
+        
+        cast_title: "Проєкція віртуального дисплея",
+        cast_desc: "Проєктуйте, розширюйте або дублюйте екран на додатковий ноутбук чи ПК за допомогою віртуального драйвера Microsoft IddCx.",
+        sec_projection_cfg: "Конфігурація проєкції",
+        projection_mode_name: "Режим проєкції",
+        projection_mode_desc: "Оберіть спосіб виведення: як додатковий незалежний монітор чи дублювання основного дисплея.",
+        mode_extend: "Розширити робочий стіл (незалежний 2-й монітор)",
+        mode_duplicate: "Дублювати головний екран (дзеркало)",
+        stream_name: "Трансляція віртуального дисплея",
+        stream_desc: "Активуйте потік DirectX 11 з наднизькою затримкою для створення апаратно-прискореного монітора.",
+        btn_display_settings: "Параметри дисплея Windows",
+        btn_project_start: "Почати трансляцію",
+        btn_project_stop: "Зупинити трансляцію",
+        sec_driver: "Драйвер та прискорення",
+        driver_status_name: "Стан драйвера Microsoft IddCx UMDF",
+        driver_ready: "Віртуальний монітор готовий. Windows повністю керує роздільною здатністю та масштабуванням.",
+        driver_extended: "Додатковий віртуальний монітор активний. Робочий стіл незалежно розширено.",
+        driver_not_installed_desc: "Виявлено лише один екран. Встановіть драйвер IddCx для створення незалежного 2-го монітора.",
+        btn_install_driver: "Встановити драйвер IddCx",
+        btn_uninstall_driver: "Видалити драйвер",
+        badge_checking: "Перевірка...",
+        badge_driver_ready: "Віртуальний дисплей готовий",
+        badge_driver_missing: "Драйвер не встановлено",
+        badge_projecting: "Трансляція активна",
+        badge_active: "Активно",
+        badge_ready: "Готово",
+        
+        settings_title: "Загальні налаштування",
+        settings_desc: "Налаштування параметрів програми, оформлення, мови та мережевих зв'язків.",
+        theme_setting_name: "Тема оформлення",
+        theme_setting_desc: "Оберіть кольорову гаму інтерфейсу програми: світлу, темну або автоматичну системну.",
+        theme_dark: "Темна тема",
+        theme_light: "Світла тема",
+        theme_system: "Системна (Авто)",
+        lang_setting_name: "Мова інтерфейсу",
+        lang_setting_desc: "Оберіть бажану мову для всіх екранів та сповіщень програми.",
+        autostart_name: "Запуск разом із системою",
+        autostart_desc: "Автоматично запускати NerveDesk у фоновому режимі під час старту Windows.",
+        subnet_name: "Прив'язка до локальної підмережі",
+        subnet_desc: "Приймати підключення лише від пристроїв, що розташовані в тій самій підмережі IPv4.",
+        
+        alert_enter_device_name: "Будь ласка, введіть ім'я цільового пристрою",
+        alert_enter_key: "Будь ласка, введіть ключ безпеки",
+        alert_conn_failed: "Помилка підключення: ",
+        alert_proj_single_display: "Виявлено лише 1 монітор. Щоб використовувати екран як незалежний 2-й монітор, потрібен віртуальний драйвер IddCx.\n\nВстановити драйвер IddCx зараз?",
+        alert_proj_error: "Помилка трансляції: ",
+        alert_install_err: "Не вдалося запустити встановлення драйвера: ",
+        alert_uninstall_confirm: "Ви впевнені, що хочете повністю видалити драйвер віртуального дисплея IddCx та всі його компоненти?",
+        alert_uninstall_err: "Не вдалося запустити видалення драйвера: ",
+        alert_folder_err: "Не вдалося відкрити теку файлів: ",
+        toast_file_received: "Отримано файл: ",
+        toast_file_desc: "Збережено у Завантаження\\NerveDesk та готово до вставки",
+        toast_open_btn: "Відкрити"
+      },
+      en: {
+        app_title: "NerveDesk",
+        nav_home: "Home",
+        nav_section_navigation: "Navigation",
+        nav_kvm: "Mouse Without Borders",
+        nav_cast: "Virtual Display Cast",
+        nav_settings: "Settings",
+        
+        home_title: "Home",
+        home_desc: "Central dashboard for telemetry, metrics, and managing active NerveDesk modules.",
+        sec_system_metrics: "System Metrics",
+        metric_input_latency: "Input Latency",
+        metric_input_latency_sub: "Sub-millisecond Direct UDP",
+        metric_framerate: "Display Stream Framerate",
+        metric_framerate_sub: "DirectX 11 Zero-Copy Pipeline",
+        metric_bandwidth: "Network Throughput",
+        metric_bandwidth_sub: "H.264 Low-Latency CBR",
+        metric_virtual_display: "Virtual Display Device",
+        metric_virtual_display_sub: "Microsoft IddCx UMDF Driver",
+        metric_edge: "Active Transition Edge",
+        metric_edge_sub: "Screen Boundary Crossing",
+        
+        sec_active_modules: "Active Modules & Services",
+        mod_kvm_name: "Mouse Without Borders (KVM)",
+        mod_kvm_desc: "Share keyboard and mouse seamlessly between computers",
+        mod_cast_name: "Virtual Display Projection",
+        mod_cast_desc: "Extend or duplicate desktop to secondary screen",
+        mod_transfer_name: "File Drag & Drop",
+        mod_transfer_desc: "Drag files across screen borders with mouse or copy to clipboard",
+        open_folder_btn: "Open Received Files",
+        
+        kvm_title: "Mouse Without Borders",
+        kvm_desc: "Seamless mouse and keyboard sharing between computers using local network pairing and encryption.",
+        sec_activation: "Activation",
+        kvm_activation_name: "Mouse Without Borders Service",
+        kvm_activation_desc: "Enable seamless border-crossing cursor and keyboard control across paired devices",
+        sec_encryption: "Encryption Key & Device Name",
+        security_key_name: "Security Key",
+        security_key_desc: "To configure, create a key on one computer and enter it manually on other computers.",
+        btn_new_key: "New Key",
+        btn_connect: "Connect",
+        btn_expand: "Expand connection",
+        placeholder_key: "Security Key",
+        placeholder_device_name: "Device Name",
+        host_name_title: "This Device Host Name",
+        host_name_desc: "Hostname used to identify this machine on the local network.",
+        copy_name_title: "Copy Name",
+        
+        sec_device_layout: "Device Layout",
+        device_layout_desc: "Arrange computers in the order matching your physical desk setup:",
+        this_pc: "This PC",
+        primary_device: "Primary Device",
+        slot_available: "Available",
+        status_connected: "Connected",
+        status_connecting: "Connecting...",
+        status_disabled: "Disabled",
+        status_offline: "Offline (Click Reconnect)",
+        status_attached: "Attached",
+        status_detached: "Detached",
+        btn_reconnect: "Reconnect",
+        btn_disable: "Disable Device",
+        btn_enable: "Enable Device",
+        btn_forget: "Forget Device",
+        transition_edge: "Transition Edge:",
+        edge_right: "Right Edge",
+        edge_top: "Top Edge",
+        edge_left: "Left Edge",
+        edge_bottom: "Bottom Edge",
+        btn_reconnect_device: "Reconnect Device",
+        
+        sec_behavior: "Behavior",
+        kb_sharing_name: "Share Keyboard across computers",
+        kb_sharing_desc: "Forward keystrokes seamlessly to the remote computer when cursor crosses screen edges.",
+        clip_sharing_name: "Share Clipboard across computers",
+        clip_sharing_desc: "Text copied to the clipboard will be seamlessly available on the other device.",
+        hotkey_name: "Emergency Escape Hotkey",
+        hotkey_desc: "Press this combination to immediately release input focus back to the primary computer.",
+        
+        cast_title: "Virtual Display Projection",
+        cast_desc: "Project, extend, or duplicate your desktop to a secondary laptop or PC via Microsoft IddCx Virtual Display Driver.",
+        sec_projection_cfg: "Projection Configuration",
+        projection_mode_name: "Projection Mode",
+        projection_mode_desc: "Choose whether to extend the desktop as a secondary monitor or mirror your primary display.",
+        mode_extend: "Extend Desktop (Independent 2nd Monitor)",
+        mode_duplicate: "Duplicate Primary Display (Mirror Screen)",
+        stream_name: "Virtual Display Projection Stream",
+        stream_desc: "Activate low-latency DirectX 11 stream to turn the remote PC into a hardware-accelerated monitor.",
+        btn_display_settings: "Windows Display Settings",
+        btn_project_start: "Project Display",
+        btn_project_stop: "Stop Projection",
+        sec_driver: "Driver & Acceleration",
+        driver_status_name: "Microsoft IddCx UMDF Driver Status",
+        driver_ready: "Virtual monitor ready. Windows handles resolution, scaling, and positioning natively.",
+        driver_extended: "Secondary virtual monitor active. Windows desktop extended independently.",
+        driver_not_installed_desc: "Single display detected. Install IddCx driver to create an independent 2nd monitor.",
+        btn_install_driver: "Install IddCx Driver",
+        btn_uninstall_driver: "Uninstall Driver",
+        badge_checking: "Checking...",
+        badge_driver_ready: "Virtual Display Ready",
+        badge_driver_missing: "Driver Not Installed",
+        badge_projecting: "Projecting (Active)",
+        badge_active: "Active",
+        badge_ready: "Ready",
+        
+        settings_title: "General Settings",
+        settings_desc: "Configure application parameters, hardware bindings, and network settings.",
+        theme_setting_name: "Appearance Theme",
+        theme_setting_desc: "Choose light, dark, or system color scheme for the application interface.",
+        theme_dark: "Dark Theme",
+        theme_light: "Light Theme",
+        theme_system: "System (Auto)",
+        lang_setting_name: "Interface Language",
+        lang_setting_desc: "Select your preferred language for application screens and notifications.",
+        autostart_name: "Run at System Startup",
+        autostart_desc: "Automatically launch NerveDesk in the background when Windows boots up.",
+        subnet_name: "Local Subnet Binding",
+        subnet_desc: "Only accept pairings from devices located on the same IPv4 subnet mask.",
+        
+        alert_enter_device_name: "Please enter target Device Name",
+        alert_enter_key: "Please enter Security Key",
+        alert_conn_failed: "Connection failed: ",
+        alert_proj_single_display: "Only 1 monitor was detected. To use the secondary screen as an independent 2nd monitor, the IddCx virtual display driver is required.\n\nInstall IddCx Driver now?",
+        alert_proj_error: "Projection error: ",
+        alert_install_err: "Failed to launch driver installer: ",
+        alert_uninstall_confirm: "Are you sure you want to completely uninstall the IddCx virtual display driver and all associated components?",
+        alert_uninstall_err: "Failed to launch driver uninstaller: ",
+        alert_folder_err: "Failed to open received folder: ",
+        toast_file_received: "File Received: ",
+        toast_file_desc: "Saved to Downloads\\NerveDesk and ready to paste",
+        toast_open_btn: "Open"
+      }
+    };
 
+    let currentLang = localStorage.getItem('nervedesk_lang') || 'uk';
+    let currentTheme = localStorage.getItem('nervedesk_theme') || 'dark';
+
+    function t(key, fallback = "") {
+      const langDict = translations[currentLang] || translations.uk;
+      return langDict[key] !== undefined ? langDict[key] : (fallback || key);
+    }
+
+    function setLanguage(lang) {
+      currentLang = lang;
+      localStorage.setItem('nervedesk_lang', lang);
+      document.documentElement.lang = lang;
+      
+      const langSelect = document.getElementById('settingLangSelect');
+      if (langSelect) langSelect.value = lang;
+
+      // Update all data-i18n elements
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        el.innerText = t(key);
+      });
+
+      // Update placeholders
+      document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+        const key = el.getAttribute('data-i18n-placeholder');
+        el.placeholder = t(key);
+      });
+
+      // Update titles
+      document.querySelectorAll('[data-i18n-title]').forEach(el => {
+        const key = el.getAttribute('data-i18n-title');
+        el.title = t(key);
+      });
+
+      // Re-evaluate dynamic state texts
+      updateDynamicTexts();
+    }
+
+    // THEME MANAGEMENT
+    function setTheme(theme) {
+      currentTheme = theme;
+      localStorage.setItem('nervedesk_theme', theme);
+      
+      const themeSelect = document.getElementById('settingThemeSelect');
+      if (themeSelect) themeSelect.value = theme;
+
+      applyTheme();
+    }
+
+    function applyTheme() {
+      let isLight = false;
+      if (currentTheme === 'light') {
+        isLight = true;
+      } else if (currentTheme === 'dark') {
+        isLight = false;
+      } else if (currentTheme === 'system') {
+        isLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+      }
+
+      if (isLight) {
+        document.body.classList.add('light-theme');
+      } else {
+        document.body.classList.remove('light-theme');
+      }
+    }
+
+    if (window.matchMedia) {
+      window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+        if (currentTheme === 'system') {
+          applyTheme();
+        }
+      });
+    }
+
+    // TAURI BRIDGE
     async function callTauri(cmd, args) {
       if (window.__TAURI__?.core?.invoke) {
         return await window.__TAURI__.core.invoke(cmd, args);
@@ -1029,6 +1577,7 @@
       throw new Error("Tauri API not accessible");
     }
 
+    // NAVIGATION
     function switchTab(tabId) {
       document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
       document.querySelectorAll('.view-container').forEach(el => el.classList.remove('active'));
@@ -1047,6 +1596,44 @@
       } else if (tabId === 'settings') {
         document.getElementById('navSettings').classList.add('active');
         document.getElementById('viewSettings').classList.add('active');
+      }
+    }
+
+    let activeEdge = 'Right';
+    let myDeviceName = 'DESKTOP-PC';
+    let isPeerDisabled = false;
+    let isProjecting = false;
+
+    function getEdgeLabel(edge) {
+      switch (edge) {
+        case 'Right': return t('edge_right');
+        case 'Top': return t('edge_top');
+        case 'Left': return t('edge_left');
+        case 'Bottom': return t('edge_bottom');
+        default: return edge + " Edge";
+      }
+    }
+
+    function updateDynamicTexts() {
+      // Screen edge button and metric
+      const edgeBtn = document.getElementById('edgeToggleBtn');
+      if (edgeBtn) edgeBtn.innerText = getEdgeLabel(activeEdge);
+      const diagEdge = document.getElementById('diagEdge');
+      if (diagEdge) diagEdge.innerText = getEdgeLabel(activeEdge);
+
+      // Projection button
+      const castBtn = document.getElementById('btnCastToggle');
+      if (castBtn) {
+        castBtn.innerText = isProjecting ? t('btn_project_stop') : t('btn_project_start');
+      }
+
+      // Peer status
+      const peerSub = document.getElementById('peerBoxSub');
+      const savedPeer = localStorage.getItem('paired_device_name');
+      if (peerSub && savedPeer) {
+        if (isPeerDisabled) {
+          peerSub.innerText = t('status_disabled');
+        }
       }
     }
 
@@ -1105,11 +1692,11 @@
       const key = document.getElementById('peerKeyInput').value.trim();
       const name = document.getElementById('peerDeviceNameInput').value.trim();
       if (!name) {
-        alert("Please enter target Device Name");
+        alert(t('alert_enter_device_name'));
         return;
       }
       if (!key) {
-        alert("Please enter Security Key");
+        alert(t('alert_enter_key'));
         return;
       }
 
@@ -1120,25 +1707,13 @@
         document.getElementById('peerAvailableSlot').style.display = 'none';
         document.getElementById('monitorBoxPeer').style.display = 'flex';
         document.getElementById('peerBoxLabel').innerText = name.toUpperCase();
-        document.getElementById('peerBoxSub').innerText = "Connected";
+        document.getElementById('peerBoxSub').innerText = t('status_connected');
         document.getElementById('pairDrawer').style.display = 'none';
         document.getElementById('pairDrawerChevron').innerHTML = '<polyline points="6 9 12 15 18 9"/>';
       } catch (err) {
-        alert("Connection failed: " + err);
+        alert(t('alert_conn_failed') + err);
       }
     }
-
-    window.addEventListener('mouseleave', () => {
-      if (document.activeElement && typeof document.activeElement.blur === 'function') {
-        document.activeElement.blur();
-      }
-    });
-
-    document.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-    });
-
-    let isPeerDisabled = false;
 
     function togglePeerDisconnectMenu(e) {
       e.preventDefault();
@@ -1147,10 +1722,10 @@
       if (menu.style.display === 'none' || menu.style.display === '') {
         const btnToggle = document.getElementById('btnPeerToggleDisable');
         if (isPeerDisabled) {
-          btnToggle.innerText = 'Enable Device';
-          btnToggle.style.color = '#4ade80';
+          btnToggle.innerText = t('btn_enable');
+          btnToggle.style.color = 'var(--success)';
         } else {
-          btnToggle.innerText = 'Disable Device';
+          btnToggle.innerText = t('btn_disable');
           btnToggle.style.color = '';
         }
         menu.style.display = 'flex';
@@ -1176,11 +1751,11 @@
       const btn = document.getElementById('btnReconnectDevice');
 
       if (sub) {
-        sub.innerText = 'Connecting...';
+        sub.innerText = t('status_connecting');
         sub.style.color = '#f59e0b';
       }
       if (btn) {
-        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg> Connecting...';
+        btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg> ${t('status_connecting')}`;
         btn.style.opacity = '0.7';
       }
 
@@ -1189,8 +1764,8 @@
         isPeerDisabled = false;
         localStorage.setItem('peer_device_disabled', 'false');
         if (sub) {
-          sub.innerText = 'Connected';
-          sub.style.color = '#4ade80';
+          sub.innerText = t('status_connected');
+          sub.style.color = 'var(--success)';
         }
         if (box) {
           box.style.opacity = '1';
@@ -1199,11 +1774,11 @@
         if (btn) btn.style.display = 'none';
       } catch (err) {
         if (sub) {
-          sub.innerText = 'Offline (Click Reconnect)';
-          sub.style.color = '#ef4444';
+          sub.innerText = t('status_offline');
+          sub.style.color = 'var(--danger)';
         }
         if (btn) {
-          btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg> Reconnect Device';
+          btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg> ${t('btn_reconnect_device')}`;
           btn.style.display = 'inline-flex';
           btn.style.opacity = '1';
         }
@@ -1224,7 +1799,7 @@
         try {
           await callTauri('stop_service');
         } catch (err) {}
-        document.getElementById('peerBoxSub').innerText = 'Disabled';
+        document.getElementById('peerBoxSub').innerText = t('status_disabled');
         document.getElementById('peerBoxSub').style.color = 'var(--text-dark)';
         document.getElementById('monitorBoxPeer').style.opacity = '0.5';
         document.getElementById('monitorBoxPeer').style.borderStyle = 'dashed';
@@ -1240,8 +1815,8 @@
             await callTauri('pair_device', { targetName: target, securityKey: key });
           } catch (err) {}
         }
-        document.getElementById('peerBoxSub').innerText = 'Connected';
-        document.getElementById('peerBoxSub').style.color = '#4ade80';
+        document.getElementById('peerBoxSub').innerText = t('status_connected');
+        document.getElementById('peerBoxSub').style.color = 'var(--success)';
         document.getElementById('monitorBoxPeer').style.opacity = '1';
         document.getElementById('monitorBoxPeer').style.borderStyle = 'solid';
         const reconnectBtn = document.getElementById('btnReconnectDevice');
@@ -1288,7 +1863,9 @@
       const edges = ['Right', 'Top', 'Left', 'Bottom'];
       const idx = edges.indexOf(activeEdge);
       activeEdge = edges[(idx + 1) % edges.length];
-      document.getElementById('edgeToggleBtn').innerText = activeEdge + ' Edge';
+      document.getElementById('edgeToggleBtn').innerText = getEdgeLabel(activeEdge);
+      const diagEdge = document.getElementById('diagEdge');
+      if (diagEdge) diagEdge.innerText = getEdgeLabel(activeEdge);
       callTauri('set_screen_edge', { edge: activeEdge }).catch(() => {});
     }
 
@@ -1299,7 +1876,7 @@
     }
 
     function toggleVirtualDisplay(checked) {
-      document.getElementById('diagDisplay').innerText = checked ? "Attached" : "Detached";
+      document.getElementById('diagDisplay').innerText = checked ? t('status_attached') : t('status_detached');
       callTauri('toggle_virtual_display', { enable: checked }).catch(() => {});
     }
 
@@ -1307,7 +1884,6 @@
       callTauri('open_display_settings').catch(() => {});
     }
 
-    let isProjecting = false;
     async function toggleCastProjection() {
       const btn = document.getElementById('btnCastToggle');
       if (!isProjecting) {
@@ -1318,7 +1894,7 @@
           try {
             const hasSecondDisplay = await callTauri('get_display_driver_status');
             if (!hasSecondDisplay) {
-              const ok = confirm("Only 1 monitor was detected. To use the secondary screen as an independent 2nd monitor, the IddCx virtual display driver is required.\n\nInstall IddCx Driver now?");
+              const ok = confirm(t('alert_proj_single_display'));
               if (ok) {
                 installDriver();
                 return;
@@ -1333,17 +1909,17 @@
             extendMode: mode === 'extend'
           });
           isProjecting = true;
-          btn.innerText = 'Stop Projection';
-          btn.style.background = '#dc2626';
-          document.getElementById('vDisplayBadge').innerText = 'Projecting (Active)';
+          btn.innerText = t('btn_project_stop');
+          btn.style.background = 'var(--danger)';
+          document.getElementById('vDisplayBadge').innerText = t('badge_projecting');
           document.getElementById('vDisplayBadge').style.background = '#15803d';
         } catch (e) {
-          alert('Projection error: ' + e);
+          alert(t('alert_proj_error') + e);
         }
       } else {
         callTauri('stop_virtual_display_cast').catch(() => {});
         isProjecting = false;
-        btn.innerText = 'Project Display';
+        btn.innerText = t('btn_project_start');
         btn.style.background = '';
         checkDriverStatus();
       }
@@ -1359,18 +1935,18 @@
         if (isProjecting) return;
         if (hasSecondDisplay) {
           if (badge) {
-            badge.innerText = 'Virtual Display Ready';
+            badge.innerText = t('badge_driver_ready');
             badge.style.background = '#15803d';
           }
-          if (desc) desc.innerText = 'Secondary virtual monitor active. Windows desktop extended independently.';
+          if (desc) desc.innerText = t('driver_extended');
           if (installBtn) installBtn.style.display = 'none';
           if (uninstallBtn) uninstallBtn.style.display = 'inline-block';
         } else {
           if (badge) {
-            badge.innerText = 'Driver Not Installed';
-            badge.style.background = '#d97706';
+            badge.innerText = t('badge_driver_missing');
+            badge.style.background = 'var(--warning)';
           }
-          if (desc) desc.innerText = 'Single display detected. Install IddCx driver to create an independent 2nd monitor.';
+          if (desc) desc.innerText = t('driver_not_installed_desc');
           if (installBtn) installBtn.style.display = 'inline-block';
           if (uninstallBtn) uninstallBtn.style.display = 'none';
         }
@@ -1381,7 +1957,17 @@
       try {
         await callTauri('install_virtual_display_driver');
       } catch (e) {
-        alert('Failed to launch driver installer: ' + e);
+        alert(t('alert_install_err') + e);
+      }
+    }
+
+    async function uninstallDriver() {
+      const ok = confirm(t('alert_uninstall_confirm'));
+      if (!ok) return;
+      try {
+        await callTauri('uninstall_virtual_display_driver');
+      } catch (e) {
+        alert(t('alert_uninstall_err') + e);
       }
     }
 
@@ -1394,7 +1980,7 @@
       try {
         await callTauri('open_received_folder');
       } catch (e) {
-        alert('Failed to open received folder: ' + e);
+        alert(t('alert_folder_err') + e);
       }
     }
 
@@ -1403,22 +1989,12 @@
       const title = document.getElementById('toastTitle');
       const desc = document.getElementById('toastDesc');
       if (toast && title && desc) {
-        title.innerText = 'File Received: ' + fileName;
-        desc.innerText = 'Saved to Downloads\\NerveDesk and ready to paste';
+        title.innerText = t('toast_file_received') + fileName;
+        desc.innerText = t('toast_file_desc');
         toast.style.display = 'flex';
         setTimeout(() => {
           toast.style.display = 'none';
         }, 5000);
-      }
-    }
-
-    async function uninstallDriver() {
-      const ok = confirm("Are you sure you want to completely uninstall the IddCx virtual display driver and all associated components?");
-      if (!ok) return;
-      try {
-        await callTauri('uninstall_virtual_display_driver');
-      } catch (e) {
-        alert('Failed to launch driver uninstaller: ' + e);
       }
     }
 
@@ -1448,6 +2024,10 @@
     }
 
     async function initSystemInfo() {
+      // Initialize language & theme
+      setTheme(currentTheme);
+      setLanguage(currentLang);
+
       try {
         const name = await callTauri('get_device_name');
         if (name) {
@@ -1475,13 +2055,13 @@
         document.getElementById('peerBoxLabel').innerText = savedPeer.toUpperCase();
         if (isDisabled) {
           isPeerDisabled = true;
-          document.getElementById('peerBoxSub').innerText = "Disabled";
+          document.getElementById('peerBoxSub').innerText = t('status_disabled');
           document.getElementById('peerBoxSub').style.color = "var(--text-dark)";
           document.getElementById('monitorBoxPeer').style.opacity = "0.5";
           document.getElementById('monitorBoxPeer').style.borderStyle = "dashed";
         } else {
           isPeerDisabled = false;
-          document.getElementById('peerBoxSub').innerText = "Connecting...";
+          document.getElementById('peerBoxSub').innerText = t('status_connecting');
           document.getElementById('peerBoxSub').style.color = "#f59e0b";
           document.getElementById('monitorBoxPeer').style.opacity = "1";
           document.getElementById('monitorBoxPeer').style.borderStyle = "solid";
@@ -1493,10 +2073,12 @@
         document.getElementById('peerAvailableSlot').style.display = 'flex';
         document.getElementById('monitorBoxPeer').style.display = 'none';
       }
+
       const savedKey = localStorage.getItem('paired_security_key');
       if (savedKey) {
         document.getElementById('securityKeyInput').value = savedKey;
       }
+
       const kbSharing = localStorage.getItem('keyboard_sharing_enabled') !== 'false';
       const clipSharing = localStorage.getItem('clipboard_sharing_enabled') !== 'false';
       const kvmKb = document.getElementById('kvmKbToggle');
@@ -1505,16 +2087,19 @@
       if (kvmClip) kvmClip.checked = clipSharing;
       callTauri('set_keyboard_sharing_enabled', { enabled: kbSharing }).catch(() => {});
       callTauri('set_clipboard_sharing_enabled', { enabled: clipSharing }).catch(() => {});
+
       try {
         const autostart = await callTauri('get_autostart_enabled');
         const autoElem = document.getElementById('settingAutostart');
         if (autoElem) autoElem.checked = !!autostart;
       } catch (e) {}
+
       checkDriverStatus();
     }
 
     setTimeout(initSystemInfo, 100);
 
+    // PERIODIC METRICS
     setInterval(async () => {
       try {
         const m = await callTauri('get_metrics');
@@ -1522,18 +2107,20 @@
         document.getElementById('diagRtt').innerText = m.rtt_ms > 0 ? m.rtt_ms.toFixed(2) + " ms" : "0.00 ms";
         document.getElementById('diagFps').innerText = m.video_fps.toFixed(1) + " FPS";
         document.getElementById('diagBitrate').innerText = m.bandwidth_mbps.toFixed(1) + " Mbps";
-        document.getElementById('diagDisplay').innerText = m.virtual_display_active ? "Attached" : "Detached";
+        document.getElementById('diagDisplay').innerText = m.virtual_display_active ? t('status_attached') : t('status_detached');
+        
         const vBadge = document.getElementById('vDisplayBadge');
         if (vBadge && !isProjecting) {
-          vBadge.innerText = m.virtual_display_active ? "Active" : "Ready";
+          vBadge.innerText = m.virtual_display_active ? t('badge_active') : t('badge_ready');
           vBadge.style.background = m.virtual_display_active ? "#15803d" : "";
         }
+
         if (m.screen_edge && activeEdge !== m.screen_edge) {
           activeEdge = m.screen_edge;
-          document.getElementById('edgeToggleBtn').innerText = activeEdge + ' Edge';
+          document.getElementById('edgeToggleBtn').innerText = getEdgeLabel(activeEdge);
         }
         const edgeEl = document.getElementById('diagEdge');
-        if (edgeEl) edgeEl.innerText = activeEdge + ' Edge';
+        if (edgeEl) edgeEl.innerText = getEdgeLabel(activeEdge);
 
         const kvmToggle = document.getElementById('homeKvmToggle');
         if (kvmToggle && kvmToggle !== document.activeElement) {
@@ -1550,6 +2137,7 @@
         if (transferToggle && transferToggle !== document.activeElement) {
           transferToggle.checked = transferSaved;
         }
+
         const savedPeer = localStorage.getItem('paired_device_name');
         if (savedPeer && !isPeerDisabled) {
           let peerName = m.peer_device || savedPeer;
@@ -1563,25 +2151,27 @@
           document.getElementById('peerBoxLabel').innerText = peerName.toUpperCase();
           const sub = document.getElementById('peerBoxSub');
           const reconnectBtn = document.getElementById('btnReconnectDevice');
+
           if (m.is_active) {
             if (sub) {
-              sub.innerText = "Connected";
-              sub.style.color = "#4ade80";
+              sub.innerText = t('status_connected');
+              sub.style.color = "var(--success)";
             }
             document.getElementById('monitorBoxPeer').style.opacity = "1";
             document.getElementById('monitorBoxPeer').style.borderStyle = "solid";
             if (reconnectBtn) reconnectBtn.style.display = "none";
           } else {
-            if (sub && sub.innerText !== "Connecting...") {
-              sub.innerText = "Offline (Click Reconnect)";
-              sub.style.color = "#f59e0b";
+            if (sub && sub.innerText !== t('status_connecting')) {
+              sub.innerText = t('status_offline');
+              sub.style.color = "var(--warning)";
             }
-            if (reconnectBtn && sub && sub.innerText !== "Connecting...") {
+            if (reconnectBtn && sub && sub.innerText !== t('status_connecting')) {
               reconnectBtn.style.display = "inline-flex";
-              reconnectBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg> Reconnect Device';
+              reconnectBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg> ${t('btn_reconnect_device')}`;
               reconnectBtn.style.opacity = "1";
             }
           }
+
           if (m.peer_device && !/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(m.peer_device)) {
             localStorage.setItem('paired_device_name', m.peer_device);
           }

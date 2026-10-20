@@ -14,13 +14,12 @@
         "title": "NerveDesk",
         "width": 980,
         "height": 680,
-        "minWidth": 800,
-        "minHeight": 550,
+        "minWidth": 460,
+        "minHeight": 450,
         "resizable": true,
         "fullscreen": false,
         "decorations": true,
-        "transparent": false,
-        "theme": "Dark"
+        "transparent": false
       }
     ],
     "security": {
