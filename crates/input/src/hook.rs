@@ -28,6 +28,7 @@ const XBUTTON2: u32 = 0x0002;
 static HOOK_SENDER: Mutex<Option<Sender<InputEvent>>> = Mutex::new(None);
 static CAPTURE_ACTIVE: AtomicBool = AtomicBool::new(false);
 static KEYBOARD_SHARING_ENABLED: AtomicBool = AtomicBool::new(true);
+static LBUTTON_DOWN: AtomicBool = AtomicBool::new(false);
 static LAST_CURSOR_POS: Mutex<Option<POINT>> = Mutex::new(None);
 static EDGE_DETECTOR: Mutex<Option<EdgeDetector>> = Mutex::new(None);
 static CENTER_PT: Mutex<POINT> = Mutex::new(POINT { x: 960, y: 540 });
@@ -38,6 +39,10 @@ pub fn set_keyboard_sharing(enabled: bool) {
 
 pub fn is_keyboard_sharing_enabled() -> bool {
     KEYBOARD_SHARING_ENABLED.load(Ordering::SeqCst)
+}
+
+pub fn is_lbutton_down() -> bool {
+    LBUTTON_DOWN.load(Ordering::SeqCst)
 }
 
 pub fn set_active_edge(edge: ScreenEdge) {
@@ -91,6 +96,12 @@ unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: LPAR
     if n_code >= 0 {
         let msg = w_param.0 as u32;
         let hook_struct = *(l_param.0 as *const MSLLHOOKSTRUCT);
+
+        if msg == WM_LBUTTONDOWN {
+            LBUTTON_DOWN.store(true, Ordering::SeqCst);
+        } else if msg == WM_LBUTTONUP {
+            LBUTTON_DOWN.store(false, Ordering::SeqCst);
+        }
 
         let mut event_to_send = None;
         let mut block_event = false;
@@ -162,10 +173,23 @@ unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: LPAR
                 }
 
                 if let Some(TransitionResult::CrossedToClient { client_x, client_y }) = transition {
+                    let was_dragging = LBUTTON_DOWN.load(Ordering::SeqCst);
                     CAPTURE_ACTIVE.store(true, Ordering::SeqCst);
                     let _ = SetCursorPos(center.x, center.y);
                     let _ = SetForegroundWindow(GetDesktopWindow());
-                    event_to_send = Some(InputEvent::CursorPosition { x: client_x, y: client_y });
+                    if was_dragging {
+                        if let Ok(sender_guard) = HOOK_SENDER.lock() {
+                            if let Some(ref sender) = *sender_guard {
+                                let _ = sender.try_send(InputEvent::CursorPosition { x: client_x, y: client_y });
+                                let _ = sender.try_send(InputEvent::MouseButton {
+                                    button: MouseButton::Left,
+                                    state: ButtonState::Pressed,
+                                });
+                            }
+                        }
+                    } else {
+                        event_to_send = Some(InputEvent::CursorPosition { x: client_x, y: client_y });
+                    }
                     block_event = true;
                 }
             }

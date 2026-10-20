@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 pub enum ClipboardPayload {
     Text(String),
     Image(Vec<u8>),
+    Files(Vec<String>),
 }
 
 impl ClipboardPayload {
@@ -20,6 +21,10 @@ impl ClipboardPayload {
             Self::Image(bytes) => {
                 1u8.hash(&mut hasher);
                 bytes.hash(&mut hasher);
+            }
+            Self::Files(files) => {
+                2u8.hash(&mut hasher);
+                files.hash(&mut hasher);
             }
         }
         hasher.finish()

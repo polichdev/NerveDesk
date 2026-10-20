@@ -705,6 +705,33 @@ fn get_display_driver_status() -> bool {
     count > 1
 }
 
+#[command]
+async fn open_received_folder() -> Result<(), String> {
+    let dir = net::get_default_transfer_dir();
+    let _ = std::process::Command::new("explorer").arg(&dir).spawn();
+    Ok(())
+}
+
+#[command]
+async fn send_file_to_peer(path: String, state: State<'_, AppState>) -> Result<String, String> {
+    let target_ip = if let Ok(guard) = state.paired_peer_ip.lock() {
+        guard.clone()
+    } else {
+        None
+    };
+    let ip = target_ip.ok_or_else(|| "No paired device connected".to_string())?;
+    let token = if let Ok(guard) = state.paired_security_key.lock() {
+        guard.clone().unwrap_or_default()
+    } else {
+        String::new()
+    };
+    let target_addr = format!("{}:{}", ip, net::FILE_TRANSFER_PORT);
+    let bytes = net::FileTransferClient::send_files(&target_addr, &token, &[path])
+        .await
+        .map_err(|e| format!("File transfer failed: {e}"))?;
+    Ok(format!("Transferred {bytes} bytes"))
+}
+
 pub fn run() {
     let projection_viewer = Arc::new(ProjectionViewer::new());
     let state = AppState {
@@ -941,6 +968,14 @@ pub fn run() {
     let paired_key_for_tx = state.paired_security_key.clone();
     let paired_ip_for_tx = state.paired_peer_ip.clone();
 
+    let (file_queue_tx, mut file_queue_rx) = tokio::sync::mpsc::unbounded_channel::<(String, String, Vec<String>)>();
+    tauri::async_runtime::spawn(async move {
+        while let Some((target_ip, token, files)) = file_queue_rx.recv().await {
+            let target_addr = format!("{}:{}", target_ip, net::FILE_TRANSFER_PORT);
+            let _ = net::FileTransferClient::send_files(&target_addr, &token, &files).await;
+        }
+    });
+
     if let Ok(listener) = clipboard::ClipboardListener::start(clip_tx, clipboard_hash_for_listener) {
         std::mem::forget(listener);
     }
@@ -966,24 +1001,27 @@ pub fn run() {
                         String::new()
                     };
 
-                    let text = match payload {
-                        clipboard::ClipboardPayload::Text(t) => t,
-                        _ => continue,
-                    };
-
-                    let packet = ClipboardPacket { token, text };
-                    if let Ok(bytes) = serde_json::to_vec(&packet) {
-                        let len = (bytes.len() as u32).to_be_bytes();
-                        let target_addr = format!("{}:48102", ip);
-                        if let Ok(mut stream) = std::net::TcpStream::connect_timeout(
-                            &target_addr.parse().unwrap(),
-                            Duration::from_millis(800),
-                        ) {
-                            use std::io::Write;
-                            let _ = stream.write_all(&len);
-                            let _ = stream.write_all(&bytes);
-                            let _ = stream.flush();
+                    match payload {
+                        clipboard::ClipboardPayload::Text(t) => {
+                            let packet = ClipboardPacket { token, text: t };
+                            if let Ok(bytes) = serde_json::to_vec(&packet) {
+                                let len = (bytes.len() as u32).to_be_bytes();
+                                let target_addr = format!("{}:48102", ip);
+                                if let Ok(mut stream) = std::net::TcpStream::connect_timeout(
+                                    &target_addr.parse().unwrap(),
+                                    Duration::from_millis(800),
+                                ) {
+                                    use std::io::Write;
+                                    let _ = stream.write_all(&len);
+                                    let _ = stream.write_all(&bytes);
+                                    let _ = stream.flush();
+                                }
+                            }
                         }
+                        clipboard::ClipboardPayload::Files(files) => {
+                            let _ = file_queue_tx.send((ip, token, files));
+                        }
+                        _ => {}
                     }
                 }
             }
@@ -1036,6 +1074,20 @@ pub fn run() {
     if let Err(e) = tauri::Builder::default()
         .manage(state)
         .setup(|app| {
+            let file_key_ref = app.state::<AppState>().paired_security_key.clone();
+            let file_app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                use tauri::Emitter;
+                let cb = move |files: Vec<std::path::PathBuf>| {
+                    let _ = clipboard::ClipboardWriter::write_files(&files);
+                    let names: Vec<String> = files
+                        .iter()
+                        .filter_map(|p| p.file_name().and_then(|n| n.to_str()).map(|s| s.to_string()))
+                        .collect();
+                    let _ = file_app_handle.emit("file-received", names);
+                };
+                let _ = net::FileTransferServer::start(net::FILE_TRANSFER_PORT, file_key_ref, cb).await;
+            });
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_theme(Some(tauri::Theme::Dark));
                 #[cfg(target_os = "windows")]
@@ -1139,7 +1191,9 @@ pub fn run() {
             uninstall_virtual_display_driver,
             get_display_driver_status,
             start_virtual_display_cast,
-            stop_virtual_display_cast
+            stop_virtual_display_cast,
+            open_received_folder,
+            send_file_to_peer
         ])
         .run(tauri::generate_context!())
     {

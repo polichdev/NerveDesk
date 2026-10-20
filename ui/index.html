@@ -690,6 +690,23 @@
                 </button>
               </div>
             </div>
+
+            <div class="setting-card" style="margin: 0; padding: 14px 16px; border-radius: 8px;">
+              <div class="setting-left">
+                <div class="setting-icon" style="color: #22c55e;">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+                </div>
+                <div class="setting-text">
+                  <div class="setting-name" style="font-size: 14px;">File Drag & Drop</div>
+                  <div class="setting-desc" style="font-size: 12px;">Drag files across screen borders with mouse or copy to clipboard</div>
+                </div>
+              </div>
+              <div class="setting-right" style="display: flex; align-items: center; gap: 10px;">
+                <button class="btn btn-secondary" onclick="openReceivedFolder()" title="Open Received Files Folder" style="padding: 6px 12px; border-radius: 6px; font-size: 12px;">
+                  Open Folder
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1024,6 +1041,17 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <div id="fileToast" style="display: none; position: fixed; bottom: 24px; right: 24px; background: #18181b; border: 1px solid #22c55e; border-radius: 8px; padding: 12px 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); z-index: 9999; align-items: center; gap: 12px;">
+    <div style="color: #22c55e;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+    </div>
+    <div>
+      <div style="font-size: 13px; font-weight: 600; color: #f4f4f5;" id="toastTitle">File Received</div>
+      <div style="font-size: 11px; color: var(--text-muted);" id="toastDesc">Saved to Downloads\NerveDesk</div>
+    </div>
+    <button class="btn btn-secondary" onclick="openReceivedFolder()" style="padding: 4px 8px; font-size: 11px; margin-left: 8px;">Open</button>
   </div>
 
   <script>
@@ -1401,6 +1429,28 @@
       }
     }
 
+    async function openReceivedFolder() {
+      try {
+        await callTauri('open_received_folder');
+      } catch (e) {
+        alert('Failed to open received folder: ' + e);
+      }
+    }
+
+    function showFileToast(fileName) {
+      const toast = document.getElementById('fileToast');
+      const title = document.getElementById('toastTitle');
+      const desc = document.getElementById('toastDesc');
+      if (toast && title && desc) {
+        title.innerText = 'File Received: ' + fileName;
+        desc.innerText = 'Saved to Downloads\\NerveDesk and ready to paste';
+        toast.style.display = 'flex';
+        setTimeout(() => {
+          toast.style.display = 'none';
+        }, 5000);
+      }
+    }
+
     async function uninstallDriver() {
       const ok = confirm("Are you sure you want to completely uninstall the IddCx virtual display driver and all associated components?");
       if (!ok) return;
@@ -1443,6 +1493,16 @@
           myDeviceName = name;
           document.getElementById('thisDeviceNameText').innerText = name;
           document.getElementById('hostBoxLabel').innerText = name;
+        }
+      } catch (e) {}
+
+      try {
+        if (window.__TAURI__ && window.__TAURI__.event && window.__TAURI__.event.listen) {
+          window.__TAURI__.event.listen('file-received', (e) => {
+            if (e.payload && e.payload.length > 0) {
+              showFileToast(e.payload.join(', '));
+            }
+          });
         }
       } catch (e) {}
 
