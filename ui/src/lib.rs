@@ -202,11 +202,26 @@ fn get_metrics(state: State<AppState>) -> AppMetrics {
     }
 }
 
+fn get_screen_dimensions() -> (u32, u32) {
+    unsafe {
+        use windows::Win32::Graphics::Gdi::{GetDC, ReleaseDC, GetDeviceCaps, DESKTOPHORZRES, DESKTOPVERTRES};
+        use windows::Win32::Foundation::HWND;
+        let hdc = GetDC(HWND(std::ptr::null_mut()));
+        let mut w = GetDeviceCaps(hdc, DESKTOPHORZRES) as u32;
+        let mut h = GetDeviceCaps(hdc, DESKTOPVERTRES) as u32;
+        ReleaseDC(HWND(std::ptr::null_mut()), hdc);
+        if w == 0 || h == 0 {
+            w = windows::Win32::UI::WindowsAndMessaging::GetSystemMetrics(windows::Win32::UI::WindowsAndMessaging::SM_CXSCREEN) as u32;
+            h = windows::Win32::UI::WindowsAndMessaging::GetSystemMetrics(windows::Win32::UI::WindowsAndMessaging::SM_CYSCREEN) as u32;
+        }
+        (if w > 0 { w } else { 1920 }, if h > 0 { h } else { 1080 })
+    }
+}
+
 #[command]
 async fn discover_devices(state: State<'_, AppState>) -> Result<Vec<DiscoveredDevice>, String> {
     let my_name = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Host-PC".into());
-    let sw = unsafe { windows::Win32::UI::WindowsAndMessaging::GetSystemMetrics(windows::Win32::UI::WindowsAndMessaging::SM_CXSCREEN) } as u32;
-    let sh = unsafe { windows::Win32::UI::WindowsAndMessaging::GetSystemMetrics(windows::Win32::UI::WindowsAndMessaging::SM_CYSCREEN) } as u32;
+    let (sw, sh) = get_screen_dimensions();
     let beacon = DiscoveryBeacon::new(my_name, DeviceRole::Host, 48100, 48101, sw, sh);
 
     if let Ok(emitter) = DiscoveryBeaconEmitter::new(beacon).await {
@@ -243,8 +258,7 @@ async fn pair_device(
     }
 
     let my_name = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Desktop-PC".into());
-    let sw = unsafe { windows::Win32::UI::WindowsAndMessaging::GetSystemMetrics(windows::Win32::UI::WindowsAndMessaging::SM_CXSCREEN) } as u32;
-    let sh = unsafe { windows::Win32::UI::WindowsAndMessaging::GetSystemMetrics(windows::Win32::UI::WindowsAndMessaging::SM_CYSCREEN) } as u32;
+    let (sw, sh) = get_screen_dimensions();
     let beacon = DiscoveryBeacon::new(my_name, DeviceRole::Host, 48100, 48101, sw, sh);
     if let Ok(emitter) = DiscoveryBeaconEmitter::new(beacon).await {
         let _ = emitter.emit_beacon().await;
@@ -373,6 +387,9 @@ async fn start_virtual_display_cast(
 
     if extend_mode {
         let _ = state.display_manager.plug_display();
+        let _ = std::process::Command::new("displayswitch.exe").arg("/extend").spawn();
+    } else {
+        let _ = std::process::Command::new("displayswitch.exe").arg("/clone").spawn();
     }
 
     let video_target: SocketAddr = format!("{}:48101", resolved_ip)
@@ -393,12 +410,23 @@ async fn start_virtual_display_cast(
             }
         };
 
-        let config = DxgiCaptureConfig::default();
-        let mut duplicator = match DxgiOutputDuplicator::new(config) {
+        let out_idx = if extend_mode { 1 } else { 0 };
+        let mut config = DxgiCaptureConfig {
+            adapter_index: 0,
+            output_index: out_idx,
+            timeout_ms: 16,
+        };
+        let mut duplicator = match DxgiOutputDuplicator::new(config.clone()) {
             Ok(d) => d,
-            Err(e) => {
-                error!("DxgiDuplicator error: {:?}", e);
-                return;
+            Err(_) => {
+                config.output_index = 0;
+                match DxgiOutputDuplicator::new(config) {
+                    Ok(d) => d,
+                    Err(e) => {
+                        error!("DxgiDuplicator error: {:?}", e);
+                        return;
+                    }
+                }
             }
         };
 
@@ -589,8 +617,7 @@ pub fn run() {
 
     tauri::async_runtime::spawn(async move {
         let my_name = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Desktop-PC".into());
-        let sw = unsafe { windows::Win32::UI::WindowsAndMessaging::GetSystemMetrics(windows::Win32::UI::WindowsAndMessaging::SM_CXSCREEN) } as u32;
-        let sh = unsafe { windows::Win32::UI::WindowsAndMessaging::GetSystemMetrics(windows::Win32::UI::WindowsAndMessaging::SM_CYSCREEN) } as u32;
+        let (sw, sh) = get_screen_dimensions();
         let beacon = DiscoveryBeacon::new(my_name, DeviceRole::Host, 48100, 48101, sw, sh);
         if let Ok(emitter) = DiscoveryBeaconEmitter::new(beacon).await {
             let mut ticker = tokio::time::interval(Duration::from_secs(1));

@@ -45,8 +45,18 @@ pub fn set_active_edge(edge: ScreenEdge) {
 }
 
 pub fn set_active_edge_and_resolution(edge: ScreenEdge, client_w: i32, client_h: i32) {
-    let w = unsafe { GetSystemMetrics(SM_CXSCREEN) };
-    let h = unsafe { GetSystemMetrics(SM_CYSCREEN) };
+    let (w, h) = unsafe {
+        use windows::Win32::Graphics::Gdi::{GetDC, ReleaseDC, GetDeviceCaps, DESKTOPHORZRES, DESKTOPVERTRES};
+        let hdc = GetDC(HWND(std::ptr::null_mut()));
+        let dw = GetDeviceCaps(hdc, DESKTOPHORZRES);
+        let dh = GetDeviceCaps(hdc, DESKTOPVERTRES);
+        ReleaseDC(HWND(std::ptr::null_mut()), hdc);
+        if dw > 0 && dh > 0 {
+            (dw, dh)
+        } else {
+            (GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN))
+        }
+    };
     let host_w = if w > 0 { w } else { 1920 };
     let host_h = if h > 0 { h } else { 1080 };
     let cw = if client_w > 0 { client_w } else { host_w };
@@ -269,10 +279,13 @@ unsafe extern "system" fn keyboard_proc(n_code: i32, w_param: WPARAM, l_param: L
         let msg = w_param.0 as u32;
         let hook_struct = *(l_param.0 as *const KBDLLHOOKSTRUCT);
 
-        if hook_struct.vkCode == 0x1B || hook_struct.vkCode == 0x13 || hook_struct.vkCode == 0x91 {
+        if (hook_struct.flags.0 & 0x10) != 0 {
+            return CallNextHookEx(HHOOK::default(), n_code, w_param, l_param);
+        }
+
+        if hook_struct.vkCode == 0x1B {
             let shift_down = (windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(0x10) as u16 & 0x8000) != 0;
-            let ctrl_down = (windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(0x11) as u16 & 0x8000) != 0;
-            if shift_down || ctrl_down || hook_struct.vkCode == 0x13 || hook_struct.vkCode == 0x91 {
+            if shift_down {
                 CAPTURE_ACTIVE.store(false, Ordering::SeqCst);
                 if let Ok(mut guard) = EDGE_DETECTOR.lock() {
                     if let Some(detector) = guard.as_mut() {

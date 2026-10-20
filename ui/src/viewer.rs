@@ -3,15 +3,18 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
-    GetDC, ReleaseDC, StretchDIBits, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
-    RGBQUAD, SRCCOPY,
+    GetDC, ReleaseDC, SetBrushOrgEx, SetStretchBltMode, StretchDIBits, BITMAPINFO,
+    BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HALFTONE, RGBQUAD, SRCCOPY,
+};
+use windows::Win32::UI::HiDpi::{
+    SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::VK_ESCAPE;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, GetSystemMetrics, PeekMessageW, RegisterClassW,
-    SetWindowPos, ShowWindow, DispatchMessageW, TranslateMessage, MSG, PM_REMOVE,
-    SM_CXSCREEN, SM_CYSCREEN, SWP_NOMOVE, SWP_NOSIZE, SW_HIDE, SW_SHOW, WM_DESTROY,
-    WM_KEYDOWN, WNDCLASSW, WS_EX_TOPMOST, WS_POPUP, HWND_TOPMOST,
+    CreateWindowExW, DefWindowProcW, DispatchMessageW, GetClientRect, GetSystemMetrics,
+    PeekMessageW, RegisterClassW, SetWindowPos, ShowWindow, TranslateMessage, MSG, PM_REMOVE,
+    SM_CXSCREEN, SM_CYSCREEN, SWP_SHOWWINDOW, SW_HIDE, SW_SHOW, WM_DESTROY, WM_KEYDOWN,
+    WNDCLASSW, WS_EX_TOPMOST, WS_POPUP, HWND_TOPMOST,
 };
 
 pub struct ProjectionViewer {
@@ -33,6 +36,8 @@ impl ProjectionViewer {
         std::thread::Builder::new()
             .name("nerve-projection-viewer".into())
             .spawn(move || unsafe {
+                let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
                 let class_name = windows::core::w!("NerveDeskProjectionWindowClass");
                 let wnd_class = WNDCLASSW {
                     lpfnWndProc: Some(projection_wnd_proc),
@@ -71,7 +76,7 @@ impl ProjectionViewer {
                     0,
                     sw,
                     sh,
-                    SWP_NOMOVE | SWP_NOSIZE,
+                    SWP_SHOWWINDOW,
                 );
 
                 let mut is_shown = false;
@@ -95,6 +100,17 @@ impl ProjectionViewer {
 
                     if active && elapsed < std::time::Duration::from_secs(3) {
                         if !is_shown {
+                            let cur_sw = GetSystemMetrics(SM_CXSCREEN);
+                            let cur_sh = GetSystemMetrics(SM_CYSCREEN);
+                            let _ = SetWindowPos(
+                                hwnd,
+                                HWND_TOPMOST,
+                                0,
+                                0,
+                                cur_sw,
+                                cur_sh,
+                                SWP_SHOWWINDOW,
+                            );
                             let _ = ShowWindow(hwnd, SW_SHOW);
                             is_shown = true;
                         }
@@ -107,6 +123,11 @@ impl ProjectionViewer {
 
                         if let Some((w, h, pixels)) = frame_opt {
                             if !pixels.is_empty() {
+                                let mut client_rect = windows::Win32::Foundation::RECT::default();
+                                let _ = GetClientRect(hwnd, &mut client_rect);
+                                let client_w = client_rect.right - client_rect.left;
+                                let client_h = client_rect.bottom - client_rect.top;
+
                                 let bmi = BITMAPINFO {
                                     bmiHeader: BITMAPINFOHEADER {
                                         biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
@@ -126,12 +147,14 @@ impl ProjectionViewer {
 
                                 let hdc = GetDC(hwnd);
                                 if !hdc.is_invalid() {
+                                    let _ = SetStretchBltMode(hdc, HALFTONE);
+                                    let _ = SetBrushOrgEx(hdc, 0, 0, None);
                                     let _ = StretchDIBits(
                                         hdc,
                                         0,
                                         0,
-                                        sw,
-                                        sh,
+                                        client_w,
+                                        client_h,
                                         0,
                                         0,
                                         w as i32,

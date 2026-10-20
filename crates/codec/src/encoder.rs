@@ -106,7 +106,7 @@ impl HardwareVideoEncoder {
             || (frame_id % self.config.keyframe_interval as u64 == 0)
             || (frame_id == 1);
 
-        let (target_w, target_h, src_data) = if width > 1280 {
+        let (target_w, target_h, src_data) = if width > 2560 {
             let tw = width / 2;
             let th = height / 2;
             let mut scaled = vec![0u8; (tw * th * 4) as usize];
