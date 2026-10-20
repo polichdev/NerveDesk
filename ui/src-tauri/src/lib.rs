@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -47,6 +48,7 @@ pub struct AppState {
     pub live_rtt_us: Arc<AtomicU64>,
     pub live_fps_x10: Arc<AtomicU64>,
     pub live_mbps_x10: Arc<AtomicU64>,
+    pub discovered_devices: Arc<Mutex<HashMap<String, DiscoveredDevice>>>,
 }
 
 fn stop_service_internal(state: &AppState) {
@@ -67,6 +69,18 @@ fn stop_service_internal(state: &AppState) {
     state.live_rtt_us.store(0, Ordering::Relaxed);
     state.live_fps_x10.store(0, Ordering::Relaxed);
     state.live_mbps_x10.store(0, Ordering::Relaxed);
+}
+
+#[command]
+fn get_my_ip() -> String {
+    if let Ok(socket) = std::net::UdpSocket::bind("0.0.0.0:0") {
+        if socket.connect("8.8.8.8:80").is_ok() {
+            if let Ok(addr) = socket.local_addr() {
+                return addr.ip().to_string();
+            }
+        }
+    }
+    "127.0.0.1".into()
 }
 
 #[command]
@@ -95,46 +109,23 @@ fn get_metrics(state: State<AppState>) -> AppMetrics {
 }
 
 #[command]
-async fn discover_devices() -> Result<Vec<DiscoveredDevice>, String> {
-    use std::collections::HashSet;
-    use std::time::Duration;
-    use tokio::time::timeout;
-
+async fn discover_devices(state: State<'_, AppState>) -> Result<Vec<DiscoveredDevice>, String> {
     let my_name = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Host-PC".into());
-    let beacon = DiscoveryBeacon::new(my_name.clone(), DeviceRole::Host, 48100, 48101);
+    let beacon = DiscoveryBeacon::new(my_name, DeviceRole::Host, 48100, 48101);
 
     if let Ok(emitter) = DiscoveryBeaconEmitter::new(beacon).await {
         let _ = emitter.emit_beacon().await;
     }
 
-    let listener = match DiscoveryListener::bind().await {
-        Ok(l) => l,
-        Err(_) => return Ok(Vec::new()),
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    let devices: Vec<DiscoveredDevice> = if let Ok(guard) = state.discovered_devices.lock() {
+        guard.values().cloned().collect()
+    } else {
+        Vec::new()
     };
 
-    let mut discovered = Vec::new();
-    let mut seen_ips = HashSet::new();
-    let start = std::time::Instant::now();
-
-    while start.elapsed() < Duration::from_millis(600) {
-        let remaining = Duration::from_millis(600).saturating_sub(start.elapsed());
-        if let Ok(Ok((beacon, peer_addr))) = timeout(remaining, listener.recv_beacon()).await {
-            let ip = peer_addr.ip().to_string();
-            if beacon.device_name != my_name && seen_ips.insert(ip.clone()) {
-                discovered.push(DiscoveredDevice {
-                    name: beacon.device_name,
-                    role: format!("{:?}", beacon.role),
-                    ip,
-                    input_port: beacon.input_port,
-                    video_port: beacon.video_port,
-                });
-            }
-        } else {
-            break;
-        }
-    }
-
-    Ok(discovered)
+    Ok(devices)
 }
 
 #[command]
@@ -396,6 +387,9 @@ fn toggle_virtual_display(enable: bool, state: State<'_, AppState>) -> Result<bo
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let discovered_cache = Arc::new(Mutex::new(HashMap::new()));
+    let discovered_cache_clone = discovered_cache.clone();
+
     let state = AppState {
         is_running: Arc::new(AtomicBool::new(false)),
         mode: Mutex::new("Idle".into()),
@@ -407,19 +401,48 @@ pub fn run() {
         live_rtt_us: Arc::new(AtomicU64::new(0)),
         live_fps_x10: Arc::new(AtomicU64::new(0)),
         live_mbps_x10: Arc::new(AtomicU64::new(0)),
+        discovered_devices: discovered_cache,
     };
 
+    let my_name = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "NerveDesk-PC".into());
+    let my_name_emitter = my_name.clone();
+    let my_name_listener = my_name.clone();
+
     tauri::async_runtime::spawn(async move {
-        let my_name = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "NerveDesk-PC".into());
-        let beacon = DiscoveryBeacon::new(my_name, DeviceRole::Host, 48100, 48101);
+        let beacon = DiscoveryBeacon::new(my_name_emitter, DeviceRole::Host, 48100, 48101);
         if let Ok(emitter) = DiscoveryBeaconEmitter::new(beacon).await {
-            let _ = emitter.spawn_loop(Duration::from_secs(2));
+            let _ = emitter.spawn_loop(Duration::from_secs(1));
+        }
+    });
+
+    tauri::async_runtime::spawn(async move {
+        if let Ok(listener) = DiscoveryListener::bind().await {
+            loop {
+                if let Ok((beacon, peer_addr)) = listener.recv_beacon().await {
+                    let ip = peer_addr.ip().to_string();
+                    if beacon.device_name != my_name_listener {
+                        if let Ok(mut cache) = discovered_cache_clone.lock() {
+                            cache.insert(
+                                ip.clone(),
+                                DiscoveredDevice {
+                                    name: beacon.device_name,
+                                    role: format!("{:?}", beacon.role),
+                                    ip,
+                                    input_port: beacon.input_port,
+                                    video_port: beacon.video_port,
+                                },
+                            );
+                        }
+                    }
+                }
+            }
         }
     });
 
     if let Err(e) = tauri::Builder::default()
         .manage(state)
         .invoke_handler(tauri::generate_handler![
+            get_my_ip,
             get_metrics,
             discover_devices,
             start_host,

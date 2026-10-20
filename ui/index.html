@@ -440,7 +440,15 @@
     <div class="panel">
       <div class="panel-title">
         <span>Devices</span>
-        <button class="btn btn-secondary" id="scanBtn" style="font-size: 0.75rem; padding: 4px 10px;" onclick="refreshDevices()">Scan</button>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <span id="myIpBadge" style="font-size: 0.72rem; color: var(--accent); background: rgba(56, 189, 248, 0.12); padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(56, 189, 248, 0.25);">IP: loading...</span>
+          <button class="btn btn-secondary" id="scanBtn" style="font-size: 0.75rem; padding: 4px 10px;" onclick="refreshDevices()">Scan</button>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 8px;">
+        <input type="text" id="manualIpInput" placeholder="Direct Connect IP (e.g. 192.0.2.10)" style="flex: 1; background: #111520; border: 1px solid var(--card-border); color: #f1f5f9; padding: 8px 12px; border-radius: 8px; font-size: 0.8rem; outline: none;">
+        <button class="btn" style="font-size: 0.8rem; padding: 8px 16px;" onclick="connectManual()">Connect</button>
       </div>
 
       <div class="device-list" id="deviceList">
@@ -552,6 +560,26 @@
       }
     }
 
+    async function loadMyIp() {
+      if (window.__TAURI__) {
+        try {
+          const ip = await window.__TAURI__.core.invoke('get_my_ip');
+          document.getElementById('myIpBadge').innerText = "This Device: " + ip;
+        } catch (e) {}
+      }
+    }
+
+    function connectManual() {
+      const input = document.getElementById('manualIpInput');
+      const ip = input.value.trim();
+      if (ip) {
+        connectTo(ip);
+      } else {
+        alert("Please enter the IP address of your other device.");
+      }
+    }
+
+    loadMyIp();
     refreshDevices();
 
     setInterval(async () => {
