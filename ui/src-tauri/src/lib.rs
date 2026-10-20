@@ -74,6 +74,11 @@ fn stop_service_internal(state: &AppState) {
 }
 
 #[command]
+fn get_device_name() -> String {
+    std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Desktop-PC".into())
+}
+
+#[command]
 fn get_my_ip() -> String {
     if let Ok(socket) = std::net::UdpSocket::bind("0.0.0.0:0") {
         if socket.connect("8.8.8.8:80").is_ok() {
@@ -477,6 +482,7 @@ pub fn run() {
     if let Err(e) = tauri::Builder::default()
         .manage(state)
         .invoke_handler(tauri::generate_handler![
+            get_device_name,
             get_my_ip,
             get_metrics,
             discover_devices,
