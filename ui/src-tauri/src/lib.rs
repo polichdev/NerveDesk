@@ -140,6 +140,23 @@ async fn discover_devices(state: State<'_, AppState>) -> Result<Vec<DiscoveredDe
 }
 
 #[command]
+async fn pair_device(
+    target_name: String,
+    security_key: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let clean_name = target_name.trim();
+    if clean_name.is_empty() {
+        return Err("Device name cannot be empty".into());
+    }
+    if security_key.trim().is_empty() {
+        return Err("Security key cannot be empty".into());
+    }
+
+    start_host(clean_name.to_string(), false, state).await
+}
+
+#[command]
 async fn start_host(
     target_ip: String,
     stream_video: bool,
@@ -147,13 +164,40 @@ async fn start_host(
 ) -> Result<String, String> {
     stop_service_internal(&state);
 
-    let target_addr: SocketAddr = if target_ip.contains(':') {
-        target_ip.parse().map_err(|e| format!("Invalid target address: {e}"))?
+    let host_part = if let Some((h, _)) = target_ip.split_once(':') {
+        h
     } else {
-        format!("{target_ip}:48100")
-            .parse()
-            .map_err(|e| format!("Invalid target address: {e}"))?
+        target_ip.as_str()
     };
+
+    let resolved_ip = if let Ok(ip) = host_part.parse::<std::net::IpAddr>() {
+        ip.to_string()
+    } else {
+        let mut found_ip = None;
+        if let Ok(guard) = state.discovered_devices.lock() {
+            for d in guard.values() {
+                if d.name.eq_ignore_ascii_case(host_part) {
+                    found_ip = Some(d.ip.clone());
+                    break;
+                }
+            }
+        }
+        if let Some(ip) = found_ip {
+            ip
+        } else if let Ok(mut addrs) = tokio::net::lookup_host(format!("{host_part}:48100")).await {
+            if let Some(addr) = addrs.next() {
+                addr.ip().to_string()
+            } else {
+                return Err(format!("Could not resolve device name: {host_part}"));
+            }
+        } else {
+            return Err(format!("Device not reachable: {host_part}"));
+        }
+    };
+
+    let target_addr: SocketAddr = format!("{resolved_ip}:48100")
+        .parse()
+        .map_err(|e| format!("Invalid target address: {e}"))?;
 
     let video_target: SocketAddr = SocketAddr::new(target_addr.ip(), 48101);
 
@@ -484,6 +528,48 @@ pub fn run() {
     if let Err(e) = tauri::Builder::default()
         .manage(state)
         .setup(|app| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_theme(Some(tauri::Theme::Dark));
+                #[cfg(target_os = "windows")]
+                {
+                    use windows::Win32::Foundation::HWND;
+                    use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_USE_IMMERSIVE_DARK_MODE, DWMWINDOWATTRIBUTE};
+
+                    if let Ok(raw_hwnd) = window.hwnd() {
+                        let hwnd = HWND(raw_hwnd.0 as *mut std::ffi::c_void);
+                        let dark: u32 = 1;
+                        unsafe {
+                            let _ = DwmSetWindowAttribute(
+                                hwnd,
+                                DWMWA_USE_IMMERSIVE_DARK_MODE,
+                                &dark as *const _ as _,
+                                std::mem::size_of::<u32>() as u32,
+                            );
+                            let _ = DwmSetWindowAttribute(
+                                hwnd,
+                                DWMWINDOWATTRIBUTE(19),
+                                &dark as *const _ as _,
+                                std::mem::size_of::<u32>() as u32,
+                            );
+                            let caption_color: u32 = 0x00141212;
+                            let _ = DwmSetWindowAttribute(
+                                hwnd,
+                                DWMWINDOWATTRIBUTE(35),
+                                &caption_color as *const _ as _,
+                                std::mem::size_of::<u32>() as u32,
+                            );
+                            let text_color: u32 = 0x00f4f4f5;
+                            let _ = DwmSetWindowAttribute(
+                                hwnd,
+                                DWMWINDOWATTRIBUTE(36),
+                                &text_color as *const _ as _,
+                                std::mem::size_of::<u32>() as u32,
+                            );
+                        }
+                    }
+                }
+            }
+
             let quit_i = MenuItem::with_id(app, "quit", "Quit NerveDesk", true, None::<&str>)?;
             let show_i = MenuItem::with_id(app, "show", "Open NerveDesk", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_i, &quit_i])?;
@@ -536,6 +622,7 @@ pub fn run() {
             get_my_ip,
             get_metrics,
             discover_devices,
+            pair_device,
             start_host,
             start_client,
             stop_service,

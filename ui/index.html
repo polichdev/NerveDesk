@@ -668,29 +668,10 @@
         </div>
         <span>Settings</span>
       </div>
-      <div style="padding: 6px 12px; font-size: 11px; color: var(--text-dark); display: flex; justify-content: space-between;">
-        <span>Service:</span>
-        <span id="serviceStatusPill" style="color: var(--success); font-weight: 500;">Ready</span>
-      </div>
     </div>
   </aside>
 
   <div class="main-wrap">
-    <header>
-      <div class="header-title-wrap">
-        <span>NerveDesk</span>
-        <span>/</span>
-        <strong id="breadcrumbTitle">Mouse Without Borders</strong>
-      </div>
-      <div class="header-actions">
-        <button class="btn btn-secondary" onclick="stopService()">Stop Service</button>
-        <div class="status-badge" id="statusBadge">
-          <div class="status-dot" id="statusDot"></div>
-          <span id="statusText">Ready</span>
-        </div>
-      </div>
-    </header>
-
     <div class="content-area">
       <div class="view-container active" id="viewKvm">
         <div class="view-header">
@@ -718,33 +699,42 @@
         </div>
 
         <div class="section-title">Encryption Key & Device Name</div>
-        <div style="display: flex; flex-direction: column; gap: 8px;">
-          <div class="setting-card">
+        <div style="display: flex; flex-direction: column; gap: 0;">
+          <div class="setting-card" style="border-radius: 8px 8px 0 0; border-bottom: none; margin-bottom: 0;">
             <div class="setting-left">
               <div class="setting-icon">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>
               </div>
               <div class="setting-text">
                 <div class="setting-name">Security Key</div>
-                <div class="setting-desc">Enter the same security key on your other computers to establish a paired connection.</div>
+                <div class="setting-desc">To configure, create a key on one computer and enter it manually on other computers.</div>
               </div>
             </div>
             <div class="setting-right">
               <input type="text" id="securityKeyInput" class="code-input" value="gS7;hJ1(eR3<hG4?" readonly>
               <button class="btn btn-secondary" onclick="generateNewKey()">New Key</button>
-              <button class="btn-icon" onclick="copySecurityKey()" title="Copy Key">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <button class="btn btn-primary" onclick="togglePairDrawer()">Connect</button>
+              <button class="btn-icon" id="togglePairDrawerBtn" onclick="togglePairDrawer()" title="Expand connection">
+                <svg id="pairDrawerChevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
               </button>
             </div>
           </div>
 
-          <div class="setting-card">
+          <div id="pairDrawer" style="display: none; background: #18181c; border-left: 1px solid var(--card-border); border-right: 1px solid var(--card-border); border-top: 1px solid #27272a; border-bottom: 1px solid #27272a; padding: 14px 20px;">
+            <div style="display: flex; gap: 12px; align-items: center; width: 100%;">
+              <input type="text" id="peerKeyInput" class="code-input" placeholder="Security Key" style="flex: 1; height: 34px;">
+              <input type="text" id="peerDeviceNameInput" class="code-input" placeholder="Device Name" style="flex: 1; height: 34px;">
+              <button class="btn btn-primary" style="height: 34px; padding: 0 20px;" onclick="connectWithKeyAndDevice()">Connect</button>
+            </div>
+          </div>
+
+          <div class="setting-card" style="border-radius: 0 0 8px 8px; margin-top: 0;">
             <div class="setting-left">
               <div class="setting-icon">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
               </div>
               <div class="setting-text">
-                <div class="setting-name">This Device Name</div>
+                <div class="setting-name">This Device Host Name</div>
                 <div class="setting-desc">Hostname used to identify this machine on the local network.</div>
               </div>
             </div>
@@ -786,11 +776,6 @@
             <div style="display: flex; gap: 8px; align-items: center;">
               <span style="font-size: 12px; color: var(--text-dark);">Transition Edge:</span>
               <button class="btn btn-secondary" id="edgeToggleBtn" onclick="cycleEdge()">Right Edge</button>
-            </div>
-
-            <div style="display: flex; gap: 10px;">
-              <button class="btn btn-secondary" onclick="startKvmReceiver()">Start Receiver</button>
-              <button class="btn" onclick="refreshKvmConnection()">Refresh Connections</button>
             </div>
           </div>
         </div>
@@ -1063,15 +1048,12 @@
       } else if (tabId === 'cast') {
         document.getElementById('navCast').classList.add('active');
         document.getElementById('viewCast').classList.add('active');
-        document.getElementById('breadcrumbTitle').innerText = 'Virtual Display Cast';
       } else if (tabId === 'metrics') {
         document.getElementById('navMetrics').classList.add('active');
         document.getElementById('viewMetrics').classList.add('active');
-        document.getElementById('breadcrumbTitle').innerText = 'Metrics & Diagnostics';
       } else if (tabId === 'settings') {
         document.getElementById('navSettings').classList.add('active');
         document.getElementById('viewSettings').classList.add('active');
-        document.getElementById('breadcrumbTitle').innerText = 'General Settings';
       }
     }
 
@@ -1091,6 +1073,43 @@
 
     function copyDeviceName() {
       navigator.clipboard.writeText(myDeviceName).catch(() => {});
+    }
+
+    function togglePairDrawer() {
+      const drawer = document.getElementById('pairDrawer');
+      const chevron = document.getElementById('pairDrawerChevron');
+      if (drawer.style.display === 'none' || drawer.style.display === '') {
+        drawer.style.display = 'block';
+        chevron.innerHTML = '<polyline points="18 15 12 9 6 15"/>';
+      } else {
+        drawer.style.display = 'none';
+        chevron.innerHTML = '<polyline points="6 9 12 15 18 9"/>';
+      }
+    }
+
+    async function connectWithKeyAndDevice() {
+      const key = document.getElementById('peerKeyInput').value.trim();
+      const name = document.getElementById('peerDeviceNameInput').value.trim();
+      if (!name) {
+        alert("Please enter target Device Name");
+        return;
+      }
+      if (!key) {
+        alert("Please enter Security Key");
+        return;
+      }
+
+      try {
+        await callTauri('pair_device', { targetName: name, securityKey: key });
+        localStorage.setItem('paired_device_name', name);
+        localStorage.setItem('paired_security_key', key);
+        document.getElementById('peerBoxLabel').innerText = name.toUpperCase();
+        document.getElementById('peerBoxSub').innerText = "Connected";
+        document.getElementById('pairDrawer').style.display = 'none';
+        document.getElementById('pairDrawerChevron').innerHTML = '<polyline points="6 9 12 15 18 9"/>';
+      } catch (err) {
+        alert("Connection failed: " + err);
+      }
     }
 
     function selectMonitorBox(which) {
@@ -1122,65 +1141,17 @@
       callTauri('toggle_virtual_display', { enable: checked }).catch(() => {});
     }
 
-    function startKvmReceiver() {
-      callTauri('start_client', { bindPort: 48100 }).catch(() => {});
-      document.getElementById('statusText').innerText = "Receiver Active";
-      document.getElementById('statusDot').classList.add('active');
-    }
-
-    function refreshKvmConnection() {
-      if (peerIp) {
-        callTauri('start_host', { targetIp: peerIp + ":48100", streamVideo: false }).catch(() => {});
-        document.getElementById('statusText').innerText = "Connected";
-        document.getElementById('statusDot').classList.add('active');
-      } else {
-        refreshDevicesAndAutoConnect(false);
-      }
-    }
-
     function startCastStream() {
-      if (peerIp) {
-        callTauri('start_host', { targetIp: peerIp + ":48100", streamVideo: true }).catch(() => {});
-        document.getElementById('statusText').innerText = "Streaming";
-        document.getElementById('statusDot').classList.add('active');
-      } else {
-        refreshDevicesAndAutoConnect(true);
-      }
+      const target = localStorage.getItem('paired_device_name') || 'laptop';
+      callTauri('start_host', { targetIp: target, streamVideo: true }).catch(() => {});
     }
 
     function startCastReceiver() {
       callTauri('start_client', { bindPort: 48100 }).catch(() => {});
-      document.getElementById('statusText').innerText = "Cast Receiver Active";
-      document.getElementById('statusDot').classList.add('active');
-    }
-
-    async function refreshDevicesAndAutoConnect(isCast) {
-      try {
-        const devices = await callTauri('discover_devices');
-        if (devices && devices.length > 0) {
-          const first = devices[0];
-          peerIp = first.ip;
-          document.getElementById('peerBoxLabel').innerText = first.name;
-          document.getElementById('peerBoxSub').innerText = "Connected";
-          callTauri('start_host', { targetIp: peerIp + ":48100", streamVideo: isCast }).catch(() => {});
-          document.getElementById('statusText').innerText = isCast ? "Streaming" : "Connected";
-          document.getElementById('statusDot').classList.add('active');
-        } else {
-          const manual = prompt("Enter target computer name or IP:", "192.0.2.10");
-          if (manual) {
-            peerIp = manual;
-            callTauri('start_host', { targetIp: peerIp + ":48100", streamVideo: isCast }).catch(() => {});
-            document.getElementById('statusText').innerText = "Connected";
-            document.getElementById('statusDot').classList.add('active');
-          }
-        }
-      } catch (e) {}
     }
 
     function stopService() {
       callTauri('stop_service').catch(() => {});
-      document.getElementById('statusText').innerText = "Ready";
-      document.getElementById('statusDot').classList.remove('active');
       document.getElementById('diagRtt').innerText = "0.00 ms";
       document.getElementById('diagFps').innerText = "0.0 FPS";
       document.getElementById('diagBitrate').innerText = "0.0 Mbps";
@@ -1224,15 +1195,15 @@
         }
       } catch (e) {}
 
-      try {
-        const devices = await callTauri('discover_devices');
-        if (devices && devices.length > 0) {
-          const first = devices[0];
-          peerIp = first.ip;
-          document.getElementById('peerBoxLabel').innerText = first.name;
-          document.getElementById('peerBoxSub').innerText = "Connected";
-        }
-      } catch (e) {}
+      const savedPeer = localStorage.getItem('paired_device_name');
+      if (savedPeer) {
+        document.getElementById('peerBoxLabel').innerText = savedPeer.toUpperCase();
+        document.getElementById('peerBoxSub').innerText = "Connected";
+      }
+      const savedKey = localStorage.getItem('paired_security_key');
+      if (savedKey) {
+        document.getElementById('securityKeyInput').value = savedKey;
+      }
     }
 
     setTimeout(initSystemInfo, 100);
@@ -1245,13 +1216,6 @@
         document.getElementById('diagBitrate').innerText = m.bandwidth_mbps.toFixed(1) + " Mbps";
         document.getElementById('diagDisplay').innerText = m.virtual_display_active ? "Attached" : "Detached";
         document.getElementById('viewerFpsBadge').innerText = m.video_fps.toFixed(1) + " FPS";
-        if (m.is_active) {
-          document.getElementById('statusText').innerText = m.mode + " Active";
-          document.getElementById('statusDot').classList.add('active');
-        } else {
-          document.getElementById('statusText').innerText = "Ready";
-          document.getElementById('statusDot').classList.remove('active');
-        }
       } catch (e) {}
     }, 1000);
   </script>
