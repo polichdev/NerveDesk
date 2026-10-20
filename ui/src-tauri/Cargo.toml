@@ -1,0 +1,28 @@
+[package]
+name = "nervedesk-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "nervedesk_ui_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.0", features = ["tray-icon"] }
+common = { path = "../../crates/common" }
+input = { path = "../../crates/input" }
+net = { path = "../../crates/net" }
+capture = { path = "../../crates/capture" }
+codec = { path = "../../crates/codec" }
+clipboard = { path = "../../crates/clipboard" }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = "1.0"
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
