@@ -15,7 +15,6 @@
       --accent: #0078d4;
       --accent-hover: #1084d9;
       --accent-subtle: rgba(0, 120, 212, 0.15);
-      --accent-glow: rgba(0, 120, 212, 0.3);
       --success: #10b981;
       --danger: #ef4444;
       --text: #f4f4f5;
@@ -30,6 +29,26 @@
       margin: 0;
       padding: 0;
       user-select: none;
+      scrollbar-width: thin;
+      scrollbar-color: #27272a transparent;
+    }
+
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #27272a;
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #3f3f46;
     }
 
     body {
@@ -43,7 +62,7 @@
     }
 
     aside {
-      width: 260px;
+      width: 250px;
       background: var(--sidebar-bg);
       border-right: 1px solid var(--card-border);
       display: flex;
@@ -59,29 +78,21 @@
       border-bottom: 1px solid var(--card-border);
     }
 
-    .brand-logo {
-      width: 28px;
-      height: 28px;
-      background: #27272a;
-      border: 1px solid #3f3f46;
-      border-radius: 6px;
+    .brand-logo-wrap {
+      width: 30px;
+      height: 30px;
+      background: #202025;
+      border: 1px solid #33333a;
+      border-radius: 7px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-weight: 700;
-      font-size: 13px;
-      color: var(--text);
     }
 
     .brand-title {
       font-size: 14px;
       font-weight: 600;
       color: var(--text);
-    }
-
-    .brand-sub {
-      font-size: 11px;
-      color: var(--text-dark);
     }
 
     .nav-group-title {
@@ -161,8 +172,8 @@
       justify-content: space-between;
       align-items: center;
       padding: 0 28px;
-      border-bottom: 1px solid var(--card-border);
-      background: #141416;
+      border-bottom: 1px solid #1c1c20;
+      background: var(--bg);
       flex-shrink: 0;
     }
 
@@ -225,8 +236,8 @@
     .view-container {
       display: none;
       flex-direction: column;
-      gap: 20px;
-      max-width: 980px;
+      gap: 18px;
+      max-width: 960px;
       margin: 0 auto;
     }
 
@@ -422,7 +433,7 @@
       font-size: 13px;
       padding: 6px 10px;
       outline: none;
-      width: 220px;
+      width: 210px;
     }
 
     .code-input:focus {
@@ -474,7 +485,6 @@
     .monitor-box.selected {
       border-color: var(--accent);
       background: #1e2534;
-      box-shadow: 0 0 10px var(--accent-subtle);
     }
 
     .monitor-box.empty {
@@ -615,10 +625,15 @@
 <body>
   <aside>
     <div class="brand-section">
-      <div class="brand-logo">ND</div>
+      <div class="brand-logo-wrap">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <rect x="2" y="4" width="12" height="9" rx="2" stroke="#38bdf8" stroke-width="1.8"/>
+          <rect x="10" y="11" width="12" height="9" rx="2" stroke="#818cf8" stroke-width="1.8"/>
+          <circle cx="10" cy="11" r="2" fill="#38bdf8"/>
+        </svg>
+      </div>
       <div>
         <div class="brand-title">NerveDesk</div>
-        <div class="brand-sub">PowerToys Edition</div>
       </div>
     </div>
 
@@ -654,8 +669,8 @@
         <span>Settings</span>
       </div>
       <div style="padding: 6px 12px; font-size: 11px; color: var(--text-dark); display: flex; justify-content: space-between;">
-        <span>Local IP:</span>
-        <span id="myIpText" style="color: var(--text-muted); font-family: var(--font-mono);">127.0.0.1</span>
+        <span>Service:</span>
+        <span id="serviceStatusPill" style="color: var(--success); font-weight: 500;">Ready</span>
       </div>
     </div>
   </aside>
@@ -749,13 +764,13 @@
             <div class="monitor-box selected" id="monitorBoxHost" onclick="selectMonitorBox('host')">
               <svg class="monitor-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
               <div class="monitor-label" id="hostBoxLabel">This PC</div>
-              <div class="monitor-sub">Primary (Host)</div>
+              <div class="monitor-sub">Primary Device</div>
             </div>
 
             <div class="monitor-box" id="monitorBoxPeer" onclick="selectMonitorBox('peer')">
               <svg class="monitor-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
               <div class="monitor-label" id="peerBoxLabel">Laptop</div>
-              <div class="monitor-sub" id="peerBoxSub">Secondary</div>
+              <div class="monitor-sub" id="peerBoxSub">Connected</div>
             </div>
 
             <div class="monitor-box empty">
@@ -1116,7 +1131,7 @@
     function refreshKvmConnection() {
       if (peerIp) {
         callTauri('start_host', { targetIp: peerIp + ":48100", streamVideo: false }).catch(() => {});
-        document.getElementById('statusText').innerText = "Connected to " + peerIp;
+        document.getElementById('statusText').innerText = "Connected";
         document.getElementById('statusDot').classList.add('active');
       } else {
         refreshDevicesAndAutoConnect(false);
@@ -1126,7 +1141,7 @@
     function startCastStream() {
       if (peerIp) {
         callTauri('start_host', { targetIp: peerIp + ":48100", streamVideo: true }).catch(() => {});
-        document.getElementById('statusText').innerText = "Streaming to " + peerIp;
+        document.getElementById('statusText').innerText = "Streaming";
         document.getElementById('statusDot').classList.add('active');
       } else {
         refreshDevicesAndAutoConnect(true);
@@ -1146,16 +1161,16 @@
           const first = devices[0];
           peerIp = first.ip;
           document.getElementById('peerBoxLabel').innerText = first.name;
-          document.getElementById('peerBoxSub').innerText = first.ip;
+          document.getElementById('peerBoxSub').innerText = "Connected";
           callTauri('start_host', { targetIp: peerIp + ":48100", streamVideo: isCast }).catch(() => {});
-          document.getElementById('statusText').innerText = (isCast ? "Streaming to " : "Connected to ") + first.name;
+          document.getElementById('statusText').innerText = isCast ? "Streaming" : "Connected";
           document.getElementById('statusDot').classList.add('active');
         } else {
-          const manual = prompt("Enter target computer IP (e.g. 192.0.2.10):", "192.0.2.10");
+          const manual = prompt("Enter target computer name or IP:", "192.0.2.10");
           if (manual) {
             peerIp = manual;
             callTauri('start_host', { targetIp: peerIp + ":48100", streamVideo: isCast }).catch(() => {});
-            document.getElementById('statusText').innerText = "Connected to " + peerIp;
+            document.getElementById('statusText').innerText = "Connected";
             document.getElementById('statusDot').classList.add('active');
           }
         }
@@ -1201,11 +1216,6 @@
 
     async function initSystemInfo() {
       try {
-        const ip = await callTauri('get_my_ip');
-        document.getElementById('myIpText').innerText = ip;
-      } catch (e) {}
-
-      try {
         const name = await callTauri('get_device_name');
         if (name) {
           myDeviceName = name;
@@ -1220,7 +1230,7 @@
           const first = devices[0];
           peerIp = first.ip;
           document.getElementById('peerBoxLabel').innerText = first.name;
-          document.getElementById('peerBoxSub').innerText = first.ip;
+          document.getElementById('peerBoxSub').innerText = "Connected";
         }
       } catch (e) {}
     }

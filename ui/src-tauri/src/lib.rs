@@ -4,7 +4,9 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
-use tauri::{command, State};
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{command, Manager, State};
 use tracing::{error, info};
 
 use capture::{DxgiCaptureConfig, DxgiOutputDuplicator, VirtualDisplayManager};
@@ -481,6 +483,54 @@ pub fn run() {
 
     if let Err(e) = tauri::Builder::default()
         .manage(state)
+        .setup(|app| {
+            let quit_i = MenuItem::with_id(app, "quit", "Quit NerveDesk", true, None::<&str>)?;
+            let show_i = MenuItem::with_id(app, "show", "Open NerveDesk", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show_i, &quit_i])?;
+
+            let mut builder = TrayIconBuilder::new()
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| {
+                    match event.id.as_ref() {
+                        "quit" => {
+                            app.exit(0);
+                        }
+                        "show" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.unminimize();
+                                let _ = window.set_focus();
+                            }
+                        }
+                        _ => {}
+                    }
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                        }
+                    }
+                });
+
+            if let Some(icon) = app.default_window_icon() {
+                builder = builder.icon(icon.clone());
+            }
+
+            let _tray = builder.build(app)?;
+
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             get_device_name,
             get_my_ip,
