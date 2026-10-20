@@ -1,0 +1,14 @@
+[package]
+name = "clipboard"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+common = { path = "../common" }
+windows = { workspace = true }
+tokio = { workspace = true }
+crossbeam-channel = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
