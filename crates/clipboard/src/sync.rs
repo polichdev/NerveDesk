@@ -11,7 +11,7 @@ use windows::core::s;
 use windows::Win32::Foundation::{HANDLE, HGLOBAL, HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::DataExchange::{
     AddClipboardFormatListener, CloseClipboard, EmptyClipboard, GetClipboardData,
-    IsClipboardFormatAvailable, OpenClipboard, RemoveClipboardFormatListener, SetClipboardData,
+    OpenClipboard, RemoveClipboardFormatListener, SetClipboardData,
 };
 use windows::Win32::System::Memory::{
     GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE,
@@ -171,36 +171,6 @@ fn read_clipboard_content() -> Option<ClipboardPayload> {
         }
         if !opened {
             return None;
-        }
-
-        if IsClipboardFormatAvailable(CF_HDROP).is_ok() {
-            if let Ok(handle) = GetClipboardData(CF_HDROP) {
-                let ptr = GlobalLock(HGLOBAL(handle.0));
-                if !ptr.is_null() {
-                    let header = &*(ptr as *const DropFilesHeader);
-                    let mut files = Vec::new();
-                    if header.f_wide != 0 {
-                        let mut p = (ptr as *const u8).add(header.p_files as usize) as *const u16;
-                        while *p != 0 {
-                            let mut len = 0;
-                            let start = p;
-                            while *p != 0 {
-                                len += 1;
-                                p = p.add(1);
-                            }
-                            let slice = std::slice::from_raw_parts(start, len);
-                            files.push(String::from_utf16_lossy(slice));
-                            p = p.add(1);
-                        }
-                    }
-                    let _ = GlobalUnlock(HGLOBAL(handle.0));
-                    let _ = CloseClipboard();
-                    if !files.is_empty() {
-                        return Some(ClipboardPayload::Files(files));
-                    }
-                    return None;
-                }
-            }
         }
 
         let handle = match GetClipboardData(CF_UNICODETEXT) {

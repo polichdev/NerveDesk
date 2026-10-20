@@ -82,6 +82,7 @@ pub enum PacketType {
     Pong = 6,
     Heartbeat = 7,
     CursorPosition = 8,
+    FileDrag = 9,
 }
 
 impl TryFrom<u8> for PacketType {
@@ -97,6 +98,7 @@ impl TryFrom<u8> for PacketType {
             6 => Ok(Self::Pong),
             7 => Ok(Self::Heartbeat),
             8 => Ok(Self::CursorPosition),
+            9 => Ok(Self::FileDrag),
             other => Err(NerveError::Protocol(format!("Unknown packet type: {other}"))),
         }
     }
@@ -255,6 +257,14 @@ pub struct HeartbeatPayload {
     pub device_name: [u8; 32],
 }
 
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+pub struct FileDragPayload {
+    pub active: u8,
+    pub _padding: [u8; 3],
+    pub file_name: [u8; 32],
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum InputEvent {
     MouseMove {
@@ -287,6 +297,10 @@ pub enum InputEvent {
     },
     Heartbeat {
         device_name: String,
+    },
+    FileDrag {
+        active: bool,
+        file_name: String,
     },
 }
 
@@ -430,6 +444,25 @@ pub fn encode_packet(
             buf[header_size..total].copy_from_slice(bytemuck::bytes_of(&payload));
             Ok(total)
         }
+        InputEvent::FileDrag { active, file_name } => {
+            let mut payload = FileDragPayload {
+                active: if *active { 1 } else { 0 },
+                _padding: [0; 3],
+                file_name: [0; 32],
+            };
+            let bytes = file_name.as_bytes();
+            let len = bytes.len().min(32);
+            payload.file_name[..len].copy_from_slice(&bytes[..len]);
+            let payload_size = std::mem::size_of::<FileDragPayload>();
+            let total = header_size + payload_size;
+            if buf.len() < total {
+                return Err(NerveError::Protocol("Buffer too small for FileDrag".into()));
+            }
+            let header = PacketHeader::new(PacketType::FileDrag, sequence, timestamp_us);
+            buf[..header_size].copy_from_slice(bytemuck::bytes_of(&header));
+            buf[header_size..total].copy_from_slice(bytemuck::bytes_of(&payload));
+            Ok(total)
+        }
     }
 }
 
@@ -533,6 +566,23 @@ pub fn decode_packet(buf: &[u8]) -> Result<(PacketHeader, InputEvent)> {
                 InputEvent::Heartbeat { device_name: String::new() }
             }
         }
+        PacketType::FileDrag => {
+            let payload_size = std::mem::size_of::<FileDragPayload>();
+            if payload_bytes.len() >= payload_size {
+                let payload: FileDragPayload = *bytemuck::from_bytes(&payload_bytes[..payload_size]);
+                let end = payload.file_name.iter().position(|&b| b == 0).unwrap_or(32);
+                let name = String::from_utf8_lossy(&payload.file_name[..end]).to_string();
+                InputEvent::FileDrag {
+                    active: payload.active != 0,
+                    file_name: name,
+                }
+            } else {
+                InputEvent::FileDrag {
+                    active: false,
+                    file_name: String::new(),
+                }
+            }
+        }
     };
 
     Ok((header, event))
@@ -600,6 +650,21 @@ mod tests {
         let (header, decoded_event) = decode_packet(&buf[..len]).expect("Decode failed");
 
         assert_eq!(header.packet_type, PacketType::Heartbeat as u8);
+        assert_eq!(decoded_event, original_event);
+    }
+
+    #[test]
+    fn test_file_drag_roundtrip() {
+        let mut buf = [0u8; MAX_PACKET_SIZE];
+        let original_event = InputEvent::FileDrag {
+            active: true,
+            file_name: "photo.jpg".to_string(),
+        };
+
+        let len = encode_packet(&original_event, 7, 3000, &mut buf).expect("Encode failed");
+        let (header, decoded_event) = decode_packet(&buf[..len]).expect("Decode failed");
+
+        assert_eq!(header.packet_type, PacketType::FileDrag as u8);
         assert_eq!(decoded_event, original_event);
     }
 }

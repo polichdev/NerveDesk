@@ -139,6 +139,14 @@ unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: LPAR
                     if let Ok(mut guard) = LAST_CURSOR_POS.lock() {
                         *guard = Some(POINT { x: return_x, y: return_y });
                     }
+                    if let Ok(sender_guard) = HOOK_SENDER.lock() {
+                        if let Some(ref sender) = *sender_guard {
+                            let _ = sender.try_send(InputEvent::FileDrag {
+                                active: false,
+                                file_name: String::new(),
+                            });
+                        }
+                    }
                 } else if dx != 0 || dy != 0 {
                     let cur_pos = if let Ok(guard) = EDGE_DETECTOR.lock() {
                         guard.as_ref().map(|d| d.virtual_client_pos())
@@ -185,6 +193,10 @@ unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: LPAR
                                     button: MouseButton::Left,
                                     state: ButtonState::Pressed,
                                 });
+                                let _ = sender.try_send(InputEvent::FileDrag {
+                                    active: true,
+                                    file_name: String::new(),
+                                });
                             }
                         }
                     } else {
@@ -203,10 +215,18 @@ unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: LPAR
                     block_event = true;
                 }
                 WM_LBUTTONUP => {
-                    event_to_send = Some(InputEvent::MouseButton {
-                        button: MouseButton::Left,
-                        state: ButtonState::Released,
-                    });
+                    if let Ok(sender_guard) = HOOK_SENDER.lock() {
+                        if let Some(ref sender) = *sender_guard {
+                            let _ = sender.try_send(InputEvent::MouseButton {
+                                button: MouseButton::Left,
+                                state: ButtonState::Released,
+                            });
+                            let _ = sender.try_send(InputEvent::FileDrag {
+                                active: false,
+                                file_name: String::new(),
+                            });
+                        }
+                    }
                     block_event = true;
                 }
                 WM_RBUTTONDOWN => {

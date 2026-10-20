@@ -21,6 +21,9 @@ use net::{
 mod viewer;
 use viewer::ProjectionViewer;
 
+mod badge;
+use badge::DragBadge;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppMetrics {
     pub mode: String,
@@ -78,6 +81,7 @@ pub struct AppState {
     pub projection_viewer: Arc<ProjectionViewer>,
     pub projection_cancel: Arc<AtomicBool>,
     pub file_transfer_enabled: Arc<AtomicBool>,
+    pub drag_badge: Arc<DragBadge>,
 }
 
 fn update_mode_string(state: &AppState) {
@@ -336,12 +340,51 @@ async fn start_host(
         .await;
 
     let heartbeat_name = my_name.clone();
+    let is_file_transfer_enabled = state.file_transfer_enabled.clone();
+    let paired_key_for_input = state.paired_security_key.clone();
+    let target_file_addr = format!("{}:{}", target_addr.ip(), net::FILE_TRANSFER_PORT);
+
     let input_worker = tokio::spawn(async move {
         let mut last_hb = Instant::now();
         while is_running_in.load(Ordering::SeqCst) {
             match event_rx.try_recv() {
                 Ok(event) => {
-                    let _ = input_sender.send_event(&event).await;
+                    if let InputEvent::FileDrag { active, .. } = event {
+                        if active && is_file_transfer_enabled.load(Ordering::Relaxed) {
+                            let dragged_files = net::get_dragged_or_selected_files();
+                            if let Some(first) = dragged_files.first() {
+                                let file_name = first
+                                    .file_name()
+                                    .and_then(|n| n.to_str())
+                                    .unwrap_or("file")
+                                    .to_string();
+                                let _ = input_sender
+                                    .send_event(&InputEvent::FileDrag {
+                                        active: true,
+                                        file_name,
+                                    })
+                                    .await;
+                                let token = if let Ok(guard) = paired_key_for_input.lock() {
+                                    guard.clone().unwrap_or_default()
+                                } else {
+                                    String::new()
+                                };
+                                let addr = target_file_addr.clone();
+                                tokio::spawn(async move {
+                                    let _ = net::FileTransferClient::send_files(&addr, &token, &dragged_files).await;
+                                });
+                            }
+                        } else {
+                            let _ = input_sender
+                                .send_event(&InputEvent::FileDrag {
+                                    active: false,
+                                    file_name: String::new(),
+                                })
+                                .await;
+                        }
+                    } else {
+                        let _ = input_sender.send_event(&event).await;
+                    }
                 }
                 Err(crossbeam_channel::TryRecvError::Empty) => {
                     if last_hb.elapsed() >= Duration::from_secs(1) {
@@ -740,6 +783,8 @@ async fn send_file_to_peer(path: String, state: State<'_, AppState>) -> Result<S
 
 pub fn run() {
     let projection_viewer = Arc::new(ProjectionViewer::new());
+    let drag_badge = Arc::new(DragBadge::new());
+
     let state = AppState {
         is_kvm_active: Arc::new(AtomicBool::new(false)),
         is_projecting: Arc::new(AtomicBool::new(false)),
@@ -762,6 +807,7 @@ pub fn run() {
         projection_viewer,
         projection_cancel: Arc::new(AtomicBool::new(false)),
         file_transfer_enabled: Arc::new(AtomicBool::new(true)),
+        drag_badge: drag_badge.clone(),
     };
 
     let discovered_for_disc = state.discovered_devices.clone();
@@ -771,6 +817,9 @@ pub fn run() {
     let live_rtt_for_rx = state.live_rtt_us.clone();
     let paired_ip_for_rx = state.paired_peer_ip.clone();
     let keyboard_sharing_for_rx = state.keyboard_sharing.clone();
+    let drag_badge_for_rx = drag_badge.clone();
+    let app_handle_for_drop = Arc::new(Mutex::new(None::<tauri::AppHandle>));
+    let app_handle_for_setup = app_handle_for_drop.clone();
 
     tauri::async_runtime::spawn(async move {
         let my_name = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Desktop-PC".into());
@@ -815,7 +864,7 @@ pub fn run() {
                                     video_port: beacon.video_port,
                                     screen_width: beacon.screen_width,
                                     screen_height: beacon.screen_height,
-                                },
+                                    },
                             );
                         }
                         if let Ok(mut cur) = peer_device_for_disc.lock() {
@@ -869,6 +918,57 @@ pub fn run() {
                     if let InputEvent::Keyboard { .. } = event {
                         if !keyboard_sharing_for_rx.load(Ordering::Relaxed) {
                             continue;
+                        }
+                    }
+
+                    if let InputEvent::FileDrag { active, ref file_name } = event {
+                        if active {
+                            drag_badge_for_rx.show(0, 0, file_name);
+                        } else {
+                            drag_badge_for_rx.hide();
+                            net::clear_file_drag();
+                        }
+                        continue;
+                    }
+
+                    if let InputEvent::CursorPosition { x, y } = event {
+                        if drag_badge_for_rx.is_active() {
+                            drag_badge_for_rx.update_position(x, y);
+                        }
+                    }
+
+                    if let InputEvent::MouseMove { .. } = event {
+                        if drag_badge_for_rx.is_active() {
+                            unsafe {
+                                let mut pt = windows::Win32::Foundation::POINT::default();
+                                if windows::Win32::UI::WindowsAndMessaging::GetCursorPos(&mut pt).is_ok() {
+                                    drag_badge_for_rx.update_position(pt.x, pt.y);
+                                }
+                            }
+                        }
+                    }
+
+                    if let InputEvent::MouseButton {
+                        button: common::MouseButton::Left,
+                        state: common::ButtonState::Released,
+                    } = event
+                    {
+                        if drag_badge_for_rx.is_active() {
+                            drag_badge_for_rx.hide();
+                            let target_dir = net::get_target_dir_at_cursor();
+                            let moved = net::commit_file_drop(target_dir);
+                            if !moved.is_empty() {
+                                if let Ok(guard) = app_handle_for_drop.lock() {
+                                    if let Some(ref handle) = *guard {
+                                        use tauri::Emitter;
+                                        let names: Vec<String> = moved
+                                            .iter()
+                                            .filter_map(|p| p.file_name().and_then(|n| n.to_str()).map(|s| s.to_string()))
+                                            .collect();
+                                        let _ = handle.emit("file-received", names);
+                                    }
+                                }
+                            }
                         }
                     }
 
@@ -972,17 +1072,8 @@ pub fn run() {
     let (clip_tx, clip_rx) = crossbeam_channel::unbounded::<clipboard::ClipboardPayload>();
     let clipboard_hash_for_listener = state.clipboard_hash.clone();
     let clipboard_sharing_for_tx = state.clipboard_sharing.clone();
-    let file_transfer_enabled_for_tx = state.file_transfer_enabled.clone();
     let paired_key_for_tx = state.paired_security_key.clone();
     let paired_ip_for_tx = state.paired_peer_ip.clone();
-
-    let (file_queue_tx, mut file_queue_rx) = tokio::sync::mpsc::unbounded_channel::<(String, String, Vec<String>)>();
-    tauri::async_runtime::spawn(async move {
-        while let Some((target_ip, token, files)) = file_queue_rx.recv().await {
-            let target_addr = format!("{}:{}", target_ip, net::FILE_TRANSFER_PORT);
-            let _ = net::FileTransferClient::send_files(&target_addr, &token, &files).await;
-        }
-    });
 
     if let Ok(listener) = clipboard::ClipboardListener::start(clip_tx, clipboard_hash_for_listener) {
         std::mem::forget(listener);
@@ -1024,11 +1115,6 @@ pub fn run() {
                                     let _ = stream.write_all(&bytes);
                                     let _ = stream.flush();
                                 }
-                            }
-                        }
-                        clipboard::ClipboardPayload::Files(files) => {
-                            if file_transfer_enabled_for_tx.load(Ordering::Relaxed) {
-                                let _ = file_queue_tx.send((ip, token, files));
                             }
                         }
                         _ => {}
@@ -1083,14 +1169,17 @@ pub fn run() {
 
     if let Err(e) = tauri::Builder::default()
         .manage(state)
-        .setup(|app| {
+        .setup(move |app| {
+            if let Ok(mut guard) = app_handle_for_setup.lock() {
+                *guard = Some(app.handle().clone());
+            }
+
             let file_key_ref = app.state::<AppState>().paired_security_key.clone();
             let file_enabled = app.state::<AppState>().file_transfer_enabled.clone();
             let file_app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 use tauri::Emitter;
                 let cb = move |files: Vec<std::path::PathBuf>| {
-                    let _ = clipboard::ClipboardWriter::write_files(&files);
                     let names: Vec<String> = files
                         .iter()
                         .filter_map(|p| p.file_name().and_then(|n| n.to_str()).map(|s| s.to_string()))
