@@ -475,6 +475,7 @@ async fn start_virtual_display_cast(
         let mut frame_count = 0u64;
         let mut total_bytes = 0u64;
         let mut last_report = Instant::now();
+        let mut last_sent_time = Instant::now();
         let mut raw_buf = vec![0u8; (w * h * 4) as usize];
 
         while is_running_vid.load(Ordering::SeqCst) {
@@ -493,6 +494,7 @@ async fn start_virtual_display_cast(
                                 if let Ok(sent_bytes) = video_sender.send_frame(&encoded_frame).await {
                                     total_bytes += sent_bytes as u64;
                                     frame_count += 1;
+                                    last_sent_time = Instant::now();
                                 }
                             }
                             Err(_) => {}
@@ -500,6 +502,16 @@ async fn start_virtual_display_cast(
                     }
                 }
                 Ok(None) => {
+                    if last_sent_time.elapsed() >= Duration::from_millis(500) && frame_count > 0 {
+                        let is_key = frame_count % 60 == 0;
+                        if let Ok(encoded_frame) = encoder.encode_bgra(w, h, &raw_buf, now_us, is_key) {
+                            if let Ok(sent_bytes) = video_sender.send_frame(&encoded_frame).await {
+                                total_bytes += sent_bytes as u64;
+                                frame_count += 1;
+                                last_sent_time = Instant::now();
+                            }
+                        }
+                    }
                     tokio::time::sleep(Duration::from_millis(5)).await;
                 }
                 Err(_) => {
@@ -615,7 +627,7 @@ fn install_virtual_display_driver() -> Result<String, String> {
         .args([
             "-NoProfile",
             "-Command",
-            "Start-Process winget -ArgumentList 'install --id=VirtualDrivers.Virtual-Display-Driver -e --accept-source-agreements --accept-package-agreements' -Verb RunAs",
+            "$w = (Get-Command winget.exe -ErrorAction SilentlyContinue).Source; if (-not $w) { $w = \"$env:LOCALAPPDATA\\Microsoft\\WindowsApps\\winget.exe\" }; Start-Process powershell -ArgumentList \"-NoExit -Command & `\"$w`\" install --id=VirtualDrivers.Virtual-Display-Driver -e --accept-source-agreements --accept-package-agreements\" -Verb RunAs",
         ])
         .spawn()
         .map_err(|e| e.to_string())?;

@@ -3,15 +3,17 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
-    GetDC, ReleaseDC, SetBrushOrgEx, SetStretchBltMode, StretchDIBits, BITMAPINFO,
-    BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HALFTONE, RGBQUAD, SRCCOPY,
+    GetDC, GetDeviceCaps, ReleaseDC, SetBrushOrgEx, SetStretchBltMode, StretchDIBits, BITMAPINFO,
+    BITMAPINFOHEADER, BI_RGB, DESKTOPHORZRES, DESKTOPVERTRES, DIB_RGB_COLORS, HALFTONE, RGBQUAD,
+    SRCCOPY,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::VK_ESCAPE;
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DispatchMessageW, GetClientRect, GetSystemMetrics,
     PeekMessageW, RegisterClassW, SetWindowPos, ShowWindow, TranslateMessage, MSG, PM_REMOVE,
     SM_CXSCREEN, SM_CYSCREEN, SWP_HIDEWINDOW, SWP_NOACTIVATE, SWP_SHOWWINDOW, SW_HIDE, SW_SHOW,
-    WM_DESTROY, WM_KEYDOWN, WNDCLASSW, WS_EX_TOPMOST, WS_POPUP, HWND_TOPMOST,
+    WM_DESTROY, WM_KEYDOWN, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP,
+    WM_RBUTTONDOWN, WM_RBUTTONUP, WNDCLASSW, WS_EX_TOPMOST, WS_POPUP, HWND_TOPMOST,
 };
 
 pub struct ProjectionViewer {
@@ -28,7 +30,6 @@ impl ProjectionViewer {
 
         let slot_clone = frame_slot.clone();
         let active_clone = is_active.clone();
-        let time_clone = last_frame_time.clone();
 
         std::thread::Builder::new()
             .name("nerve-projection-viewer".into())
@@ -88,23 +89,32 @@ impl ProjectionViewer {
                     }
 
                     let active = active_clone.load(Ordering::Relaxed);
-                    let elapsed = if let Ok(guard) = time_clone.lock() {
-                        guard.elapsed()
-                    } else {
-                        std::time::Duration::from_secs(10)
-                    };
 
-                    if active && elapsed < std::time::Duration::from_secs(3) {
+                    if active {
                         if !is_shown {
-                            let cur_sw = GetSystemMetrics(SM_CXSCREEN);
-                            let cur_sh = GetSystemMetrics(SM_CYSCREEN);
+                            let (sw, sh) = {
+                                let hdc = GetDC(HWND::default());
+                                let mut w = 0;
+                                let mut h = 0;
+                                if !hdc.is_invalid() {
+                                    w = GetDeviceCaps(hdc, DESKTOPHORZRES);
+                                    h = GetDeviceCaps(hdc, DESKTOPVERTRES);
+                                    let _ = ReleaseDC(HWND::default(), hdc);
+                                }
+                                if w == 0 || h == 0 {
+                                    w = GetSystemMetrics(SM_CXSCREEN);
+                                    h = GetSystemMetrics(SM_CYSCREEN);
+                                }
+                                (w, h)
+                            };
+
                             let _ = SetWindowPos(
                                 hwnd,
                                 HWND_TOPMOST,
                                 0,
                                 0,
-                                cur_sw,
-                                cur_sh,
+                                sw,
+                                sh,
                                 SWP_SHOWWINDOW,
                             );
                             let _ = ShowWindow(hwnd, SW_SHOW);
@@ -167,7 +177,6 @@ impl ProjectionViewer {
                     } else if is_shown {
                         let _ = ShowWindow(hwnd, SW_HIDE);
                         is_shown = false;
-                        active_clone.store(false, Ordering::Relaxed);
                     }
 
                     std::thread::sleep(std::time::Duration::from_millis(8));
@@ -212,6 +221,9 @@ unsafe extern "system" fn projection_wnd_proc(
                 let _ = ShowWindow(hwnd, SW_HIDE);
                 return LRESULT(0);
             }
+        }
+        WM_LBUTTONDOWN | WM_LBUTTONUP | WM_RBUTTONDOWN | WM_RBUTTONUP | WM_MBUTTONDOWN | WM_MBUTTONUP => {
+            return LRESULT(0);
         }
         _ => {}
     }

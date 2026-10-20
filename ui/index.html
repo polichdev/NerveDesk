@@ -1215,6 +1215,20 @@
       if (!isProjecting) {
         const mode = document.getElementById('castModeSelect').value;
         const target = localStorage.getItem('paired_device_name') || 'laptop';
+
+        if (mode === 'extend') {
+          try {
+            const hasSecondDisplay = await callTauri('get_display_driver_status');
+            if (!hasSecondDisplay) {
+              const ok = confirm("У системі виявлено лише 1 монітор. Щоб монітор ноутбука став окремим незалежним 2-м монітором, потрібен драйвер віртуального дисплея IddCx.\n\nВстановити IddCx Driver зараз?");
+              if (ok) {
+                installDriver();
+                return;
+              }
+            }
+          } catch (_) {}
+        }
+
         try {
           await callTauri('start_virtual_display_cast', {
             targetName: target,
