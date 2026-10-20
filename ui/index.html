@@ -963,34 +963,16 @@
         <div class="setting-card">
           <div class="setting-left">
             <div class="setting-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="6" y1="8" x2="6.01" y2="8"/><line x1="10" y1="8" x2="10.01" y2="8"/><line x1="14" y1="8" x2="14.01" y2="8"/><line x1="18" y1="8" x2="18.01" y2="8"/><line x1="6" y1="12" x2="6.01" y2="12"/><line x1="10" y1="12" x2="10.01" y2="12"/><line x1="14" y1="12" x2="14.01" y2="12"/><line x1="18" y1="12" x2="18.01" y2="12"/><line x1="7" y1="16" x2="17" y2="16"/></svg>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg>
             </div>
             <div class="setting-text">
-              <div class="setting-name">Share Keyboard Input</div>
-              <div class="setting-desc">Forward keystrokes to the secondary computer when the mouse crosses screen boundaries.</div>
+              <div class="setting-name">Run at System Startup</div>
+              <div class="setting-desc">Automatically launch NerveDesk in the background when Windows boots up.</div>
             </div>
           </div>
           <div class="setting-right">
             <label class="switch">
-              <input type="checkbox" id="settingKbSharing" checked onchange="onKeyboardSharingToggle(this.checked)">
-              <span class="slider"></span>
-            </label>
-          </div>
-        </div>
-
-        <div class="setting-card">
-          <div class="setting-left">
-            <div class="setting-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
-            </div>
-            <div class="setting-text">
-              <div class="setting-name">Share Clipboard</div>
-              <div class="setting-desc">Automatically synchronize copied text and items between connected computers.</div>
-            </div>
-          </div>
-          <div class="setting-right">
-            <label class="switch">
-              <input type="checkbox" id="settingClipSharing" checked onchange="onClipboardSharingToggle(this.checked)">
+              <input type="checkbox" id="settingAutostart" onchange="onAutostartToggle(this.checked)">
               <span class="slider"></span>
             </label>
           </div>
@@ -1011,36 +993,6 @@
               <input type="checkbox" checked>
               <span class="slider"></span>
             </label>
-          </div>
-        </div>
-
-        <div class="setting-card">
-          <div class="setting-left">
-            <div class="setting-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-            </div>
-            <div class="setting-text">
-              <div class="setting-name">Hardware Graphics Acceleration</div>
-              <div class="setting-desc">DirectX 11 hardware-accelerated desktop duplication and encoding.</div>
-            </div>
-          </div>
-          <div class="setting-right">
-            <span style="font-size: 12px; font-weight: 600; color: var(--success);">Direct3D 11 Active</span>
-          </div>
-        </div>
-
-        <div class="setting-card">
-          <div class="setting-left">
-            <div class="setting-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            </div>
-            <div class="setting-text">
-              <div class="setting-name">Runtime Architecture</div>
-              <div class="setting-desc">Self-contained statically linked Microsoft Visual C++ runtime.</div>
-            </div>
-          </div>
-          <div class="setting-right">
-            <span style="font-size: 12px; font-family: var(--font-mono); color: var(--text-muted);">+crt-static</span>
           </div>
         </div>
       </div>
@@ -1473,19 +1425,19 @@
     function onKeyboardSharingToggle(checked) {
       localStorage.setItem('keyboard_sharing_enabled', checked ? 'true' : 'false');
       const e1 = document.getElementById('kvmKbToggle');
-      const e2 = document.getElementById('settingKbSharing');
       if (e1) e1.checked = checked;
-      if (e2) e2.checked = checked;
       callTauri('set_keyboard_sharing_enabled', { enabled: checked }).catch(() => {});
     }
 
     function onClipboardSharingToggle(checked) {
       localStorage.setItem('clipboard_sharing_enabled', checked ? 'true' : 'false');
       const e1 = document.getElementById('kvmClipToggle');
-      const e2 = document.getElementById('settingClipSharing');
       if (e1) e1.checked = checked;
-      if (e2) e2.checked = checked;
       callTauri('set_clipboard_sharing_enabled', { enabled: checked }).catch(() => {});
+    }
+
+    function onAutostartToggle(checked) {
+      callTauri('set_autostart_enabled', { enabled: checked }).catch(() => {});
     }
 
     function stopService() {
@@ -1547,16 +1499,17 @@
       }
       const kbSharing = localStorage.getItem('keyboard_sharing_enabled') !== 'false';
       const clipSharing = localStorage.getItem('clipboard_sharing_enabled') !== 'false';
-      const kbElem = document.getElementById('settingKbSharing');
-      const clipElem = document.getElementById('settingClipSharing');
       const kvmKb = document.getElementById('kvmKbToggle');
       const kvmClip = document.getElementById('kvmClipToggle');
-      if (kbElem) kbElem.checked = kbSharing;
-      if (clipElem) clipElem.checked = clipSharing;
       if (kvmKb) kvmKb.checked = kbSharing;
       if (kvmClip) kvmClip.checked = clipSharing;
       callTauri('set_keyboard_sharing_enabled', { enabled: kbSharing }).catch(() => {});
       callTauri('set_clipboard_sharing_enabled', { enabled: clipSharing }).catch(() => {});
+      try {
+        const autostart = await callTauri('get_autostart_enabled');
+        const autoElem = document.getElementById('settingAutostart');
+        if (autoElem) autoElem.checked = !!autostart;
+      } catch (e) {}
       checkDriverStatus();
     }
 

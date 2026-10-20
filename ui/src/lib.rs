@@ -762,6 +762,48 @@ fn set_file_transfer_enabled(enabled: bool, state: State<'_, AppState>) {
 }
 
 #[command]
+fn get_autostart_enabled() -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(output) = std::process::Command::new("reg")
+            .args(["query", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", "NerveDesk"])
+            .output()
+        {
+            return output.status.success();
+        }
+    }
+    false
+}
+
+#[command]
+fn set_autostart_enabled(enabled: bool) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        if enabled {
+            let exe_path = std::env::current_exe().map_err(|e| e.to_string())?;
+            let exe_str = exe_path.to_str().ok_or_else(|| "Invalid exe path".to_string())?;
+            let val = format!("\"{}\" --minimized", exe_str);
+            let status = std::process::Command::new("reg")
+                .args(["add", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", "NerveDesk", "/t", "REG_SZ", "/d", &val, "/f"])
+                .status()
+                .map_err(|e| e.to_string())?;
+            if !status.success() {
+                return Err("Failed to register autostart in Windows Registry".into());
+            }
+        } else {
+            let _ = std::process::Command::new("reg")
+                .args(["delete", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", "NerveDesk", "/f"])
+                .status();
+        }
+        Ok(())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(())
+    }
+}
+
+#[command]
 async fn send_file_to_peer(path: String, state: State<'_, AppState>) -> Result<String, String> {
     let target_ip = if let Ok(guard) = state.paired_peer_ip.lock() {
         guard.clone()
@@ -1221,6 +1263,9 @@ pub fn run() {
                         }
                     }
                 }
+                if std::env::args().any(|arg| arg == "--minimized") {
+                    let _ = window.hide();
+                }
             }
 
             let quit_i = MenuItem::with_id(app, "quit", "Exit NerveDesk", true, None::<&str>)?;
@@ -1294,7 +1339,9 @@ pub fn run() {
             stop_virtual_display_cast,
             open_received_folder,
             send_file_to_peer,
-            set_file_transfer_enabled
+            set_file_transfer_enabled,
+            get_autostart_enabled,
+            set_autostart_enabled
         ])
         .run(tauri::generate_context!())
     {
