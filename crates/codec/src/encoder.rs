@@ -93,6 +93,51 @@ impl HardwareVideoEncoder {
         })
     }
 
+    pub fn encode_bgra(
+        &self,
+        width: u32,
+        height: u32,
+        bgra: &[u8],
+        timestamp_us: u64,
+        force_keyframe: bool,
+    ) -> Result<EncodedVideoFrame> {
+        let frame_id = self.frame_counter.fetch_add(1, Ordering::Relaxed);
+        let is_keyframe = force_keyframe
+            || (frame_id % self.config.keyframe_interval as u64 == 0)
+            || (frame_id == 1);
+
+        let (target_w, target_h, src_data) = if width > 1280 {
+            let tw = width / 2;
+            let th = height / 2;
+            let mut scaled = vec![0u8; (tw * th * 4) as usize];
+            for y in 0..th {
+                let src_row = (y * 2 * width * 4) as usize;
+                let dst_row = (y * tw * 4) as usize;
+                for x in 0..tw {
+                    let s = src_row + (x * 2 * 4) as usize;
+                    let d = dst_row + (x * 4) as usize;
+                    scaled[d..d + 4].copy_from_slice(&bgra[s..s + 4]);
+                }
+            }
+            (tw, th, scaled)
+        } else {
+            (width, height, bgra.to_vec())
+        };
+
+        let compressed = miniz_oxide::deflate::compress_to_vec_zlib(&src_data, 1);
+        let mut payload = Vec::with_capacity(4 + compressed.len());
+        payload.extend_from_slice(&(target_w as u16).to_le_bytes());
+        payload.extend_from_slice(&(target_h as u16).to_le_bytes());
+        payload.extend_from_slice(&compressed);
+
+        Ok(EncodedVideoFrame {
+            frame_id,
+            is_keyframe,
+            timestamp_us,
+            data: payload,
+        })
+    }
+
     pub fn config(&self) -> &VideoEncoderConfig {
         &self.config
     }

@@ -11,3 +11,5 @@ windows = { workspace = true }
 bytemuck = { workspace = true }
 tracing = { workspace = true }
 thiserror = { workspace = true }
+miniz_oxide = "0.8"
+

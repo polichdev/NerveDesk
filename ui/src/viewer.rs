@@ -1,0 +1,200 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
+use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
+use windows::Win32::Graphics::Gdi::{
+    GetDC, ReleaseDC, StretchDIBits, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
+    RGBQUAD, SRCCOPY,
+};
+use windows::Win32::UI::Input::KeyboardAndMouse::VK_ESCAPE;
+use windows::Win32::UI::WindowsAndMessaging::{
+    CreateWindowExW, DefWindowProcW, GetSystemMetrics, PeekMessageW, RegisterClassW,
+    SetWindowPos, ShowWindow, DispatchMessageW, TranslateMessage, MSG, PM_REMOVE,
+    SM_CXSCREEN, SM_CYSCREEN, SWP_NOMOVE, SWP_NOSIZE, SW_HIDE, SW_SHOW, WM_DESTROY,
+    WM_KEYDOWN, WNDCLASSW, WS_EX_TOPMOST, WS_POPUP, HWND_TOPMOST,
+};
+
+pub struct ProjectionViewer {
+    frame_slot: Arc<Mutex<Option<(u32, u32, Vec<u8>)>>>,
+    is_active: Arc<AtomicBool>,
+    last_frame_time: Arc<Mutex<Instant>>,
+}
+
+impl ProjectionViewer {
+    pub fn new() -> Self {
+        let frame_slot: Arc<Mutex<Option<(u32, u32, Vec<u8>)>>> = Arc::new(Mutex::new(None));
+        let is_active = Arc::new(AtomicBool::new(false));
+        let last_frame_time = Arc::new(Mutex::new(Instant::now()));
+
+        let slot_clone = frame_slot.clone();
+        let active_clone = is_active.clone();
+        let time_clone = last_frame_time.clone();
+
+        std::thread::Builder::new()
+            .name("nerve-projection-viewer".into())
+            .spawn(move || unsafe {
+                let class_name = windows::core::w!("NerveDeskProjectionWindowClass");
+                let wnd_class = WNDCLASSW {
+                    lpfnWndProc: Some(projection_wnd_proc),
+                    hInstance: HINSTANCE::default(),
+                    lpszClassName: class_name,
+                    ..Default::default()
+                };
+
+                let _ = RegisterClassW(&wnd_class);
+
+                let sw = GetSystemMetrics(SM_CXSCREEN);
+                let sh = GetSystemMetrics(SM_CYSCREEN);
+
+                let hwnd = match CreateWindowExW(
+                    WS_EX_TOPMOST,
+                    class_name,
+                    windows::core::w!("NerveDesk Projection Display"),
+                    WS_POPUP,
+                    0,
+                    0,
+                    sw,
+                    sh,
+                    HWND::default(),
+                    None,
+                    HINSTANCE::default(),
+                    None,
+                ) {
+                    Ok(h) => h,
+                    Err(_) => return,
+                };
+
+                let _ = SetWindowPos(
+                    hwnd,
+                    HWND_TOPMOST,
+                    0,
+                    0,
+                    sw,
+                    sh,
+                    SWP_NOMOVE | SWP_NOSIZE,
+                );
+
+                let mut is_shown = false;
+
+                loop {
+                    let mut msg = MSG::default();
+                    while PeekMessageW(&mut msg, HWND::default(), 0, 0, PM_REMOVE).as_bool() {
+                        if msg.message == WM_DESTROY {
+                            return;
+                        }
+                        let _ = TranslateMessage(&msg);
+                        DispatchMessageW(&msg);
+                    }
+
+                    let active = active_clone.load(Ordering::Relaxed);
+                    let elapsed = if let Ok(guard) = time_clone.lock() {
+                        guard.elapsed()
+                    } else {
+                        std::time::Duration::from_secs(10)
+                    };
+
+                    if active && elapsed < std::time::Duration::from_secs(3) {
+                        if !is_shown {
+                            let _ = ShowWindow(hwnd, SW_SHOW);
+                            is_shown = true;
+                        }
+
+                        let frame_opt = if let Ok(mut guard) = slot_clone.lock() {
+                            guard.take()
+                        } else {
+                            None
+                        };
+
+                        if let Some((w, h, pixels)) = frame_opt {
+                            if !pixels.is_empty() {
+                                let bmi = BITMAPINFO {
+                                    bmiHeader: BITMAPINFOHEADER {
+                                        biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                                        biWidth: w as i32,
+                                        biHeight: -(h as i32),
+                                        biPlanes: 1,
+                                        biBitCount: 32,
+                                        biCompression: BI_RGB.0,
+                                        biSizeImage: 0,
+                                        biXPelsPerMeter: 0,
+                                        biYPelsPerMeter: 0,
+                                        biClrUsed: 0,
+                                        biClrImportant: 0,
+                                    },
+                                    bmiColors: [RGBQUAD::default()],
+                                };
+
+                                let hdc = GetDC(hwnd);
+                                if !hdc.is_invalid() {
+                                    let _ = StretchDIBits(
+                                        hdc,
+                                        0,
+                                        0,
+                                        sw,
+                                        sh,
+                                        0,
+                                        0,
+                                        w as i32,
+                                        h as i32,
+                                        Some(pixels.as_ptr() as *const _),
+                                        &bmi,
+                                        DIB_RGB_COLORS,
+                                        SRCCOPY,
+                                    );
+                                    let _ = ReleaseDC(hwnd, hdc);
+                                }
+                            }
+                        }
+                    } else if is_shown {
+                        let _ = ShowWindow(hwnd, SW_HIDE);
+                        is_shown = false;
+                        active_clone.store(false, Ordering::Relaxed);
+                    }
+
+                    std::thread::sleep(std::time::Duration::from_millis(8));
+                }
+            })
+            .expect("Failed to spawn projection viewer thread");
+
+        Self {
+            frame_slot,
+            is_active,
+            last_frame_time,
+        }
+    }
+
+    pub fn present_frame(&self, width: u32, height: u32, bgra: Vec<u8>) {
+        if let Ok(mut time_guard) = self.last_frame_time.lock() {
+            *time_guard = Instant::now();
+        }
+        self.is_active.store(true, Ordering::Relaxed);
+        if let Ok(mut guard) = self.frame_slot.lock() {
+            *guard = Some((width, height, bgra));
+        }
+    }
+
+    pub fn stop(&self) {
+        self.is_active.store(false, Ordering::Relaxed);
+        if let Ok(mut guard) = self.frame_slot.lock() {
+            *guard = None;
+        }
+    }
+}
+
+unsafe extern "system" fn projection_wnd_proc(
+    hwnd: HWND,
+    msg: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
+    match msg {
+        WM_KEYDOWN => {
+            if wparam.0 == VK_ESCAPE.0 as usize {
+                let _ = ShowWindow(hwnd, SW_HIDE);
+                return LRESULT(0);
+            }
+        }
+        _ => {}
+    }
+    DefWindowProcW(hwnd, msg, wparam, lparam)
+}

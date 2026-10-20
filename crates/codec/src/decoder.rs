@@ -22,6 +22,7 @@ pub struct DecodedVideoFrame {
     pub timestamp_us: u64,
     pub width: u32,
     pub height: u32,
+    pub bgra: Vec<u8>,
 }
 
 pub struct HardwareVideoDecoder {
@@ -52,18 +53,43 @@ impl HardwareVideoDecoder {
             return Err(NerveError::Protocol("Empty video frame payload".into()));
         }
 
+        self.last_frame_id = frame_id;
+
+        if payload.len() >= 4 {
+            let width = u16::from_le_bytes([payload[0], payload[1]]) as u32;
+            let height = u16::from_le_bytes([payload[2], payload[3]]) as u32;
+            if width > 0 && width <= 7680 && height > 0 && height <= 4320 {
+                if let Ok(bgra) = miniz_oxide::inflate::decompress_to_vec_zlib(&payload[4..]) {
+                    trace!(
+                        "Decoded video frame {}: {}x{} ({} bytes uncompressed)",
+                        frame_id,
+                        width,
+                        height,
+                        bgra.len()
+                    );
+                    return Ok(DecodedVideoFrame {
+                        frame_id,
+                        timestamp_us,
+                        width,
+                        height,
+                        bgra,
+                    });
+                }
+            }
+        }
+
         trace!(
             "Decoded video frame {}: {} bytes received",
             frame_id,
             payload.len()
         );
-        self.last_frame_id = frame_id;
 
         Ok(DecodedVideoFrame {
             frame_id,
             timestamp_us,
             width: self.config.width,
             height: self.config.height,
+            bgra: Vec::new(),
         })
     }
 }

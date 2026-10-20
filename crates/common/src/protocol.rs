@@ -249,6 +249,12 @@ pub struct PingPayload {
     pub client_timestamp_us: u64,
 }
 
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
+pub struct HeartbeatPayload {
+    pub device_name: [u8; 32],
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum InputEvent {
     MouseMove {
@@ -279,7 +285,9 @@ pub enum InputEvent {
     Pong {
         client_timestamp_us: u64,
     },
-    Heartbeat,
+    Heartbeat {
+        device_name: String,
+    },
 }
 
 pub const MAX_PACKET_SIZE: usize = 64;
@@ -407,13 +415,19 @@ pub fn encode_packet(
             buf[header_size..total].copy_from_slice(bytemuck::bytes_of(&payload));
             Ok(total)
         }
-        InputEvent::Heartbeat => {
-            let total = header_size;
+        InputEvent::Heartbeat { device_name } => {
+            let mut payload = HeartbeatPayload { device_name: [0; 32] };
+            let bytes = device_name.as_bytes();
+            let len = bytes.len().min(32);
+            payload.device_name[..len].copy_from_slice(&bytes[..len]);
+            let payload_size = std::mem::size_of::<HeartbeatPayload>();
+            let total = header_size + payload_size;
             if buf.len() < total {
                 return Err(NerveError::Protocol("Buffer too small for Heartbeat".into()));
             }
             let header = PacketHeader::new(PacketType::Heartbeat, sequence, timestamp_us);
             buf[..header_size].copy_from_slice(bytemuck::bytes_of(&header));
+            buf[header_size..total].copy_from_slice(bytemuck::bytes_of(&payload));
             Ok(total)
         }
     }
@@ -508,7 +522,17 @@ pub fn decode_packet(buf: &[u8]) -> Result<(PacketHeader, InputEvent)> {
                 client_timestamp_us: payload.client_timestamp_us,
             }
         }
-        PacketType::Heartbeat => InputEvent::Heartbeat,
+        PacketType::Heartbeat => {
+            let payload_size = std::mem::size_of::<HeartbeatPayload>();
+            if payload_bytes.len() >= payload_size {
+                let payload: HeartbeatPayload = *bytemuck::from_bytes(&payload_bytes[..payload_size]);
+                let end = payload.device_name.iter().position(|&b| b == 0).unwrap_or(32);
+                let name = String::from_utf8_lossy(&payload.device_name[..end]).to_string();
+                InputEvent::Heartbeat { device_name: name }
+            } else {
+                InputEvent::Heartbeat { device_name: String::new() }
+            }
+        }
     };
 
     Ok((header, event))
@@ -562,6 +586,20 @@ mod tests {
         let (header, decoded_event) = decode_packet(&buf[..len]).expect("Decode failed");
 
         assert_eq!(header.packet_type, PacketType::Keyboard as u8);
+        assert_eq!(decoded_event, original_event);
+    }
+
+    #[test]
+    fn test_heartbeat_roundtrip() {
+        let mut buf = [0u8; MAX_PACKET_SIZE];
+        let original_event = InputEvent::Heartbeat {
+            device_name: "DESKTOP-EH07EJM".to_string(),
+        };
+
+        let len = encode_packet(&original_event, 5, 2000, &mut buf).expect("Encode failed");
+        let (header, decoded_event) = decode_packet(&buf[..len]).expect("Decode failed");
+
+        assert_eq!(header.packet_type, PacketType::Heartbeat as u8);
         assert_eq!(decoded_event, original_event);
     }
 }

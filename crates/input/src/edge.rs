@@ -209,6 +209,10 @@ impl EdgeDetector {
         None
     }
 
+    pub fn virtual_client_pos(&self) -> (i32, i32) {
+        (self.virtual_client_x, self.virtual_client_y)
+    }
+
     pub fn set_location(&mut self, location: ActiveLocation) {
         self.active_location = location;
     }

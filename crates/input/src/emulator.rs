@@ -139,7 +139,20 @@ impl InputEmulator {
         state: KeyState,
         is_extended: bool,
     ) -> Result<()> {
-        let mut flags = windows::Win32::UI::Input::KeyboardAndMouse::KEYBD_EVENT_FLAGS(0);
+        let scan = if scan_code != 0 {
+            scan_code
+        } else if vk_code != 0 {
+            unsafe {
+                windows::Win32::UI::Input::KeyboardAndMouse::MapVirtualKeyW(
+                    vk_code as u32,
+                    windows::Win32::UI::Input::KeyboardAndMouse::MAPVK_VK_TO_VSC,
+                ) as u16
+            }
+        } else {
+            0
+        };
+
+        let mut flags = KEYEVENTF_SCANCODE;
         if state == KeyState::KeyUp {
             flags |= KEYEVENTF_KEYUP;
         }
@@ -147,20 +160,11 @@ impl InputEmulator {
             flags |= KEYEVENTF_EXTENDEDKEY;
         }
 
-        let (vk, scan) = if vk_code != 0 {
-            (VIRTUAL_KEY(vk_code), 0)
-        } else if scan_code != 0 {
-            flags |= KEYEVENTF_SCANCODE;
-            (VIRTUAL_KEY(0), scan_code)
-        } else {
-            return Ok(());
-        };
-
         let input = INPUT {
             r#type: INPUT_KEYBOARD,
             Anonymous: INPUT_0 {
                 ki: KEYBDINPUT {
-                    wVk: vk,
+                    wVk: VIRTUAL_KEY(vk_code),
                     wScan: scan,
                     dwFlags: flags,
                     time: 0,
@@ -173,7 +177,7 @@ impl InputEmulator {
             let sent = SendInput(&[input], std::mem::size_of::<INPUT>() as i32);
             if sent == 0 {
                 let b_vk = (vk_code & 0xFF) as u8;
-                let b_scan = (scan_code & 0xFF) as u8;
+                let b_scan = (scan & 0xFF) as u8;
                 let mut dw_flags = windows::Win32::UI::Input::KeyboardAndMouse::KEYBD_EVENT_FLAGS(0);
                 if state == KeyState::KeyUp {
                     dw_flags |= KEYEVENTF_KEYUP;

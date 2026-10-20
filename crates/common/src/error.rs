@@ -13,6 +13,9 @@ pub enum NerveError {
 
     #[error("Platform error: {0}")]
     Platform(String),
+
+    #[error("Codec error: {0}")]
+    Codec(String),
 }
 
 pub type Result<T> = std::result::Result<T, NerveError>;

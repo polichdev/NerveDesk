@@ -115,7 +115,16 @@ unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: LPAR
                         *guard = Some(POINT { x: return_x, y: return_y });
                     }
                 } else if dx != 0 || dy != 0 {
-                    event_to_send = Some(InputEvent::MouseMove { dx, dy });
+                    let cur_pos = if let Ok(guard) = EDGE_DETECTOR.lock() {
+                        guard.as_ref().map(|d| d.virtual_client_pos())
+                    } else {
+                        None
+                    };
+                    if let Some((vx, vy)) = cur_pos {
+                        event_to_send = Some(InputEvent::CursorPosition { x: vx, y: vy });
+                    } else {
+                        event_to_send = Some(InputEvent::MouseMove { dx, dy });
+                    }
                 }
 
                 block_event = true;
