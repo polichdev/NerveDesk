@@ -47,7 +47,6 @@ impl MirrorSender {
                                 if cursor + 3 <= n {
                                     let len = u16::from_le_bytes([buf[cursor + 1], buf[cursor + 2]]) as usize;
                                     if cursor + 3 + len <= n {
-                                        // Копіюємо у Vec щоб гарантувати вирівнювання для bytemuck::from_bytes
                                         let payload: Vec<u8> = buf[cursor + 3..cursor + 3 + len].to_vec();
                                         if let Ok((_header, event)) = common::decode_packet(&payload) {
                                             let _ = emulator.inject(&event);

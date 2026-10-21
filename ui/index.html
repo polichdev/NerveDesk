@@ -119,12 +119,13 @@
       font-family: var(--font);
       font-size: 14px;
       height: 100vh;
+      height: 100dvh;
       display: flex;
       overflow: hidden;
       transition: background-color 0.2s ease, color 0.2s ease;
     }
 
-    /* Sidebar Navigation */
+
     aside {
       width: 250px;
       background: var(--sidebar-bg);
@@ -208,14 +209,14 @@
       gap: 6px;
     }
 
-    /* Main Container */
+
     .main-wrap {
       flex: 1;
       display: flex;
       flex-direction: column;
       overflow: hidden;
       background: var(--bg);
-      min-width: 0; /* Crucial for flex child resizing */
+      min-width: 0;
     }
 
     .content-area {
@@ -268,7 +269,7 @@
       margin-bottom: 2px;
     }
 
-    /* Responsive Home Grid */
+
     .home-grid {
       display: grid;
       grid-template-columns: 1fr 1.25fr;
@@ -278,7 +279,7 @@
       width: 100%;
     }
 
-    /* Cards */
+
     .setting-card {
       background: var(--card-bg);
       border: 1px solid var(--card-border);
@@ -342,7 +343,7 @@
       flex-wrap: wrap;
     }
 
-    /* Switch */
+
     .switch {
       position: relative;
       display: inline-block;
@@ -389,7 +390,7 @@
       background-color: var(--switch-thumb-checked);
     }
 
-    /* Buttons */
+
     .btn {
       background: var(--accent);
       color: #ffffff;
@@ -479,7 +480,7 @@
       border-color: var(--accent);
     }
 
-    /* Diagnostics Cards */
+
     .diag-card {
       background: var(--card-bg);
       border: 1px solid var(--card-border);
@@ -515,7 +516,7 @@
       color: var(--accent);
     }
 
-    /* Monitor Layout */
+
     .monitor-layout-card {
       background: var(--card-bg);
       border: 1px solid var(--card-border);
@@ -528,6 +529,7 @@
 
     .monitors-row {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
       justify-content: flex-start;
       gap: 12px;
@@ -536,7 +538,7 @@
       border: 1px solid var(--card-border-subtle);
       border-radius: 6px;
       min-height: 120px;
-      overflow-x: auto;
+      overflow: visible;
       max-width: 100%;
     }
 
@@ -596,7 +598,24 @@
     .monitor-sub {
       font-size: 10px;
       color: var(--text-dark);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      text-align: center;
     }
+
+    #peerBoxSub::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--text-dark);
+      flex: none;
+    }
+
+    #peerBoxSub[data-state="connected"]::before { background: var(--success); }
+    #peerBoxSub[data-state="offline"]::before { background: var(--danger); }
+    #peerBoxSub[data-state="connecting"]::before { background: var(--warning); }
 
     .badge {
       font-size: 11px;
@@ -608,7 +627,7 @@
       font-weight: 600;
     }
 
-    /* Pair Drawer Content */
+
     .pair-drawer-content {
       display: flex;
       gap: 10px;
@@ -617,7 +636,7 @@
       flex-wrap: wrap;
     }
 
-    /* Toast */
+
     #fileToast {
       display: none;
       position: fixed;
@@ -634,13 +653,10 @@
       max-width: 90vw;
     }
 
-    /* Context Menu */
+
     #peerContextMenu {
       display: none;
-      position: absolute;
-      top: calc(100% + 6px);
-      left: 50%;
-      transform: translateX(-50%);
+      position: fixed;
       background: var(--context-menu-bg);
       border: 1px solid var(--context-menu-border);
       border-radius: 6px;
@@ -652,7 +668,7 @@
       gap: 4px;
     }
 
-    /* RESPONSIVE BREAKPOINTS */
+
     @media (max-width: 840px) {
       aside {
         width: 64px;
@@ -697,6 +713,9 @@
       .monitors-row {
         justify-content: flex-start;
       }
+      .monitor-layout-card { padding: 14px; }
+      .monitor-box { flex: 1 1 110px; min-width: 110px; }
+      .select-input { max-width: 100%; width: 100%; }
     }
 
     @media (max-width: 460px) {
@@ -706,6 +725,7 @@
       aside {
         width: 100%;
         height: 56px;
+        flex: 0 0 56px;
         border-right: none;
         border-top: 1px solid var(--sidebar-border);
         flex-direction: row;
@@ -713,21 +733,30 @@
         justify-content: space-around;
         padding: 0 6px;
       }
-      .nav-group-title, .sidebar-footer {
+      .nav-group-title {
         display: none !important;
       }
       .nav-list {
         flex-direction: row;
-        width: 100%;
+        width: auto;
         justify-content: space-around;
         padding: 0;
       }
+      .nav-list:first-child, .sidebar-footer { flex: 0 0 20%; }
+      aside > .nav-list:not(:first-child) { flex: 1; }
+      .sidebar-footer { display: flex; margin: 0; border: 0; padding: 0; }
       .nav-item {
-        padding: 8px 14px;
+        padding: 8px;
+        flex: 1;
       }
       .content-area {
         padding: 14px 12px;
       }
+      .nav-list:first-child { padding-top: 0 !important; margin-bottom: 0 !important; }
+      .view-container { gap: 14px; }
+      .home-grid { gap: 8px; }
+      .setting-right { flex-wrap: wrap; }
+      #fileToast { left: 12px; right: 12px; bottom: 68px; max-width: none; }
     }
   </style>
 </head>
@@ -786,30 +815,16 @@
 
         <div class="home-grid">
           <div style="display: flex; flex-direction: column; gap: 12px;">
-            <div class="section-title" data-i18n="sec_system_metrics">Системні метрики</div>
-            
-            <div class="diag-card">
-              <div class="diag-label" data-i18n="metric_input_latency">Затримка вводу</div>
-              <div class="diag-val" id="diagRtt">0.00 ms</div>
-              <div class="diag-sub" data-i18n="metric_input_latency_sub">Субмілісекундний прямий UDP</div>
-            </div>
+            <div class="section-title" data-i18n="sec_system_metrics">Метрики трансляції</div>
 
             <div class="diag-card">
               <div class="diag-label" data-i18n="metric_framerate">Частота кадрів стріму</div>
-              <div class="diag-val" id="diagFps">0.0 FPS</div>
-              <div class="diag-sub" data-i18n="metric_framerate_sub">Захоплення екрана DirectX 11</div>
+              <div class="diag-val" id="diagFps">—</div>
             </div>
 
             <div class="diag-card">
-              <div class="diag-label" data-i18n="metric_bandwidth">Пропускна здатність</div>
-              <div class="diag-val" id="diagBitrate">0.0 Mbps</div>
-              <div class="diag-sub" data-i18n="metric_bandwidth_sub">Передача зображення локальною мережею</div>
-            </div>
-
-            <div class="diag-card">
-              <div class="diag-label" data-i18n="metric_edge">Активна межа переходу</div>
-              <div class="diag-val" id="diagEdge" style="font-size: 18px;" data-i18n="edge_right">Права межа</div>
-              <div class="diag-sub" data-i18n="metric_edge_sub">Перетин межі екрана</div>
+              <div class="diag-label" data-i18n="metric_bandwidth">Швидкість вихідного відео</div>
+              <div class="diag-val" id="diagBitrate">—</div>
             </div>
           </div>
 
@@ -822,7 +837,7 @@
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 0-4 4v12a4 4 0 0 0 8 0V6a4 4 0 0 0-4-4z"/><path d="M12 2v6"/></svg>
                 </div>
                 <div class="setting-text">
-                  <div class="setting-name" data-i18n="mod_kvm_name">Безмежна миша (KVM)</div>
+                  <div class="setting-name" data-i18n="mod_kvm_name">Безмежна миша</div>
                   <div class="setting-desc" data-i18n="mod_kvm_desc">Спільне керування мишею та клавіатурою між ПК</div>
                 </div>
               </div>
@@ -922,7 +937,7 @@
           </div>
           <div class="setting-right">
             <label class="switch">
-              <input type="checkbox" id="kvmMasterToggle" checked onchange="toggleKvmMaster(this.checked)">
+              <input type="checkbox" id="kvmMasterToggle" onchange="toggleKvmMaster(this.checked)">
               <span class="slider"></span>
             </label>
           </div>
@@ -994,7 +1009,7 @@
             <div class="monitor-box" id="monitorBoxPeer" style="display: none; position: relative;" onclick="togglePeerDisconnectMenu(event)" oncontextmenu="togglePeerDisconnectMenu(event)">
               <svg class="monitor-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
               <div class="monitor-label" id="peerBoxLabel"></div>
-              <div class="monitor-sub" id="peerBoxSub" data-i18n="status_connected">Підключено</div>
+              <div class="monitor-sub" id="peerBoxSub" data-state="offline">Офлайн</div>
               <div id="peerContextMenu">
                 <button class="btn btn-secondary" id="btnPeerReconnect" style="width: 100%; font-size: 12px; padding: 6px 10px; justify-content: flex-start; color: #38bdf8;" onclick="reconnectCurrentPeer(event)" data-i18n="btn_reconnect">Перепідключити</button>
                 <button class="btn btn-secondary" id="btnPeerToggleDisable" style="width: 100%; font-size: 12px; padding: 6px 10px; justify-content: flex-start;" onclick="togglePeerDisabled(event)" data-i18n="btn_disable">Вимкнути пристрій</button>
@@ -1063,20 +1078,6 @@
             </div>
           </div>
 
-          <div class="setting-card">
-            <div class="setting-left">
-              <div class="setting-icon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-              </div>
-              <div class="setting-text">
-                <div class="setting-name" data-i18n="hotkey_name">Аварійне повернення керування</div>
-                <div class="setting-desc" data-i18n="hotkey_desc">Натисніть цю комбінацію для миттєвого повернення фокусу на головний комп'ютер.</div>
-              </div>
-            </div>
-            <div class="setting-right">
-              <span style="font-family: var(--font-mono); font-size: 12px; background: var(--btn-secondary-bg); color: var(--text); padding: 4px 8px; border-radius: 4px; border: 1px solid var(--btn-secondary-border);">Shift + Esc</span>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -1084,6 +1085,22 @@
         <div class="view-header">
           <div class="view-title" data-i18n="cast_title">Дублювання екрана</div>
           <div class="view-desc" data-i18n="cast_desc">Покажіть поточний екран ПК на ноутбуці або іншому ПК через локальну мережу. Зображення автоматично впишеться в екран приймача зі збереженням пропорцій.</div>
+        </div>
+
+        <div class="section-title" data-i18n="sec_activation">Активація</div>
+        <div class="setting-card">
+          <div class="setting-left">
+            <div class="setting-text">
+              <div class="setting-name" data-i18n="mod_cast_name">Дублювання екрана</div>
+              <div class="setting-desc" data-i18n="mod_cast_desc">Показувати екран ПК на ноутбуці через мережу</div>
+            </div>
+          </div>
+          <div class="setting-right">
+            <label class="switch">
+              <input type="checkbox" id="mirrorMasterToggle" onchange="toggleHomeCast(this.checked)">
+              <span class="slider"></span>
+            </label>
+          </div>
         </div>
 
         <div class="setting-card">
@@ -1187,17 +1204,6 @@
           </div>
         </div>
 
-        <div class="section-title" data-i18n="sec_mobile_features">Можливості керування</div>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px;">
-          <div class="diag-card">
-            <div class="diag-label" data-i18n="feature_live_touch">Живе зображення + Тач</div>
-            <div style="font-size: 12px; color: var(--text-muted); line-height: 1.4;" data-i18n="feature_live_touch_desc">Відеопотік монітора з наднизькою затримкою. Дотик до будь-якої частини картинки миттєво переміщує курсор ПК.</div>
-          </div>
-          <div class="diag-card">
-            <div class="diag-label" data-i18n="feature_trackpad">Сенсорний трекпад</div>
-            <div style="font-size: 12px; color: var(--text-muted); line-height: 1.4;" data-i18n="feature_trackpad_desc">Плавний рух курсору пальцем, тап одним пальцем (ЛКМ), тап двома пальцями (ПКМ) та смуга вертикального скролу.</div>
-          </div>
-        </div>
       </div>
 
       <div class="view-container" id="viewSettings">
@@ -1303,21 +1309,15 @@
         nav_cast: "Дублювання екрана",
         nav_mobile: "Мобільний пульт",
         nav_settings: "Налаштування",
-        
+
         home_title: "Головна",
         home_desc: "Центральна панель телеметрії, метрик та керування активними модулями NerveDesk.",
-        sec_system_metrics: "Системні метрики",
-        metric_input_latency: "Затримка вводу",
-        metric_input_latency_sub: "Субмілісекундний прямий UDP",
+        sec_system_metrics: "Метрики трансляції",
         metric_framerate: "Частота кадрів стріму",
-        metric_framerate_sub: "Захоплення екрана DirectX 11",
-        metric_bandwidth: "Пропускна здатність",
-        metric_bandwidth_sub: "Передача зображення локальною мережею",
-        metric_edge: "Активна межа переходу",
-        metric_edge_sub: "Перетин межі екрана",
-        
+        metric_bandwidth: "Швидкість вихідного відео",
+
         sec_active_modules: "Активні модулі та служби",
-        mod_kvm_name: "Безмежна миша (KVM)",
+        mod_kvm_name: "Безмежна миша",
         mod_kvm_desc: "Спільне керування мишею та клавіатурою між ПК",
         mod_cast_name: "Дублювання екрана",
         mod_cast_desc: "Показувати екран ПК на ноутбуці через мережу",
@@ -1327,7 +1327,7 @@
         mod_mobile_desc: "Керуйте мишею по зображенню та використовуйте тачпад зі смартфона",
         open_mobile_qr: "Відкрити QR-код та налаштування",
         open_folder_btn: "Відкрити отримані файли",
-        
+
         kvm_title: "Безмежна миша",
         kvm_desc: "Безшовне спільне використання миші та клавіатури між комп'ютерами з локальним шифруванням.",
         sec_activation: "Активація",
@@ -1344,7 +1344,7 @@
         host_name_title: "Ім'я цього комп'ютера",
         host_name_desc: "Ім'я хоста для ідентифікації цього ПК у локальній мережі.",
         copy_name_title: "Скопіювати ім'я",
-        
+
         sec_device_layout: "Розташування пристроїв",
         device_layout_desc: "Розташуйте комп'ютери відповідно до їхнього фізичного розміщення на столі:",
         this_pc: "Цей ПК",
@@ -1353,7 +1353,7 @@
         status_connected: "Підключено",
         status_connecting: "З'єднання...",
         status_disabled: "Вимкнено",
-        status_offline: "Офлайн (Натисніть Перепідключити)",
+        status_offline: "Офлайн",
         status_attached: "Підключено",
         status_detached: "Відключено",
         btn_reconnect: "Перепідключити",
@@ -1366,7 +1366,7 @@
         edge_left: "Ліва межа",
         edge_bottom: "Нижня межа",
         btn_reconnect_device: "Перепідключити пристрій",
-        
+
         sec_behavior: "Поведінка",
         kb_sharing_name: "Спільний доступ до клавіатури",
         kb_sharing_desc: "Передавати натискання клавіш на віддалений ПК, коли курсор переходить межу екрана.",
@@ -1374,7 +1374,7 @@
         clip_sharing_desc: "Скопійований текст стає автоматично доступним на іншому комп'ютері.",
         hotkey_name: "Аварійне повернення керування",
         hotkey_desc: "Натисніть цю комбінацію для миттєвого повернення фокусу на головний комп'ютер.",
-        
+
         cast_title: "Дублювання екрана",
         cast_desc: "Покажіть поточний екран ПК на ноутбуці або іншому ПК через локальну мережу. Зображення автоматично впишеться в екран приймача зі збереженням пропорцій.",
         mirror_target_name: "Пристрій приймача",
@@ -1403,13 +1403,8 @@
         btn_regen_pin: "Оновити PIN",
         btn_copy_url: "Скопіювати",
         btn_open_browser: "Відкрити в браузері",
-        sec_mobile_features: "Можливості керування",
-        feature_live_touch: "Живе зображення + Тач",
-        feature_live_touch_desc: "Відеопотік монітора з наднизькою затримкою. Дотик до будь-якої частини картинки миттєво переміщує курсор ПК.",
-        feature_trackpad: "Сенсорний трекпад",
-        feature_trackpad_desc: "Плавний рух курсору пальцем, тап одним пальцем (ЛКМ), тап двома пальцями (ПКМ) та смуга вертикального скролу.",
         toast_copied_url: "Посилання скопійовано в буфер обміну!",
-        
+
         settings_title: "Загальні налаштування",
         settings_desc: "Налаштування параметрів програми, оформлення, мови та мережевих зв'язків.",
         theme_setting_name: "Тема оформлення",
@@ -1423,7 +1418,7 @@
         autostart_desc: "Автоматично запускати NerveDesk у фоновому режимі під час старту Windows.",
         subnet_name: "Прив'язка до локальної підмережі",
         subnet_desc: "Приймати підключення лише від пристроїв, що розташовані в тій самій підмережі IPv4.",
-        
+
         alert_enter_device_name: "Будь ласка, введіть ім'я цільового пристрою",
         alert_enter_key: "Будь ласка, введіть ключ безпеки",
         alert_conn_failed: "Помилка підключення: ",
@@ -1442,21 +1437,15 @@
         nav_cast: "Screen Mirror",
         nav_mobile: "Mobile Remote",
         nav_settings: "Settings",
-        
+
         home_title: "Home",
         home_desc: "Central dashboard for telemetry, metrics, and managing active NerveDesk modules.",
-        sec_system_metrics: "System Metrics",
-        metric_input_latency: "Input Latency",
-        metric_input_latency_sub: "Sub-millisecond Direct UDP",
+        sec_system_metrics: "Stream Metrics",
         metric_framerate: "Display Stream Framerate",
-        metric_framerate_sub: "DirectX 11 screen capture",
-        metric_bandwidth: "Network Throughput",
-        metric_bandwidth_sub: "Video over the local network",
-        metric_edge: "Active Transition Edge",
-        metric_edge_sub: "Screen Boundary Crossing",
-        
+        metric_bandwidth: "Outgoing Video Rate",
+
         sec_active_modules: "Active Modules & Services",
-        mod_kvm_name: "Mouse Without Borders (KVM)",
+        mod_kvm_name: "Mouse Without Borders",
         mod_kvm_desc: "Share keyboard and mouse seamlessly between computers",
         mod_cast_name: "Screen Mirror",
         mod_cast_desc: "Show this PC's screen on a laptop over the network",
@@ -1466,7 +1455,7 @@
         mod_mobile_desc: "Control PC cursor over live image and use phone as trackpad",
         open_mobile_qr: "Open QR code & settings",
         open_folder_btn: "Open Received Files",
-        
+
         kvm_title: "Mouse Without Borders",
         kvm_desc: "Seamless mouse and keyboard sharing between computers using local network pairing and encryption.",
         sec_activation: "Activation",
@@ -1483,7 +1472,7 @@
         host_name_title: "This Device Host Name",
         host_name_desc: "Hostname used to identify this machine on the local network.",
         copy_name_title: "Copy Name",
-        
+
         sec_device_layout: "Device Layout",
         device_layout_desc: "Arrange computers in the order matching your physical desk setup:",
         this_pc: "This PC",
@@ -1492,7 +1481,7 @@
         status_connected: "Connected",
         status_connecting: "Connecting...",
         status_disabled: "Disabled",
-        status_offline: "Offline (Click Reconnect)",
+        status_offline: "Offline",
         status_attached: "Attached",
         status_detached: "Detached",
         btn_reconnect: "Reconnect",
@@ -1505,7 +1494,7 @@
         edge_left: "Left Edge",
         edge_bottom: "Bottom Edge",
         btn_reconnect_device: "Reconnect Device",
-        
+
         sec_behavior: "Behavior",
         kb_sharing_name: "Share Keyboard across computers",
         kb_sharing_desc: "Forward keystrokes seamlessly to the remote computer when cursor crosses screen edges.",
@@ -1513,7 +1502,7 @@
         clip_sharing_desc: "Text copied to the clipboard will be seamlessly available on the other device.",
         hotkey_name: "Emergency Escape Hotkey",
         hotkey_desc: "Press this combination to immediately release input focus back to the primary computer.",
-        
+
         cast_title: "Screen Mirror",
         cast_desc: "Show this PC's current screen on a laptop or PC over the local network. The picture fits the receiver screen while preserving its proportions.",
         mirror_target_name: "Receiving device",
@@ -1542,13 +1531,8 @@
         btn_regen_pin: "Regenerate PIN",
         btn_copy_url: "Copy Link",
         btn_open_browser: "Open in Browser",
-        sec_mobile_features: "Control Features",
-        feature_live_touch: "Live Display + Touch",
-        feature_live_touch_desc: "Ultra-low latency screen stream. Tapping anywhere moves the PC cursor directly under your finger.",
-        feature_trackpad: "Touch Trackpad",
-        feature_trackpad_desc: "Smooth cursor motion, 1-finger tap (Left click), 2-finger tap (Right click), and vertical scroll bar.",
         toast_copied_url: "Link copied to clipboard!",
-        
+
         settings_title: "General Settings",
         settings_desc: "Configure application parameters, hardware bindings, and network settings.",
         theme_setting_name: "Appearance Theme",
@@ -1562,7 +1546,7 @@
         autostart_desc: "Automatically launch NerveDesk in the background when Windows boots up.",
         subnet_name: "Local Subnet Binding",
         subnet_desc: "Only accept pairings from devices located on the same IPv4 subnet mask.",
-        
+
         alert_enter_device_name: "Please enter target Device Name",
         alert_enter_key: "Please enter Security Key",
         alert_conn_failed: "Connection failed: ",
@@ -1587,7 +1571,7 @@
       currentLang = lang;
       localStorage.setItem('nervedesk_lang', lang);
       document.documentElement.lang = lang;
-      
+
       const langSelect = document.getElementById('settingLangSelect');
       if (langSelect) langSelect.value = lang;
 
@@ -1612,7 +1596,7 @@
     function setTheme(theme) {
       currentTheme = theme;
       localStorage.setItem('nervedesk_theme', theme);
-      
+
       const themeSelect = document.getElementById('settingThemeSelect');
       if (themeSelect) themeSelect.value = theme;
 
@@ -1732,6 +1716,7 @@
         await callTauri('toggle_mobile_remote', { enable: checked });
         await updateMobileRemoteInfo();
       } catch (e) {}
+      refreshMetrics();
     }
 
     function copyMobileUrl() {
@@ -1751,6 +1736,35 @@
     let myDeviceName = 'DESKTOP-PC';
     let isPeerDisabled = false;
     let isProjecting = false;
+    let isReconnecting = false;
+    let lastMetrics = null;
+
+    function setStatus(element, state, label) {
+      if (!element) return;
+      element.dataset.state = state;
+      element.textContent = label;
+    }
+
+    function renderPeerStatus(metrics) {
+      const savedPeer = localStorage.getItem('paired_device_name');
+      const box = document.getElementById('monitorBoxPeer');
+      const slot = document.getElementById('peerAvailableSlot');
+      const button = document.getElementById('btnReconnectDevice');
+      slot.style.display = savedPeer ? 'none' : 'flex';
+      box.style.display = savedPeer ? 'flex' : 'none';
+      if (!savedPeer) {
+        button.style.display = 'none';
+        return;
+      }
+      document.getElementById('peerBoxLabel').textContent = savedPeer.toUpperCase();
+      const state = isPeerDisabled ? 'disabled' : isReconnecting ? 'connecting' : metrics?.kvm_active && metrics?.peer_online ? 'connected' : 'offline';
+      const label = state === 'connected' ? t('status_connected') : state === 'connecting' ? t('status_connecting') : state === 'disabled' ? t('status_disabled') : t('status_offline');
+      setStatus(document.getElementById('peerBoxSub'), state, label);
+      box.style.opacity = isPeerDisabled ? '0.65' : '1';
+      box.style.borderStyle = isPeerDisabled ? 'dashed' : 'solid';
+      button.style.display = state === 'offline' ? 'inline-flex' : 'none';
+      button.disabled = isReconnecting;
+    }
 
     function getEdgeLabel(edge) {
       switch (edge) {
@@ -1765,42 +1779,33 @@
     function updateDynamicTexts() {
       const edgeBtn = document.getElementById('edgeToggleBtn');
       if (edgeBtn) edgeBtn.innerText = getEdgeLabel(activeEdge);
-      const diagEdge = document.getElementById('diagEdge');
-      if (diagEdge) diagEdge.innerText = getEdgeLabel(activeEdge);
 
       const castBtn = document.getElementById('btnCastToggle');
       if (castBtn) {
         castBtn.innerText = isProjecting ? t('btn_project_stop') : t('btn_project_start');
       }
 
-      const peerSub = document.getElementById('peerBoxSub');
-      const savedPeer = localStorage.getItem('paired_device_name');
-      if (peerSub && savedPeer) {
-        if (isPeerDisabled) {
-          peerSub.innerText = t('status_disabled');
-        }
-      }
+      renderPeerStatus(lastMetrics);
     }
 
     async function toggleHomeKvm(checked) {
-      if (checked) {
-        const saved = localStorage.getItem('paired_device_name');
-        if (saved) {
-          await reconnectCurrentPeer();
-        } else {
-          switchTab('kvm');
-        }
-      } else {
-        try {
-          await callTauri('stop_service');
-        } catch (_) {}
+      try {
+        await callTauri('set_module_enabled', { module: 'kvm', enabled: checked });
+        localStorage.setItem('kvm_module_enabled', String(checked));
+      } catch (err) {
+        console.error('Failed to change KVM module:', err);
       }
+      await refreshMetrics();
     }
 
     async function toggleHomeCast(checked) {
-      if (checked !== isProjecting) {
-        await toggleCastProjection();
+      try {
+        await callTauri('set_module_enabled', { module: 'mirror', enabled: checked });
+        localStorage.setItem('mirror_module_enabled', String(checked));
+      } catch (err) {
+        console.error('Failed to change mirror module:', err);
       }
+      await refreshMetrics();
     }
 
     function generateNewKey() {
@@ -1846,17 +1851,22 @@
       }
 
       try {
+        isReconnecting = true;
+        renderPeerStatus(lastMetrics);
         await callTauri('pair_device', { targetName: name, securityKey: key });
+        localStorage.setItem('kvm_module_enabled', 'true');
         localStorage.setItem('paired_device_name', name);
         localStorage.setItem('paired_security_key', key);
         document.getElementById('peerAvailableSlot').style.display = 'none';
         document.getElementById('monitorBoxPeer').style.display = 'flex';
         document.getElementById('peerBoxLabel').innerText = name.toUpperCase();
-        document.getElementById('peerBoxSub').innerText = t('status_connected');
         document.getElementById('pairDrawer').style.display = 'none';
         document.getElementById('pairDrawerChevron').innerHTML = '<polyline points="6 9 12 15 18 9"/>';
       } catch (err) {
         alert(t('alert_conn_failed') + err);
+      } finally {
+        isReconnecting = false;
+        refreshMetrics();
       }
     }
 
@@ -1874,6 +1884,9 @@
           btnToggle.style.color = '';
         }
         menu.style.display = 'flex';
+        const bounds = document.getElementById('monitorBoxPeer').getBoundingClientRect();
+        menu.style.left = Math.max(8, Math.min(bounds.left, window.innerWidth - menu.offsetWidth - 8)) + 'px';
+        menu.style.top = Math.max(8, Math.min(bounds.bottom + 6, window.innerHeight - menu.offsetHeight - 8)) + 'px';
       } else {
         menu.style.display = 'none';
       }
@@ -1889,44 +1902,20 @@
 
       const target = localStorage.getItem('paired_device_name');
       const key = localStorage.getItem('paired_security_key') || '';
-      if (!target) return;
-
-      const sub = document.getElementById('peerBoxSub');
-      const box = document.getElementById('monitorBoxPeer');
-      const btn = document.getElementById('btnReconnectDevice');
-
-      if (sub) {
-        sub.innerText = t('status_connecting');
-        sub.style.color = '#f59e0b';
-      }
-      if (btn) {
-        btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg> ${t('status_connecting')}`;
-        btn.style.opacity = '0.7';
-      }
+      if (!target || isReconnecting) return;
+      isReconnecting = true;
+      renderPeerStatus(lastMetrics);
 
       try {
         await callTauri('pair_device', { targetName: target, securityKey: key });
+        localStorage.setItem('kvm_module_enabled', 'true');
         isPeerDisabled = false;
         localStorage.setItem('peer_device_disabled', 'false');
-        if (sub) {
-          sub.innerText = t('status_connected');
-          sub.style.color = 'var(--success)';
-        }
-        if (box) {
-          box.style.opacity = '1';
-          box.style.borderStyle = 'solid';
-        }
-        if (btn) btn.style.display = 'none';
       } catch (err) {
-        if (sub) {
-          sub.innerText = t('status_offline');
-          sub.style.color = 'var(--danger)';
-        }
-        if (btn) {
-          btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg> ${t('btn_reconnect_device')}`;
-          btn.style.display = 'inline-flex';
-          btn.style.opacity = '1';
-        }
+        console.error('Failed to reconnect peer:', err);
+      } finally {
+        isReconnecting = false;
+        refreshMetrics();
       }
     }
 
@@ -1944,34 +1933,24 @@
         try {
           await callTauri('stop_service');
         } catch (err) {}
-        document.getElementById('peerBoxSub').innerText = t('status_disabled');
-        document.getElementById('peerBoxSub').style.color = 'var(--text-dark)';
-        document.getElementById('monitorBoxPeer').style.opacity = '0.5';
-        document.getElementById('monitorBoxPeer').style.borderStyle = 'dashed';
-        const reconnectBtn = document.getElementById('btnReconnectDevice');
-        if (reconnectBtn) reconnectBtn.style.display = 'none';
       } else {
         isPeerDisabled = false;
         localStorage.setItem('peer_device_disabled', 'false');
-        const target = localStorage.getItem('paired_device_name');
-        const key = localStorage.getItem('paired_security_key') || '';
-        if (target) {
-          try {
-            await callTauri('pair_device', { targetName: target, securityKey: key });
-          } catch (err) {}
-        }
-        document.getElementById('peerBoxSub').innerText = t('status_connected');
-        document.getElementById('peerBoxSub').style.color = 'var(--success)';
-        document.getElementById('monitorBoxPeer').style.opacity = '1';
-        document.getElementById('monitorBoxPeer').style.borderStyle = 'solid';
-        const reconnectBtn = document.getElementById('btnReconnectDevice');
-        if (reconnectBtn) reconnectBtn.style.display = 'none';
+        await reconnectCurrentPeer();
       }
+      renderPeerStatus(lastMetrics);
+      refreshMetrics();
     }
 
     document.addEventListener('click', () => {
       const menu = document.getElementById('peerContextMenu');
       if (menu) menu.style.display = 'none';
+    });
+    document.querySelector('.content-area').addEventListener('scroll', () => {
+      document.getElementById('peerContextMenu').style.display = 'none';
+    });
+    window.addEventListener('resize', () => {
+      document.getElementById('peerContextMenu').style.display = 'none';
     });
 
     async function disconnectCurrentPeer(e) {
@@ -2009,15 +1988,11 @@
       const idx = edges.indexOf(activeEdge);
       activeEdge = edges[(idx + 1) % edges.length];
       document.getElementById('edgeToggleBtn').innerText = getEdgeLabel(activeEdge);
-      const diagEdge = document.getElementById('diagEdge');
-      if (diagEdge) diagEdge.innerText = getEdgeLabel(activeEdge);
       callTauri('set_screen_edge', { edge: activeEdge }).catch(() => {});
     }
 
-    function toggleKvmMaster(checked) {
-      if (!checked) {
-        stopService();
-      }
+    async function toggleKvmMaster(checked) {
+      await toggleHomeKvm(checked);
     }
 
     function saveMirrorTarget() {
@@ -2104,6 +2079,7 @@
             extendMode: false,
             sourceWindow: document.getElementById('mirrorSourceSelect').value || null
           });
+          localStorage.setItem('mirror_module_enabled', 'true');
           isProjecting = true;
           btn.innerText = t('btn_project_stop');
           btn.style.background = 'var(--danger)';
@@ -2118,9 +2094,10 @@
       }
     }
 
-    function toggleFileTransfer(checked) {
+    async function toggleFileTransfer(checked) {
       localStorage.setItem('file_transfer_enabled', checked ? 'true' : 'false');
-      callTauri('set_file_transfer_enabled', { enabled: checked }).catch(() => {});
+      await callTauri('set_file_transfer_enabled', { enabled: checked }).catch(() => {});
+      refreshMetrics();
     }
 
     async function openReceivedFolder() {
@@ -2163,16 +2140,13 @@
       callTauri('set_autostart_enabled', { enabled: checked }).catch(() => {});
     }
 
-    function stopService() {
-      callTauri('stop_service').catch(() => {});
-      document.getElementById('diagRtt').innerText = "0.00 ms";
-      document.getElementById('diagFps').innerText = "0.0 FPS";
-      document.getElementById('diagBitrate').innerText = "0.0 Mbps";
-    }
-
     async function initSystemInfo() {
       setTheme(currentTheme);
       setLanguage(currentLang);
+      const kvmEnabled = localStorage.getItem('kvm_module_enabled') === 'true';
+      const mirrorEnabled = localStorage.getItem('mirror_module_enabled') === 'true';
+      await callTauri('set_module_enabled', { module: 'kvm', enabled: kvmEnabled }).catch(() => {});
+      await callTauri('set_module_enabled', { module: 'mirror', enabled: mirrorEnabled }).catch(() => {});
 
       try {
         const name = await callTauri('get_device_name');
@@ -2201,24 +2175,15 @@
         document.getElementById('peerBoxLabel').innerText = savedPeer.toUpperCase();
         if (isDisabled) {
           isPeerDisabled = true;
-          document.getElementById('peerBoxSub').innerText = t('status_disabled');
-          document.getElementById('peerBoxSub').style.color = "var(--text-dark)";
-          document.getElementById('monitorBoxPeer').style.opacity = "0.5";
-          document.getElementById('monitorBoxPeer').style.borderStyle = "dashed";
-        } else {
+        } else if (kvmEnabled) {
           isPeerDisabled = false;
-          document.getElementById('peerBoxSub').innerText = t('status_connecting');
-          document.getElementById('peerBoxSub').style.color = "#f59e0b";
-          document.getElementById('monitorBoxPeer').style.opacity = "1";
-          document.getElementById('monitorBoxPeer').style.borderStyle = "solid";
-          const reconnectBtn = document.getElementById('btnReconnectDevice');
-          if (reconnectBtn) reconnectBtn.style.display = 'inline-flex';
           reconnectCurrentPeer();
         }
       } else {
         document.getElementById('peerAvailableSlot').style.display = 'flex';
         document.getElementById('monitorBoxPeer').style.display = 'none';
       }
+      renderPeerStatus(lastMetrics);
 
       const savedKey = localStorage.getItem('paired_security_key');
       if (savedKey) {
@@ -2227,12 +2192,14 @@
 
       const kbSharing = localStorage.getItem('keyboard_sharing_enabled') !== 'false';
       const clipSharing = localStorage.getItem('clipboard_sharing_enabled') !== 'false';
+      const fileTransfer = localStorage.getItem('file_transfer_enabled') !== 'false';
       const kvmKb = document.getElementById('kvmKbToggle');
       const kvmClip = document.getElementById('kvmClipToggle');
       if (kvmKb) kvmKb.checked = kbSharing;
       if (kvmClip) kvmClip.checked = clipSharing;
       callTauri('set_keyboard_sharing_enabled', { enabled: kbSharing }).catch(() => {});
       callTauri('set_clipboard_sharing_enabled', { enabled: clipSharing }).catch(() => {});
+      callTauri('set_file_transfer_enabled', { enabled: fileTransfer }).catch(() => {});
 
       try {
         const autostart = await callTauri('get_autostart_enabled');
@@ -2245,86 +2212,32 @@
 
     setTimeout(initSystemInfo, 100);
 
-    setInterval(async () => {
+    async function refreshMetrics() {
       try {
         const m = await callTauri('get_metrics');
-        if (isProjecting && !m.projection_active) {
-          isProjecting = false;
-          const castBtn = document.getElementById('btnCastToggle');
-          castBtn.innerText = t('btn_project_start');
-          castBtn.style.background = '';
-        }
-        document.getElementById('diagRtt').innerText = m.rtt_ms > 0 ? m.rtt_ms.toFixed(2) + " ms" : "0.00 ms";
-        document.getElementById('diagFps').innerText = m.video_fps.toFixed(1) + " FPS";
-        document.getElementById('diagBitrate').innerText = m.bandwidth_mbps.toFixed(1) + " Mbps";
+        lastMetrics = m;
+        isProjecting = m.projection_active;
+        const castBtn = document.getElementById('btnCastToggle');
+        castBtn.innerText = isProjecting ? t('btn_project_stop') : t('btn_project_start');
+        castBtn.style.background = isProjecting ? 'var(--danger)' : '';
+        document.getElementById('diagFps').innerText = m.video_fps > 0 || m.projection_active ? m.video_fps.toFixed(1) + " FPS" : "—";
+        document.getElementById('diagBitrate').innerText = m.projection_active ? m.bandwidth_mbps.toFixed(1) + " Mbps" : "—";
         if (m.screen_edge && activeEdge !== m.screen_edge) {
           activeEdge = m.screen_edge;
           document.getElementById('edgeToggleBtn').innerText = getEdgeLabel(activeEdge);
         }
-        const edgeEl = document.getElementById('diagEdge');
-        if (edgeEl) edgeEl.innerText = getEdgeLabel(activeEdge);
-
-        const kvmToggle = document.getElementById('homeKvmToggle');
-        if (kvmToggle && kvmToggle !== document.activeElement) {
-          kvmToggle.checked = m.is_active;
-        }
-
-        const castToggle = document.getElementById('homeCastToggle');
-        if (castToggle && castToggle !== document.activeElement) {
-          castToggle.checked = isProjecting;
-        }
-
-        const transferToggle = document.getElementById('homeTransferToggle');
-        const transferSaved = localStorage.getItem('file_transfer_enabled') !== 'false';
-        if (transferToggle && transferToggle !== document.activeElement) {
-          transferToggle.checked = transferSaved;
-        }
-
-        const savedPeer = localStorage.getItem('paired_device_name');
-        if (savedPeer && !isPeerDisabled) {
-          let peerName = m.peer_device || savedPeer;
-          if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(peerName)) {
-            if (!/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(savedPeer)) {
-              peerName = savedPeer;
-            }
-          }
-          document.getElementById('peerAvailableSlot').style.display = 'none';
-          document.getElementById('monitorBoxPeer').style.display = 'flex';
-          document.getElementById('peerBoxLabel').innerText = peerName.toUpperCase();
-          const sub = document.getElementById('peerBoxSub');
-          const reconnectBtn = document.getElementById('btnReconnectDevice');
-
-          if (m.is_active) {
-            if (sub) {
-              sub.innerText = t('status_connected');
-              sub.style.color = "var(--success)";
-            }
-            document.getElementById('monitorBoxPeer').style.opacity = "1";
-            document.getElementById('monitorBoxPeer').style.borderStyle = "solid";
-            if (reconnectBtn) reconnectBtn.style.display = "none";
-          } else {
-            if (sub && sub.innerText !== t('status_connecting')) {
-              sub.innerText = t('status_offline');
-              sub.style.color = "var(--warning)";
-            }
-            if (reconnectBtn && sub && sub.innerText !== t('status_connecting')) {
-              reconnectBtn.style.display = "inline-flex";
-              reconnectBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg> ${t('btn_reconnect_device')}`;
-              reconnectBtn.style.opacity = "1";
-            }
-          }
-
-          if (m.peer_device && !/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(m.peer_device)) {
-            localStorage.setItem('paired_device_name', m.peer_device);
-          }
-        } else if (!savedPeer) {
-          document.getElementById('peerAvailableSlot').style.display = 'flex';
-          document.getElementById('monitorBoxPeer').style.display = 'none';
-          const reconnectBtn = document.getElementById('btnReconnectDevice');
-          if (reconnectBtn) reconnectBtn.style.display = 'none';
-        }
+        document.getElementById('homeKvmToggle').checked = m.kvm_enabled;
+        document.getElementById('kvmMasterToggle').checked = m.kvm_enabled;
+        document.getElementById('homeCastToggle').checked = m.mirror_enabled;
+        document.getElementById('mirrorMasterToggle').checked = m.mirror_enabled;
+        document.getElementById('homeTransferToggle').checked = m.file_transfer_enabled;
+        document.getElementById('homeMobileToggle').checked = m.mobile_active;
+        document.getElementById('mobileServerMasterToggle').checked = m.mobile_active;
+        renderPeerStatus(m);
       } catch (e) {}
-    }, 1000);
+    }
+    setInterval(refreshMetrics, 1000);
+    refreshMetrics();
   </script>
 </body>
 </html>

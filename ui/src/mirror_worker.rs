@@ -76,9 +76,6 @@ pub async fn start(
 
         let emulator = input::InputEmulator::new();
 
-        // Flow-control state.
-        // We use a simple sliding-window ACK: send one frame, wait for ACK (or timeout).
-        // This prevents TCP buffer bloat which causes multi-second latency.
         let mut receiver_ready = true;
         let mut last_frame: Option<(u32, u32, i16, i16, Vec<u8>)> = None;
         let mut last_sent = Instant::now();
@@ -92,9 +89,6 @@ pub async fn start(
         {
             let cycle = Instant::now();
 
-            // 1. Read inbound (non-blocking, 1 ms read timeout):
-            //    - 0x06 bytes  = ACK from receiver → unblock send
-            //    - 0x02 framed = Input event from receiver → inject on this PC
             match sender.read_inbound_messages(&emulator) {
                 Ok(got_ack) => {
                     if got_ack { receiver_ready = true; }
@@ -105,19 +99,16 @@ pub async fn start(
                 }
             }
 
-            // Safety-valve: if ACK never arrives (receiver lagging) unblock after 100 ms
             if !receiver_ready && last_sent.elapsed() >= Duration::from_millis(100) {
                 receiver_ready = true;
             }
 
-            // 2. Capture (non-blocking: DXGI timeout = 16 ms, WGC returns None when no new frame)
             match source.next_jpeg() {
                 Ok(Some(f)) => { last_frame = Some(f); }
                 Ok(None)    => {}
                 Err(e)      => { warn!("Mirror capture error: {e}"); break; }
             }
 
-            // 3. Send only when receiver is ready (ACK received or timeout)
             if receiver_ready {
                 if let Some((w, h, ox, oy, ref jpeg)) = last_frame {
                     match sender.send(w, h, ox, oy, jpeg) {
@@ -132,7 +123,6 @@ pub async fn start(
                 }
             }
 
-            // 4. Stats every second
             if stat_report.elapsed() >= Duration::from_secs(1) {
                 let secs = stat_report.elapsed().as_secs_f64();
                 fps .store((stat_frames as f64 / secs * 10.0) as u64, Ordering::Relaxed);
@@ -142,7 +132,6 @@ pub async fn start(
                 stat_report = Instant::now();
             }
 
-            // Spin at ~120 Hz — capture already throttles via DXGI/WGC timeout
             let elapsed = cycle.elapsed();
             let target_cycle = Duration::from_millis(8);
             if elapsed < target_cycle {

@@ -37,7 +37,12 @@ pub mod mobile_server;
 pub struct AppMetrics {
     pub mode: String,
     pub is_active: bool,
-    pub rtt_ms: f64,
+    pub kvm_active: bool,
+    pub kvm_enabled: bool,
+    pub mirror_enabled: bool,
+    pub peer_online: bool,
+    pub file_transfer_enabled: bool,
+    pub mobile_active: bool,
     pub video_fps: f64,
     pub bandwidth_mbps: f64,
     pub peer_device: Option<String>,
@@ -82,6 +87,8 @@ pub struct MobileRemoteInfo {
 pub struct AppState {
     pub is_kvm_active: Arc<AtomicBool>,
     pub is_projecting: Arc<AtomicBool>,
+    pub kvm_enabled: Arc<AtomicBool>,
+    pub mirror_enabled: Arc<AtomicBool>,
     pub mode: Mutex<String>,
     pub peer_device: Arc<Mutex<Option<String>>>,
     pub screen_edge: Mutex<String>,
@@ -89,10 +96,12 @@ pub struct AppState {
     pub hook_manager: Mutex<Option<InputHookManager>>,
     pub kvm_workers: Mutex<Vec<tokio::task::JoinHandle<()>>>,
     pub projection_workers: Mutex<Vec<tokio::task::JoinHandle<()>>>,
-    pub live_rtt_us: Arc<AtomicU64>,
     pub live_fps_x10: Arc<AtomicU64>,
+    pub received_video_fps_x10: Arc<AtomicU64>,
+    pub received_mirror_fps_x10: Arc<AtomicU64>,
     pub live_mbps_x10: Arc<AtomicU64>,
     pub discovered_devices: Arc<Mutex<HashMap<String, DiscoveredDevice>>>,
+    pub device_last_seen: Arc<Mutex<HashMap<String, Instant>>>,
     pub keyboard_sharing: Arc<AtomicBool>,
     pub clipboard_sharing: Arc<AtomicBool>,
     pub paired_security_key: Arc<Mutex<Option<String>>>,
@@ -130,7 +139,6 @@ fn stop_kvm_internal(state: &AppState) {
             w.abort();
         }
     }
-    state.live_rtt_us.store(0, Ordering::Relaxed);
     update_mode_string(state);
 }
 
@@ -213,17 +221,30 @@ fn get_metrics(state: State<AppState>) -> AppMetrics {
 
     let edge = state.screen_edge.lock().unwrap().clone();
     let is_active = state.is_kvm_active.load(Ordering::SeqCst) || state.is_projecting.load(Ordering::SeqCst);
+    let peer_ip = state.paired_peer_ip.lock().unwrap().clone();
+    let peer_online = peer_ip.as_ref().and_then(|ip| {
+        state.device_last_seen.lock().ok().and_then(|seen| seen.get(ip).copied())
+    }).is_some_and(|last_seen| last_seen.elapsed() < Duration::from_secs(5));
     let v_display = state.display_manager.is_plugged();
 
-    let rtt_us = state.live_rtt_us.load(Ordering::Relaxed);
-    let rtt_ms = if is_active { (rtt_us as f64) / 1000.0 } else { 0.0 };
-    let fps = if is_active { (state.live_fps_x10.load(Ordering::Relaxed) as f64) / 10.0 } else { 0.0 };
-    let mbps = if is_active { (state.live_mbps_x10.load(Ordering::Relaxed) as f64) / 10.0 } else { 0.0 };
+    let fps_x10 = if state.is_projecting.load(Ordering::SeqCst) {
+        state.live_fps_x10.load(Ordering::Relaxed)
+    } else {
+        state.received_video_fps_x10.load(Ordering::Relaxed)
+            .max(state.received_mirror_fps_x10.load(Ordering::Relaxed))
+    };
+    let fps = (fps_x10 as f64) / 10.0;
+    let mbps = (state.live_mbps_x10.load(Ordering::Relaxed) as f64) / 10.0;
 
     AppMetrics {
         mode,
         is_active,
-        rtt_ms,
+        kvm_active: state.is_kvm_active.load(Ordering::SeqCst),
+        kvm_enabled: state.kvm_enabled.load(Ordering::SeqCst),
+        mirror_enabled: state.mirror_enabled.load(Ordering::SeqCst),
+        peer_online,
+        file_transfer_enabled: state.file_transfer_enabled.load(Ordering::SeqCst),
+        mobile_active: state.mobile_server.is_active(),
         video_fps: fps,
         bandwidth_mbps: mbps,
         peer_device: peer,
@@ -265,8 +286,10 @@ async fn discover_devices(state: State<'_, AppState>) -> Result<Vec<DiscoveredDe
 
     tokio::time::sleep(Duration::from_millis(300)).await;
 
-    let devices: Vec<DiscoveredDevice> = if let Ok(guard) = state.discovered_devices.lock() {
-        guard.values().cloned().collect()
+    let devices: Vec<DiscoveredDevice> = if let (Ok(guard), Ok(seen)) = (state.discovered_devices.lock(), state.device_last_seen.lock()) {
+        guard.values().filter(|device| {
+            seen.get(&device.ip).is_some_and(|last_seen| last_seen.elapsed() < Duration::from_secs(5))
+        }).cloned().collect()
     } else {
         Vec::new()
     };
@@ -439,6 +462,7 @@ async fn start_host(
         target_ip.clone()
     };
     *state.peer_device.lock().unwrap() = Some(display_name);
+    state.kvm_enabled.store(true, Ordering::SeqCst);
 
     if stream_video {
         let _ = start_virtual_display_cast(target_ip.clone(), false, None, state.clone()).await;
@@ -584,6 +608,7 @@ async fn start_virtual_display_cast(
     };
 
     *state.projection_workers.lock().unwrap() = vec![vid_worker];
+    state.mirror_enabled.store(true, Ordering::SeqCst);
     update_mode_string(&state);
 
     Ok(format!("Projection active -> {}", video_target))
@@ -598,6 +623,22 @@ fn stop_virtual_display_cast(state: State<'_, AppState>) {
 fn stop_service(state: State<'_, AppState>) -> Result<String, String> {
     stop_kvm_internal(&state);
     Ok("KVM stopped safely".into())
+}
+
+#[command]
+fn set_module_enabled(module: String, enabled: bool, state: State<'_, AppState>) -> Result<bool, String> {
+    match module.as_str() {
+        "kvm" => {
+            state.kvm_enabled.store(enabled, Ordering::SeqCst);
+            if !enabled && state.is_kvm_active.load(Ordering::SeqCst) { stop_kvm_internal(&state); }
+        }
+        "mirror" => {
+            state.mirror_enabled.store(enabled, Ordering::SeqCst);
+            if !enabled && state.is_projecting.load(Ordering::SeqCst) { stop_projection_internal(&state); }
+        }
+        _ => return Err(format!("Unknown module: {module}")),
+    }
+    Ok(enabled)
 }
 
 #[command]
@@ -807,6 +848,8 @@ pub fn run() {
     let state = AppState {
         is_kvm_active: Arc::new(AtomicBool::new(false)),
         is_projecting: Arc::new(AtomicBool::new(false)),
+        kvm_enabled: Arc::new(AtomicBool::new(false)),
+        mirror_enabled: Arc::new(AtomicBool::new(false)),
         mode: Mutex::new("Idle".into()),
         peer_device: Arc::new(Mutex::new(None)),
         screen_edge: Mutex::new("Right".into()),
@@ -814,10 +857,12 @@ pub fn run() {
         hook_manager: Mutex::new(None),
         kvm_workers: Mutex::new(Vec::new()),
         projection_workers: Mutex::new(Vec::new()),
-        live_rtt_us: Arc::new(AtomicU64::new(0)),
         live_fps_x10: Arc::new(AtomicU64::new(0)),
+        received_video_fps_x10: Arc::new(AtomicU64::new(0)),
+        received_mirror_fps_x10: Arc::new(AtomicU64::new(0)),
         live_mbps_x10: Arc::new(AtomicU64::new(0)),
         discovered_devices: Arc::new(Mutex::new(HashMap::new())),
+        device_last_seen: Arc::new(Mutex::new(HashMap::new())),
         keyboard_sharing: Arc::new(AtomicBool::new(true)),
         clipboard_sharing: Arc::new(AtomicBool::new(true)),
         paired_security_key: Arc::new(Mutex::new(None)),
@@ -832,10 +877,11 @@ pub fn run() {
     };
 
     let discovered_for_disc = state.discovered_devices.clone();
+    let seen_for_disc = state.device_last_seen.clone();
     let peer_device_for_disc = state.peer_device.clone();
     let discovered_for_rx = state.discovered_devices.clone();
+    let seen_for_rx = state.device_last_seen.clone();
     let peer_device_for_rx = state.peer_device.clone();
-    let live_rtt_for_rx = state.live_rtt_us.clone();
     let paired_ip_for_rx = state.paired_peer_ip.clone();
     let keyboard_sharing_for_rx = state.keyboard_sharing.clone();
     let drag_badge_for_rx = drag_badge.clone();
@@ -864,6 +910,9 @@ pub fn run() {
                         continue;
                     }
                     let ip = peer_addr.ip().to_string();
+                    if let Ok(mut seen) = seen_for_disc.lock() {
+                        seen.insert(ip.clone(), Instant::now());
+                    }
                     if let Ok(mut map) = discovered_for_disc.lock() {
                         let role_str = match beacon.role {
                             DeviceRole::Host => "Host",
@@ -914,8 +963,11 @@ pub fn run() {
         let emulator = InputEmulator::new();
         loop {
             match receiver.recv_event().await {
-                Ok((header, event, peer)) => {
+                Ok((_header, event, peer)) => {
                     let peer_ip = peer.ip().to_string();
+                    if let Ok(mut seen) = seen_for_rx.lock() {
+                        seen.insert(peer_ip.clone(), Instant::now());
+                    }
 
                     if let Ok(mut ip_guard) = paired_ip_for_rx.lock() {
                         if ip_guard.is_none() {
@@ -992,13 +1044,6 @@ pub fn run() {
                             }
                         }
                     }
-
-                    let now_us = SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_micros() as u64;
-                    let latency_us = now_us.saturating_sub(header.timestamp_us);
-                    live_rtt_for_rx.store(latency_us, Ordering::Relaxed);
 
                     let peer_name = if let Ok(guard) = discovered_for_rx.lock() {
                         if let Some(d) = guard.get(&peer_ip) {
@@ -1145,7 +1190,7 @@ pub fn run() {
         })
         .expect("Failed to spawn clipboard sender thread");
 
-    let live_fps_for_vid_rx = state.live_fps_x10.clone();
+    let live_fps_for_vid_rx = state.received_video_fps_x10.clone();
     let viewer_for_vid_rx = state.projection_viewer.clone();
     tauri::async_runtime::spawn(async move {
         let bind_addr: SocketAddr = "0.0.0.0:48101".parse().unwrap();
@@ -1189,7 +1234,7 @@ pub fn run() {
     });
 
     let viewer_for_mirror = state.projection_viewer.clone();
-    let fps_for_mirror = state.live_fps_x10.clone();
+    let fps_for_mirror = state.received_mirror_fps_x10.clone();
     tauri::async_runtime::spawn(async move {
         let receiver = match mirror_stream::MirrorReceiver::bind().await {
             Ok(receiver) => receiver,
@@ -1372,6 +1417,7 @@ pub fn run() {
             pair_device,
             start_host,
             stop_service,
+            set_module_enabled,
             set_screen_edge,
             toggle_virtual_display,
             set_keyboard_sharing_enabled,

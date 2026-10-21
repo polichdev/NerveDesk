@@ -50,7 +50,6 @@ fn terminate_other_instances() {
         let _ = CloseHandle(snapshot);
 
         if killed_any {
-            // Give Windows & WebView2 runtime enough time to clean up directory lock handles
             std::thread::sleep(std::time::Duration::from_millis(400));
         }
     }

@@ -31,7 +31,6 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 const VK_F11_CODE: usize = 0x7A;
 
-// ── Offscreen double-buffer ───────────────────────────────────────────────────
 struct OffscreenBuffer {
     hdc: HDC,
     bitmap: HBITMAP,
@@ -77,7 +76,6 @@ impl Drop for OffscreenBuffer {
     }
 }
 
-// ── Shared state between render thread and wndproc ────────────────────────────
 #[derive(Clone, Copy)]
 pub struct FrameMeta {
     pub width: u32,
@@ -87,10 +85,8 @@ pub struct FrameMeta {
 }
 
 pub struct ViewerSharedState {
-    /// Channel to send raw framed packets back to the PC (input events + ACK).
     pub input_channel: Mutex<Option<tokio::sync::mpsc::UnboundedSender<Vec<u8>>>>,
     pub current_meta: Mutex<Option<FrameMeta>>,
-    /// Destination rect inside the window (letterbox result).
     pub dst_rect: Mutex<Option<(i32, i32, i32, i32)>>,
     pub is_fullscreen: AtomicBool,
 }
@@ -123,7 +119,6 @@ impl ViewerSharedState {
         }
     }
 
-    /// Map window-client coords to the PC's absolute screen coords.
     pub fn map_client_to_pc(&self, client_x: i32, client_y: i32) -> Option<(i32, i32)> {
         let (dst_x, dst_y, dst_w, dst_h) = (*self.dst_rect.lock().unwrap())?;
         let meta = (*self.current_meta.lock().unwrap())?;
@@ -142,7 +137,6 @@ impl ViewerSharedState {
 
 static VIEWER_STATE: OnceLock<Arc<ViewerSharedState>> = OnceLock::new();
 
-// ── Frame slot ────────────────────────────────────────────────────────────────
 pub struct FramePacket {
     pub width: u32,
     pub height: u32,
@@ -151,7 +145,6 @@ pub struct FramePacket {
     pub bgra: Vec<u8>,
 }
 
-// ── Public handle ─────────────────────────────────────────────────────────────
 pub struct ProjectionViewer {
     shared: Arc<ViewerSharedState>,
     frame_slot: Arc<Mutex<Option<FramePacket>>>,
@@ -197,7 +190,6 @@ impl ProjectionViewer {
     }
 }
 
-// ── Render thread ─────────────────────────────────────────────────────────────
 unsafe fn render_loop(
     slot: Arc<Mutex<Option<FramePacket>>>,
     active: Arc<AtomicBool>,
@@ -208,7 +200,6 @@ unsafe fn render_loop(
 
     let class_name = windows::core::w!("NerveDeskProjectionWindowClass");
     let wnd_class = WNDCLASSW {
-        // CS_DBLCLKS enables WM_LBUTTONDBLCLK; CS_OWNDC keeps DC stable
         style: CS_DBLCLKS | CS_OWNDC,
         lpfnWndProc: Some(projection_wnd_proc),
         hInstance: HINSTANCE::default(),
@@ -232,7 +223,6 @@ unsafe fn render_loop(
         Err(_) => return,
     };
 
-    // Start hidden
     let _ = SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, sw, sh, SWP_HIDEWINDOW | SWP_NOACTIVATE);
     let _ = ShowWindow(hwnd, SW_HIDE);
 
@@ -240,7 +230,6 @@ unsafe fn render_loop(
     let mut offscreen: Option<OffscreenBuffer> = None;
 
     loop {
-        // Drain Win32 messages
         let mut msg = MSG::default();
         while PeekMessageW(&mut msg, HWND::default(), 0, 0, PM_REMOVE).as_bool() {
             if msg.message == WM_DESTROY { return; }
@@ -258,7 +247,6 @@ unsafe fn render_loop(
                 is_shown = true;
             }
 
-            // Try to grab the latest frame
             let frame_opt = slot.lock().unwrap().take();
             if let Some(pkt) = frame_opt {
                 let (w, h) = (pkt.width, pkt.height);
@@ -289,7 +277,6 @@ unsafe fn render_loop(
                                 bmiColors: [RGBQUAD::default()],
                             };
 
-                            // CS_OWNDC lets us cache the DC
                             let hdc = GetDC(hwnd);
                             if !hdc.is_invalid() {
                                 if let Some(ref mut buf) = offscreen {
@@ -305,7 +292,6 @@ unsafe fn render_loop(
                                         Some(pkt.bgra.as_ptr() as *const _),
                                         &bmi, DIB_RGB_COLORS, SRCCOPY,
                                     );
-                                    // Flip back-buffer to screen atomically → no tearing/flicker
                                     let _ = BitBlt(hdc, 0, 0, cw, ch, buf.hdc, 0, 0, SRCCOPY);
                                 }
                                 let _ = ReleaseDC(hwnd, hdc);
@@ -320,12 +306,10 @@ unsafe fn render_loop(
             offscreen = None;
         }
 
-        // ~60 fps polling interval
         std::thread::sleep(Duration::from_millis(8));
     }
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 unsafe fn get_monitor_bounds(hwnd: HWND) -> (i32, i32, i32, i32) {
     let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
@@ -350,7 +334,6 @@ unsafe fn show_window_fullscreen_or_restore(hwnd: HWND, shared: &ViewerSharedSta
 
 unsafe fn toggle_fullscreen(hwnd: HWND, shared: &ViewerSharedState) {
     if shared.is_fullscreen.load(Ordering::Relaxed) {
-        // Switch to centred windowed mode
         let (mx, my, mw, mh) = get_monitor_bounds(hwnd);
         let ww = (mw * 3 / 4).max(640);
         let wh = (mh * 3 / 4).max(480);
@@ -362,14 +345,12 @@ unsafe fn toggle_fullscreen(hwnd: HWND, shared: &ViewerSharedState) {
         );
         shared.is_fullscreen.store(false, Ordering::Relaxed);
     } else {
-        // Back to fullscreen
         let (mx, my, mw, mh) = get_monitor_bounds(hwnd);
         let _ = SetWindowPos(hwnd, HWND_TOPMOST, mx, my, mw, mh, SWP_SHOWWINDOW | SWP_FRAMECHANGED);
         shared.is_fullscreen.store(true, Ordering::Relaxed);
     }
 }
 
-/// Return (dst_x, dst_y, dst_w, dst_h) letterboxed inside (screen_w × screen_h).
 pub fn fit_frame(frame_w: u32, frame_h: u32, screen_w: i32, screen_h: i32) -> Option<(i32, i32, i32, i32)> {
     if frame_w == 0 || frame_h == 0 || screen_w <= 0 || screen_h <= 0 { return None; }
     let (sw, sh) = (screen_w as u64, screen_h as u64);
@@ -382,7 +363,6 @@ pub fn fit_frame(frame_w: u32, frame_h: u32, screen_w: i32, screen_h: i32) -> Op
     Some((((sw - dw) / 2) as i32, ((sh - dh) / 2) as i32, dw as i32, dh as i32))
 }
 
-/// Convert WM_MOUSEWHEEL screen-coordinates to client coords safely.
 unsafe fn wheel_screen_to_client(hwnd: HWND, lparam: LPARAM) -> (i32, i32) {
     let mut pt = POINT {
         x: (lparam.0 & 0xffff) as i16 as i32,
@@ -404,14 +384,12 @@ mod tests {
     }
 }
 
-// ── Window procedure ──────────────────────────────────────────────────────────
 unsafe extern "system" fn projection_wnd_proc(
     hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM,
 ) -> LRESULT {
     let shared_opt = VIEWER_STATE.get();
 
     match msg {
-        // Never let Windows erase background — avoids white flash between frames
         WM_ERASEBKGND => return LRESULT(1),
 
         WM_SETCURSOR => {
@@ -419,7 +397,6 @@ unsafe extern "system" fn projection_wnd_proc(
             return LRESULT(1);
         }
 
-        // ── Keyboard ─────────────────────────────────────────────────────────
         WM_KEYDOWN => {
             match wparam.0 {
                 k if k == VK_ESCAPE.0 as usize => {
@@ -458,13 +435,11 @@ unsafe extern "system" fn projection_wnd_proc(
             }
         }
 
-        // Double-click → toggle fullscreen
         WM_LBUTTONDBLCLK => {
             if let Some(s) = shared_opt { toggle_fullscreen(hwnd, s); }
             return LRESULT(0);
         }
 
-        // ── Mouse buttons (client coordinates in LPARAM) ──────────────────────
         WM_LBUTTONDOWN => {
             let cx = (lparam.0 & 0xffff) as i16 as i32;
             let cy = ((lparam.0 >> 16) & 0xffff) as i16 as i32;
@@ -517,9 +492,7 @@ unsafe extern "system" fn projection_wnd_proc(
             return LRESULT(0);
         }
 
-        // ── Mouse move (only forward drags; hover moves don't need to be sent) ─
         WM_MOUSEMOVE => {
-            // Forward hover too — cursor position needed for scroll hit-test on PC side
             let cx = (lparam.0 & 0xffff) as i16 as i32;
             let cy = ((lparam.0 >> 16) & 0xffff) as i16 as i32;
             if let Some(s) = shared_opt {
@@ -530,16 +503,13 @@ unsafe extern "system" fn projection_wnd_proc(
             return LRESULT(0);
         }
 
-        // ── Scroll wheel — LPARAM has *screen* coords, convert to client first ─
         WM_MOUSEWHEEL => {
             let (cx, cy) = wheel_screen_to_client(hwnd, lparam);
             let delta    = ((wparam.0 >> 16) as i16) as i32 / 120 * 120;
             if let Some(s) = shared_opt {
-                // If cursor is not over the image, find the current cursor position
                 let (pcx, pcy) = if let Some(xy) = s.map_client_to_pc(cx, cy) {
                     xy
                 } else {
-                    // Scroll without specific hit — use last known cursor on PC
                     let meta = *s.current_meta.lock().unwrap();
                     if let Some(m) = meta {
                         let cx2 = m.offset_x as i32 + (m.width  / 2) as i32;

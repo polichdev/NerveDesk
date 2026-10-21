@@ -156,7 +156,6 @@ impl WindowCapture {
             return Ok(None);
         }
 
-        // Recreate pool if the window size has changed
         if self.pool_size != (size.Width, size.Height) {
             let _ = self.pool.Recreate(
                 &self.winrt_device,

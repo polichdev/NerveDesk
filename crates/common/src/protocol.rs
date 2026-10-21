@@ -472,7 +472,6 @@ pub fn decode_packet(buf: &[u8]) -> Result<(PacketHeader, InputEvent)> {
         return Err(NerveError::Protocol("Buffer smaller than packet header".into()));
     }
 
-    // pod_read_unaligned замість from_bytes — безпечно для невирівняних зрізів (стек/буфер)
     let header: PacketHeader = bytemuck::pod_read_unaligned(&buf[..header_size]);
     let packet_type = header.validate()?;
 
