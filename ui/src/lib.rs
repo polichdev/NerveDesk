@@ -3,13 +3,14 @@ use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use tokio::io::AsyncReadExt;
 use serde::{Deserialize, Serialize};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{command, Manager, State};
 use tracing::{error, info, warn};
 
-use capture::{DxgiCaptureConfig, DxgiOutputDuplicator, VirtualDisplayManager};
+use capture::{DxgiCaptureConfig, VirtualDisplayManager};
 use codec::{HardwareVideoDecoder, HardwareVideoEncoder, VideoDecoderConfig, VideoEncoderConfig};
 use common::InputEvent;
 use input::{InputEmulator, InputHookManager};
@@ -20,9 +21,17 @@ use net::{
 
 mod viewer;
 use viewer::ProjectionViewer;
+mod mirror_stream;
+mod mirror_worker;
+mod window_capture;
 
 mod badge;
 use badge::DragBadge;
+
+mod driver_install;
+pub use driver_install::handle_cli as handle_driver_cli;
+
+pub mod mobile_server;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppMetrics {
@@ -33,6 +42,7 @@ pub struct AppMetrics {
     pub bandwidth_mbps: f64,
     pub peer_device: Option<String>,
     pub virtual_display_active: bool,
+    pub projection_active: bool,
     pub screen_edge: String,
 }
 
@@ -59,6 +69,15 @@ pub struct ClipboardPacket {
     pub text: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MobileRemoteInfo {
+    pub is_active: bool,
+    pub ip: String,
+    pub port: u16,
+    pub url: String,
+    pub qr_svg: String,
+}
+
 pub struct AppState {
     pub is_kvm_active: Arc<AtomicBool>,
     pub is_projecting: Arc<AtomicBool>,
@@ -80,8 +99,10 @@ pub struct AppState {
     pub clipboard_hash: Arc<AtomicU64>,
     pub projection_viewer: Arc<ProjectionViewer>,
     pub projection_cancel: Arc<AtomicBool>,
+    pub projection_generation: Arc<AtomicU64>,
     pub file_transfer_enabled: Arc<AtomicBool>,
     pub drag_badge: Arc<DragBadge>,
+    pub mobile_server: Arc<mobile_server::MobileServer>,
 }
 
 fn update_mode_string(state: &AppState) {
@@ -114,6 +135,7 @@ fn stop_kvm_internal(state: &AppState) {
 
 fn stop_projection_internal(state: &AppState) {
     state.projection_cancel.store(true, Ordering::SeqCst);
+    state.projection_generation.fetch_add(1, Ordering::SeqCst);
     state.is_projecting.store(false, Ordering::SeqCst);
     state.projection_viewer.stop();
     let _ = state.display_manager.unplug_display();
@@ -205,6 +227,7 @@ fn get_metrics(state: State<AppState>) -> AppMetrics {
         bandwidth_mbps: mbps,
         peer_device: peer,
         virtual_display_active: v_display,
+        projection_active: state.is_projecting.load(Ordering::SeqCst),
         screen_edge: edge,
     }
 }
@@ -417,7 +440,7 @@ async fn start_host(
     *state.peer_device.lock().unwrap() = Some(display_name);
 
     if stream_video {
-        let _ = start_virtual_display_cast(target_ip.clone(), true, state.clone()).await;
+        let _ = start_virtual_display_cast(target_ip.clone(), false, None, state.clone()).await;
     }
 
     update_mode_string(&state);
@@ -425,9 +448,15 @@ async fn start_host(
 }
 
 #[command]
+fn list_capture_windows() -> Vec<window_capture::CaptureWindow> {
+    window_capture::list_windows()
+}
+
+#[command]
 async fn start_virtual_display_cast(
     target_name: String,
     extend_mode: bool,
+    source_window: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     stop_projection_internal(&state);
@@ -441,11 +470,28 @@ async fn start_virtual_display_cast(
         }
     }
 
-    if extend_mode {
-        let _ = state.display_manager.plug_display();
-        let _ = std::process::Command::new("displayswitch.exe").arg("/extend").spawn();
+    let frame_listener = if extend_mode {
+        Some(tokio::net::TcpListener::bind("127.0.0.1:48103")
+            .await
+            .map_err(|e| format!("Cannot listen for NerveDesk display frames: {e}"))?)
     } else {
-        let _ = std::process::Command::new("displayswitch.exe").arg("/clone").spawn();
+        None
+    };
+    let mirror_capture_config = if extend_mode || source_window.is_some() {
+        None
+    } else {
+        Some(DxgiCaptureConfig::primary_display().map_err(|e| e.to_string())?)
+    };
+    if extend_mode {
+        std::process::Command::new("displayswitch.exe")
+            .arg("/extend")
+            .spawn()
+            .map_err(|e| format!("Cannot extend Windows desktop: {e}"))?;
+        for _ in 0..25 {
+            if state.display_manager.is_plugged() { break; }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+        state.display_manager.plug_display().map_err(|e| e.to_string())?;
     }
 
     let video_target: SocketAddr = format!("{}:48101", resolved_ip)
@@ -458,135 +504,83 @@ async fn start_virtual_display_cast(
     is_running_vid.store(true, Ordering::SeqCst);
     let fps_holder = state.live_fps_x10.clone();
     let mbps_holder = state.live_mbps_x10.clone();
+    let generation = state.projection_generation.clone();
+    let current_generation = generation.load(Ordering::SeqCst);
 
-    let vid_worker = tokio::spawn(async move {
-        let video_sender = match VideoSender::new(video_target).await {
-            Ok(s) => s,
-            Err(e) => {
-                error!("VideoSender error: {:?}", e);
-                return;
-            }
-        };
-
-        let out_idx = if extend_mode { 1 } else { 0 };
-        let mut config = DxgiCaptureConfig {
-            adapter_index: 0,
-            output_index: out_idx,
-            timeout_ms: 16,
-        };
-        let mut duplicator = if extend_mode {
-            let mut found = None;
-            for _ in 0..15 {
-                if let Ok(d) = DxgiOutputDuplicator::new(config.clone()) {
-                    found = Some(d);
-                    break;
-                }
-                tokio::time::sleep(Duration::from_millis(200)).await;
-            }
-            if let Some(d) = found {
-                d
-            } else {
-                config.output_index = 0;
-                match DxgiOutputDuplicator::new(config) {
-                    Ok(d) => d,
-                    Err(e) => {
-                        error!("DxgiDuplicator error: {:?}", e);
-                        return;
+    let vid_worker = if let Some(listener) = frame_listener {
+        tokio::spawn(async move {
+            let sender = match VideoSender::new(video_target).await {
+                Ok(sender) => sender,
+                Err(e) => { error!("VideoSender error: {:?}", e); return; }
+            };
+            let encoder = match HardwareVideoEncoder::new(VideoEncoderConfig::default()) {
+                Ok(encoder) => encoder,
+                Err(e) => { error!("Encoder error: {:?}", e); return; }
+            };
+            let mut frame_count = 0u64;
+            let mut byte_count = 0u64;
+            let mut report = Instant::now();
+            while !cancel_flag.load(Ordering::Relaxed) && is_running_vid.load(Ordering::SeqCst) {
+                let (mut stream, _) = match tokio::time::timeout(Duration::from_millis(250), listener.accept()).await {
+                    Ok(Ok(connection)) => connection,
+                    Ok(Err(e)) => { warn!("IDD frame connection failed: {:?}", e); continue; }
+                    Err(_) => continue,
+                };
+                loop {
+                    if cancel_flag.load(Ordering::Relaxed) || !is_running_vid.load(Ordering::SeqCst) { break; }
+                    let mut header = [0u8; 16];
+                    if !matches!(tokio::time::timeout(Duration::from_secs(2), stream.read_exact(&mut header)).await, Ok(Ok(_))) { break; }
+                    let magic = u32::from_le_bytes(header[0..4].try_into().unwrap());
+                    let width = u32::from_le_bytes(header[4..8].try_into().unwrap());
+                    let height = u32::from_le_bytes(header[8..12].try_into().unwrap());
+                    let len = u32::from_le_bytes(header[12..16].try_into().unwrap()) as usize;
+                    if magic != 0x3146444e || width == 0 || height == 0
+                        || width > 7680 || height > 4320 || len != (width as usize) * (height as usize) * 4 {
+                        warn!("Invalid IDD frame header");
+                        break;
                     }
-                }
-            }
-        } else {
-            match DxgiOutputDuplicator::new(config) {
-                Ok(d) => d,
-                Err(e) => {
-                    error!("DxgiDuplicator error: {:?}", e);
-                    return;
-                }
-            }
-        };
-
-        let (w, h) = duplicator.dimensions();
-        let encoder_config = VideoEncoderConfig {
-            width: w,
-            height: h,
-            fps: 60,
-            bitrate_bps: 10_000_000,
-            keyframe_interval: 120,
-        };
-        let encoder = match HardwareVideoEncoder::new(encoder_config) {
-            Ok(enc) => enc,
-            Err(e) => {
-                error!("Encoder error: {:?}", e);
-                return;
-            }
-        };
-
-        let mut frame_count = 0u64;
-        let mut total_bytes = 0u64;
-        let mut last_report = Instant::now();
-        let mut last_sent_time = Instant::now();
-        let mut raw_buf = vec![0u8; (w * h * 4) as usize];
-
-        while !cancel_flag.load(Ordering::Relaxed) && is_running_vid.load(Ordering::SeqCst) {
-            let start_frame = Instant::now();
-            let now_us = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_micros() as u64;
-
-            match duplicator.acquire_frame() {
-                Ok(Some(frame)) => {
-                    if frame.copy_to_cpu(&mut raw_buf).is_ok() {
-                        let is_key = frame_count < 10 || frame_count % 60 == 0;
-                        match encoder.encode_bgra(w, h, &raw_buf, now_us, is_key) {
-                            Ok(encoded_frame) => {
-                                if let Ok(sent_bytes) = video_sender.send_frame(&encoded_frame).await {
-                                    total_bytes += sent_bytes as u64;
-                                    frame_count += 1;
-                                    last_sent_time = Instant::now();
-                                }
-                            }
-                            Err(_) => {}
+                    let mut pixels = vec![0u8; len];
+                    if !matches!(tokio::time::timeout(Duration::from_secs(2), stream.read_exact(&mut pixels)).await, Ok(Ok(_))) { break; }
+                    let now_us = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_micros() as u64;
+                    let keyframe = frame_count == 0 || frame_count % 60 == 0;
+                    if let Ok(frame) = encoder.encode_bgra(width, height, &pixels, now_us, keyframe) {
+                        if let Ok(bytes) = sender.send_frame(&frame).await {
+                            frame_count += 1;
+                            byte_count += bytes as u64;
                         }
                     }
-                }
-                Ok(None) => {
-                    if last_sent_time.elapsed() >= Duration::from_millis(500) && frame_count > 0 {
-                        let is_key = frame_count < 10 || frame_count % 60 == 0;
-                        if let Ok(encoded_frame) = encoder.encode_bgra(w, h, &raw_buf, now_us, is_key) {
-                            if let Ok(sent_bytes) = video_sender.send_frame(&encoded_frame).await {
-                                total_bytes += sent_bytes as u64;
-                                frame_count += 1;
-                                last_sent_time = Instant::now();
-                            }
-                        }
+                    if report.elapsed() >= Duration::from_secs(1) {
+                        let elapsed = report.elapsed().as_secs_f64();
+                        fps_holder.store((frame_count as f64 / elapsed * 10.0) as u64, Ordering::Relaxed);
+                        mbps_holder.store((byte_count as f64 * 8.0 / elapsed / 100_000.0) as u64, Ordering::Relaxed);
+                        frame_count = 0;
+                        byte_count = 0;
+                        report = Instant::now();
                     }
-                    tokio::time::sleep(Duration::from_millis(5)).await;
-                }
-                Err(_) => {
-                    tokio::time::sleep(Duration::from_millis(25)).await;
                 }
             }
-
-            if last_report.elapsed() >= Duration::from_secs(1) {
-                let elapsed = last_report.elapsed().as_secs_f64();
-                let fps = (frame_count as f64) / elapsed;
-                let mbps = ((total_bytes * 8) as f64) / (elapsed * 1_000_000.0);
-
-                fps_holder.store((fps * 10.0) as u64, Ordering::Relaxed);
-                mbps_holder.store((mbps * 10.0) as u64, Ordering::Relaxed);
-
-                frame_count = 0;
-                total_bytes = 0;
-                last_report = Instant::now();
-            }
-
-            let frame_time = start_frame.elapsed();
-            if frame_time < Duration::from_millis(33) {
-                tokio::time::sleep(Duration::from_millis(33) - frame_time).await;
+        })
+    } else {
+        let mirror_target: SocketAddr = format!("{}:48104", resolved_ip)
+            .parse().map_err(|e| format!("Invalid mirror target address: {e}"))?;
+        match mirror_worker::start(
+            mirror_target,
+            source_window,
+            mirror_capture_config,
+            cancel_flag,
+            is_running_vid,
+            fps_holder,
+            mbps_holder,
+            generation,
+            current_generation,
+        ).await {
+            Ok(worker) => worker,
+            Err(e) => {
+                state.is_projecting.store(false, Ordering::SeqCst);
+                return Err(e);
             }
         }
-    });
+    };
 
     *state.projection_workers.lock().unwrap() = vec![vid_worker];
     update_mode_string(&state);
@@ -635,13 +629,8 @@ fn set_screen_edge(edge: String, state: State<'_, AppState>) -> Result<String, S
 
 #[command]
 fn toggle_virtual_display(state: State<'_, AppState>) -> Result<bool, String> {
-    if state.display_manager.is_plugged() {
-        state.display_manager.unplug_display().map_err(|e| e.to_string())?;
-        Ok(false)
-    } else {
-        state.display_manager.plug_display().map_err(|e| e.to_string())?;
-        Ok(true)
-    }
+    let _ = state;
+    Err("Use Windows Display Settings to enable or disable the NerveDesk display".into())
 }
 
 #[command]
@@ -672,81 +661,22 @@ fn open_display_settings() {
 
 #[command]
 fn install_virtual_display_driver() -> Result<String, String> {
-    let ps_cmd = r#"
-$s = {
-    $pkg = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\VirtualDrivers.Virtual-Display-Driver*" -ErrorAction SilentlyContinue | Select-Object -First 1
-    if (-not $pkg) {
-        $w = (Get-Command winget.exe -ErrorAction SilentlyContinue).Source
-        if (-not $w) { $w = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe" }
-        & "$w" install --id=VirtualDrivers.Virtual-Display-Driver -e --accept-source-agreements --accept-package-agreements
-        $pkg = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\VirtualDrivers.Virtual-Display-Driver*" -ErrorAction SilentlyContinue | Select-Object -First 1
-    }
-    if ($pkg) {
-        $devcon = Join-Path $pkg.FullName "Dependencies\devcon.exe"
-        $inf = Join-Path $pkg.FullName "SignedDrivers\x86\VDD\MttVDD.inf"
-        $xml = Join-Path $pkg.FullName "SignedDrivers\x86\VDD\vdd_settings.xml"
-        New-Item -ItemType Directory -Path "C:\VirtualDisplayDriver" -Force -ErrorAction SilentlyContinue | Out-Null
-        if (Test-Path $xml) {
-            Copy-Item $xml "C:\VirtualDisplayDriver\vdd_settings.xml" -Force -ErrorAction SilentlyContinue
-        }
-        if ((Test-Path $devcon) -and (Test-Path $inf)) {
-            $dir = Split-Path $inf
-            Set-Location $dir
-            pnputil /add-driver "$inf" /install
-            & "$devcon" install "$inf" "Root\MttVDD"
-            & "$devcon" enable "Root\MttVDD"
-        }
-        $ctrl = Join-Path $pkg.FullName "VDD Control.exe"
-        if (Test-Path $ctrl) {
-            Start-Process "$ctrl"
-        }
-    }
-    displayswitch.exe /extend
-    Write-Host 'Virtual Display Driver installed and activated!' -ForegroundColor Green
-}
-$b = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($s.ToString()))
-Start-Process powershell -ArgumentList "-NoExit -EncodedCommand $b" -Verb RunAs
-"#;
-    let _ = std::process::Command::new("powershell")
-        .args(["-NoProfile", "-Command", ps_cmd])
-        .spawn()
-        .map_err(|e| e.to_string())?;
-    Ok("Installer started".into())
+    driver_install::elevate("install")
 }
 
 #[command]
 fn uninstall_virtual_display_driver() -> Result<String, String> {
-    let ps_cmd = r#"
-$s = {
-    $pkg = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\VirtualDrivers.Virtual-Display-Driver*" -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($pkg) {
-        $devcon = Join-Path $pkg.FullName "Dependencies\devcon.exe"
-        if (Test-Path $devcon) {
-            & "$devcon" remove "Root\MttVDD"
-        }
-    }
-    pnputil /delete-driver mttvdd.inf /uninstall /force
-    $w = (Get-Command winget.exe -ErrorAction SilentlyContinue).Source
-    if (-not $w) { $w = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe" }
-    & "$w" uninstall --id=VirtualDrivers.Virtual-Display-Driver -e --accept-source-agreements
-    Remove-Item "C:\VirtualDisplayDriver" -Recurse -Force -ErrorAction SilentlyContinue
-    displayswitch.exe /clone
-    Write-Host 'Virtual Display Driver completely uninstalled!' -ForegroundColor Green
-}
-$b = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($s.ToString()))
-Start-Process powershell -ArgumentList "-NoExit -EncodedCommand $b" -Verb RunAs
-"#;
-    let _ = std::process::Command::new("powershell")
-        .args(["-NoProfile", "-Command", ps_cmd])
-        .spawn()
-        .map_err(|e| e.to_string())?;
-    Ok("Uninstaller started".into())
+    driver_install::elevate("remove")
 }
 
 #[command]
 fn get_display_driver_status() -> bool {
-    let count = unsafe { windows::Win32::UI::WindowsAndMessaging::GetSystemMetrics(windows::Win32::UI::WindowsAndMessaging::SM_CMONITORS) };
-    count > 1
+    driver_install::is_installed()
+}
+
+#[command]
+fn get_display_driver_package_status() -> bool {
+    driver_install::package_available()
 }
 
 #[command]
@@ -823,9 +753,47 @@ async fn send_file_to_peer(path: String, state: State<'_, AppState>) -> Result<S
     Ok(format!("Transferred {bytes} bytes"))
 }
 
+#[command]
+fn get_mobile_remote_info(state: State<'_, AppState>) -> MobileRemoteInfo {
+    let ip = mobile_server::get_local_ip();
+    let port = state.mobile_server.port();
+    let is_active = state.mobile_server.is_active();
+    let url = format!("http://{}:{}", ip, port);
+    let qr_svg = mobile_server::generate_qr_svg(&url).unwrap_or_default();
+    MobileRemoteInfo {
+        is_active,
+        ip,
+        port,
+        url,
+        qr_svg,
+    }
+}
+
+#[command]
+fn toggle_mobile_remote(enable: bool, state: State<'_, AppState>) -> bool {
+    if enable {
+        state.mobile_server.start();
+    } else {
+        state.mobile_server.stop();
+    }
+    state.mobile_server.is_active()
+}
+
+#[command]
+fn open_mobile_remote_url(state: State<'_, AppState>) {
+    let ip = mobile_server::get_local_ip();
+    let port = state.mobile_server.port();
+    let url = format!("http://{}:{}", ip, port);
+    let _ = std::process::Command::new("cmd")
+        .args(["/c", "start", &url])
+        .spawn();
+}
+
 pub fn run() {
     let projection_viewer = Arc::new(ProjectionViewer::new());
     let drag_badge = Arc::new(DragBadge::new());
+    let mobile_server = Arc::new(mobile_server::MobileServer::new(5858));
+    mobile_server.start();
 
     let state = AppState {
         is_kvm_active: Arc::new(AtomicBool::new(false)),
@@ -848,8 +816,10 @@ pub fn run() {
         clipboard_hash: Arc::new(AtomicU64::new(0)),
         projection_viewer,
         projection_cancel: Arc::new(AtomicBool::new(false)),
+        projection_generation: Arc::new(AtomicU64::new(0)),
         file_transfer_enabled: Arc::new(AtomicBool::new(true)),
         drag_badge: drag_badge.clone(),
+        mobile_server,
     };
 
     let discovered_for_disc = state.discovered_devices.clone();
@@ -1189,7 +1159,7 @@ pub fn run() {
                 Ok((frame_id, _is_keyframe, timestamp_us, frame_data)) => {
                     if let Ok(decoded) = decoder.decode_frame(frame_id, timestamp_us, &frame_data) {
                         if !decoded.bgra.is_empty() {
-                            viewer_for_vid_rx.present_frame(decoded.width, decoded.height, decoded.bgra);
+                            viewer_for_vid_rx.present_frame(decoded.width, decoded.height, 0, 0, decoded.bgra);
                         }
                         frames += 1;
                     }
@@ -1206,6 +1176,73 @@ pub fn run() {
                 frames = 0;
                 last_rep = Instant::now();
             }
+        }
+    });
+
+    let viewer_for_mirror = state.projection_viewer.clone();
+    let fps_for_mirror = state.live_fps_x10.clone();
+    tauri::async_runtime::spawn(async move {
+        let receiver = match mirror_stream::MirrorReceiver::bind().await {
+            Ok(receiver) => receiver,
+            Err(e) => {
+                error!("Mirror receiver cannot listen on TCP 48104: {e}");
+                return;
+            }
+        };
+        loop {
+            let (stream, _peer_addr) = match receiver.accept().await {
+                Ok(pair) => pair,
+                Err(e) => {
+                    warn!("Mirror accept failed: {e}");
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    continue;
+                }
+            };
+
+            let (mut read_half, mut write_half) = stream.into_split();
+            let (input_tx, mut input_rx) = tokio::sync::mpsc::unbounded_channel::<Vec<u8>>();
+
+            let write_task = tokio::spawn(async move {
+                use tokio::io::AsyncWriteExt;
+                while let Some(msg) = input_rx.recv().await {
+                    if write_half.write_all(&msg).await.is_err() {
+                        break;
+                    }
+                }
+            });
+
+            viewer_for_mirror.set_input_channel(Some(input_tx.clone()));
+            let mut frames = 0u64;
+            let mut report = Instant::now();
+            loop {
+                let (width, height, offset_x, offset_y, jpeg) = match mirror_stream::MirrorReceiver::read_frame(&mut read_half).await {
+                    Ok(frame) => frame,
+                    Err(_) => break,
+                };
+
+                // ACK негайно — не чекаємо декодування, щоб ПК міг відправляти наступний кадр без затримки
+                let _ = input_tx.send(vec![0x06]);
+                frames += 1;
+
+                // Декодування + відображення у фоні (fire-and-forget)
+                let viewer = viewer_for_mirror.clone();
+                tokio::task::spawn_blocking(move || {
+                    match mirror_stream::decode_bgra(width, height, &jpeg) {
+                        Ok(bgra) => viewer.present_frame(width, height, offset_x, offset_y, bgra),
+                        Err(e) => warn!("Mirror JPEG decode failed: {e}"),
+                    }
+                });
+
+                if report.elapsed() >= Duration::from_secs(1) {
+                    fps_for_mirror.store((frames as f64 / report.elapsed().as_secs_f64() * 10.0) as u64, Ordering::Relaxed);
+                    frames = 0;
+                    report = Instant::now();
+                }
+            }
+            viewer_for_mirror.set_input_channel(None);
+            viewer_for_mirror.stop();
+            write_task.abort();
+            fps_for_mirror.store(0, Ordering::Relaxed);
         }
     });
 
@@ -1335,13 +1372,18 @@ pub fn run() {
             install_virtual_display_driver,
             uninstall_virtual_display_driver,
             get_display_driver_status,
+            get_display_driver_package_status,
+            list_capture_windows,
             start_virtual_display_cast,
             stop_virtual_display_cast,
             open_received_folder,
             send_file_to_peer,
             set_file_transfer_enabled,
             get_autostart_enabled,
-            set_autostart_enabled
+            set_autostart_enabled,
+            get_mobile_remote_info,
+            toggle_mobile_remote,
+            open_mobile_remote_url
         ])
         .run(tauri::generate_context!())
     {
