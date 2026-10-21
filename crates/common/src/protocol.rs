@@ -472,7 +472,8 @@ pub fn decode_packet(buf: &[u8]) -> Result<(PacketHeader, InputEvent)> {
         return Err(NerveError::Protocol("Buffer smaller than packet header".into()));
     }
 
-    let header: PacketHeader = *bytemuck::from_bytes(&buf[..header_size]);
+    // pod_read_unaligned замість from_bytes — безпечно для невирівняних зрізів (стек/буфер)
+    let header: PacketHeader = bytemuck::pod_read_unaligned(&buf[..header_size]);
     let packet_type = header.validate()?;
 
     let payload_bytes = &buf[header_size..];
@@ -483,7 +484,7 @@ pub fn decode_packet(buf: &[u8]) -> Result<(PacketHeader, InputEvent)> {
             if payload_bytes.len() < payload_size {
                 return Err(NerveError::Protocol("Truncated MouseMove payload".into()));
             }
-            let payload: MouseMovePayload = *bytemuck::from_bytes(&payload_bytes[..payload_size]);
+            let payload: MouseMovePayload = bytemuck::pod_read_unaligned(&payload_bytes[..payload_size]);
             InputEvent::MouseMove {
                 dx: payload.dx,
                 dy: payload.dy,
@@ -494,7 +495,7 @@ pub fn decode_packet(buf: &[u8]) -> Result<(PacketHeader, InputEvent)> {
             if payload_bytes.len() < payload_size {
                 return Err(NerveError::Protocol("Truncated CursorPosition payload".into()));
             }
-            let payload: CursorPositionPayload = *bytemuck::from_bytes(&payload_bytes[..payload_size]);
+            let payload: CursorPositionPayload = bytemuck::pod_read_unaligned(&payload_bytes[..payload_size]);
             InputEvent::CursorPosition {
                 x: payload.x,
                 y: payload.y,
@@ -505,7 +506,7 @@ pub fn decode_packet(buf: &[u8]) -> Result<(PacketHeader, InputEvent)> {
             if payload_bytes.len() < payload_size {
                 return Err(NerveError::Protocol("Truncated MouseButton payload".into()));
             }
-            let payload: MouseButtonPayload = *bytemuck::from_bytes(&payload_bytes[..payload_size]);
+            let payload: MouseButtonPayload = bytemuck::pod_read_unaligned(&payload_bytes[..payload_size]);
             InputEvent::MouseButton {
                 button: MouseButton::try_from(payload.button)?,
                 state: ButtonState::try_from(payload.state)?,
@@ -516,7 +517,7 @@ pub fn decode_packet(buf: &[u8]) -> Result<(PacketHeader, InputEvent)> {
             if payload_bytes.len() < payload_size {
                 return Err(NerveError::Protocol("Truncated MouseWheel payload".into()));
             }
-            let payload: MouseWheelPayload = *bytemuck::from_bytes(&payload_bytes[..payload_size]);
+            let payload: MouseWheelPayload = bytemuck::pod_read_unaligned(&payload_bytes[..payload_size]);
             InputEvent::MouseWheel {
                 delta: payload.delta,
                 horizontal: payload.horizontal != 0,
@@ -527,7 +528,7 @@ pub fn decode_packet(buf: &[u8]) -> Result<(PacketHeader, InputEvent)> {
             if payload_bytes.len() < payload_size {
                 return Err(NerveError::Protocol("Truncated Keyboard payload".into()));
             }
-            let payload: KeyboardPayload = *bytemuck::from_bytes(&payload_bytes[..payload_size]);
+            let payload: KeyboardPayload = bytemuck::pod_read_unaligned(&payload_bytes[..payload_size]);
             InputEvent::Keyboard {
                 vk_code: payload.vk_code,
                 scan_code: payload.scan_code,
@@ -540,7 +541,7 @@ pub fn decode_packet(buf: &[u8]) -> Result<(PacketHeader, InputEvent)> {
             if payload_bytes.len() < payload_size {
                 return Err(NerveError::Protocol("Truncated Ping payload".into()));
             }
-            let payload: PingPayload = *bytemuck::from_bytes(&payload_bytes[..payload_size]);
+            let payload: PingPayload = bytemuck::pod_read_unaligned(&payload_bytes[..payload_size]);
             InputEvent::Ping {
                 client_timestamp_us: payload.client_timestamp_us,
             }
@@ -550,7 +551,7 @@ pub fn decode_packet(buf: &[u8]) -> Result<(PacketHeader, InputEvent)> {
             if payload_bytes.len() < payload_size {
                 return Err(NerveError::Protocol("Truncated Pong payload".into()));
             }
-            let payload: PingPayload = *bytemuck::from_bytes(&payload_bytes[..payload_size]);
+            let payload: PingPayload = bytemuck::pod_read_unaligned(&payload_bytes[..payload_size]);
             InputEvent::Pong {
                 client_timestamp_us: payload.client_timestamp_us,
             }
@@ -558,7 +559,7 @@ pub fn decode_packet(buf: &[u8]) -> Result<(PacketHeader, InputEvent)> {
         PacketType::Heartbeat => {
             let payload_size = std::mem::size_of::<HeartbeatPayload>();
             if payload_bytes.len() >= payload_size {
-                let payload: HeartbeatPayload = *bytemuck::from_bytes(&payload_bytes[..payload_size]);
+                let payload: HeartbeatPayload = bytemuck::pod_read_unaligned(&payload_bytes[..payload_size]);
                 let end = payload.device_name.iter().position(|&b| b == 0).unwrap_or(32);
                 let name = String::from_utf8_lossy(&payload.device_name[..end]).to_string();
                 InputEvent::Heartbeat { device_name: name }
@@ -569,7 +570,7 @@ pub fn decode_packet(buf: &[u8]) -> Result<(PacketHeader, InputEvent)> {
         PacketType::FileDrag => {
             let payload_size = std::mem::size_of::<FileDragPayload>();
             if payload_bytes.len() >= payload_size {
-                let payload: FileDragPayload = *bytemuck::from_bytes(&payload_bytes[..payload_size]);
+                let payload: FileDragPayload = bytemuck::pod_read_unaligned(&payload_bytes[..payload_size]);
                 let end = payload.file_name.iter().position(|&b| b == 0).unwrap_or(32);
                 let name = String::from_utf8_lossy(&payload.file_name[..end]).to_string();
                 InputEvent::FileDrag {
