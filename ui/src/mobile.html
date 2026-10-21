@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>NerveDesk Mobile Remote</title>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --card-bg: #181a20;
+      --accent: #0078d4;
+      --accent-hover: #1084d9;
+      --text: #f4f4f5;
+      --text-muted: #9ba1b0;
+      --border: #262933;
+      --success: #10b981;
+      --danger: #ef4444;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      height: 100vh;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    header {
+      height: 48px;
+      background: var(--card-bg);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      flex-shrink: 0;
+      z-index: 10;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 8px var(--success);
+    }
+
+    .tabs {
+      display: flex;
+      gap: 4px;
+      background: #111318;
+      padding: 3px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 5px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .tab-btn.active {
+      background: var(--accent);
+      color: #ffffff;
+    }
+
+    .tab-content {
+      flex: 1;
+      display: none;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .tab-content.active {
+      display: flex;
+    }
+
+    #screenWrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #000000;
+      position: relative;
+      overflow: hidden;
+      touch-action: none;
+    }
+
+    #streamImg {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      display: block;
+      pointer-events: none;
+    }
+
+    .screen-touch-overlay {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      touch-action: none;
+    }
+
+    .quick-bar {
+      height: 48px;
+      background: var(--card-bg);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      padding: 4px 8px;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .q-btn {
+      flex: 1;
+      height: 38px;
+      background: #20242e;
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      cursor: pointer;
+    }
+
+    .q-btn:active {
+      background: var(--accent);
+      color: #ffffff;
+    }
+
+    #trackpadArea {
+      flex: 1;
+      background: radial-gradient(circle at center, #1b1e26 0%, #101217 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      touch-action: none;
+    }
+
+    .trackpad-hint {
+      color: var(--text-muted);
+      font-size: 13px;
+      text-align: center;
+      pointer-events: none;
+      line-height: 1.5;
+      padding: 0 20px;
+    }
+
+    .scroll-strip {
+      position: absolute;
+      top: 20px;
+      bottom: 20px;
+      right: 8px;
+      width: 32px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px dashed rgba(255, 255, 255, 0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: none;
+    }
+
+    .scroll-strip-label {
+      transform: rotate(90deg);
+      font-size: 10px;
+      color: var(--text-muted);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+
+    .mouse-btns-bar {
+      height: 64px;
+      display: flex;
+      background: var(--card-bg);
+      border-top: 1px solid var(--border);
+      gap: 1px;
+      flex-shrink: 0;
+    }
+
+    .mouse-click-btn {
+      flex: 1;
+      background: #181a20;
+      border: none;
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+
+    .mouse-click-btn:active {
+      background: var(--accent);
+      color: #ffffff;
+    }
+
+    #keyDrawer {
+      display: none;
+      background: var(--card-bg);
+      border-top: 1px solid var(--border);
+      padding: 12px;
+      gap: 8px;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .key-input-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .key-input {
+      flex: 1;
+      height: 38px;
+      background: #101217;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 0 12px;
+      font-size: 14px;
+      outline: none;
+    }
+
+    .key-input:focus {
+      border-color: var(--accent);
+    }
+
+    .key-send-btn {
+      height: 38px;
+      padding: 0 16px;
+      background: var(--accent);
+      color: #ffffff;
+      border: none;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    #pinModal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: #0b0d11;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .pin-card {
+      width: 100%;
+      max-width: 320px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+
+    .pin-icon-wrap {
+      width: 56px;
+      height: 56px;
+      border-radius: 16px;
+      background: rgba(0, 120, 212, 0.12);
+      border: 1px solid rgba(0, 120, 212, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent);
+      margin-bottom: 16px;
+    }
+
+    .pin-title {
+      font-size: 19px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .pin-subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.4;
+      margin-bottom: 24px;
+    }
+
+    .pin-input-field {
+      width: 100%;
+      height: 54px;
+      background: #15181f;
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      color: #ffffff;
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: 12px;
+      text-align: center;
+      outline: none;
+      margin-bottom: 12px;
+      transition: border-color 0.2s;
+    }
+
+    .pin-input-field:focus {
+      border-color: var(--accent);
+    }
+
+    .pin-input-field.error {
+      border-color: var(--danger);
+    }
+
+    .pin-error-msg {
+      font-size: 13px;
+      color: var(--danger);
+      min-height: 18px;
+      margin-bottom: 12px;
+    }
+
+    .pin-keypad {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      width: 100%;
+      margin-top: 8px;
+    }
+
+    .num-key {
+      height: 48px;
+      background: #1c202a;
+      border: 1px solid var(--border);
+      color: #ffffff;
+      font-size: 18px;
+      font-weight: 600;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    .num-key:active {
+      background: var(--accent);
+    }
+
+    .num-key.action-key {
+      background: #141720;
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    .num-key.submit-key {
+      background: var(--accent);
+      color: #ffffff;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <div id="pinModal">
+    <div class="pin-card">
+      <div class="pin-icon-wrap">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      </div>
+      <div class="pin-title">Доступ до NerveDesk</div>
+      <div class="pin-subtitle">Введіть 6-значний PIN-код, показаний на екрані вашого комп'ютера</div>
+      <input type="tel" id="pinInput" class="pin-input-field" maxlength="6" inputmode="numeric" placeholder="------" autocomplete="off" autofocus>
+      <div id="pinError" class="pin-error-msg"></div>
+
+      <div class="pin-keypad">
+        <button class="num-key" onclick="appendPinDigit('1')">1</button>
+        <button class="num-key" onclick="appendPinDigit('2')">2</button>
+        <button class="num-key" onclick="appendPinDigit('3')">3</button>
+        <button class="num-key" onclick="appendPinDigit('4')">4</button>
+        <button class="num-key" onclick="appendPinDigit('5')">5</button>
+        <button class="num-key" onclick="appendPinDigit('6')">6</button>
+        <button class="num-key" onclick="appendPinDigit('7')">7</button>
+        <button class="num-key" onclick="appendPinDigit('8')">8</button>
+        <button class="num-key" onclick="appendPinDigit('9')">9</button>
+        <button class="num-key action-key" onclick="clearPin()">C</button>
+        <button class="num-key" onclick="appendPinDigit('0')">0</button>
+        <button class="num-key action-key" onclick="backspacePin()">⌫</button>
+      </div>
+
+      <button onclick="submitPin()" style="width: 100%; height: 46px; margin-top: 14px; background: var(--accent); border: none; border-radius: 10px; color: #fff; font-size: 15px; font-weight: 700; cursor: pointer;">
+        Підтвердити
+      </button>
+    </div>
+  </div>
+
+  <header>
+    <div class="brand">
+      <div class="status-dot"></div>
+      <span>NerveDesk</span>
+    </div>
+
+    <div class="tabs">
+      <button class="tab-btn active" id="tabScreenBtn" onclick="switchTab('screen')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        <span>Екран</span>
+      </button>
+      <button class="tab-btn" id="tabTrackpadBtn" onclick="switchTab('trackpad')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="3"/><line x1="3" y1="14" x2="21" y2="14"/><line x1="12" y1="14" x2="12" y2="20"/></svg>
+        <span>Тачпад</span>
+      </button>
+    </div>
+  </header>
+
+  <div class="tab-content active" id="tabScreen">
+    <div id="screenWrap">
+      <img id="streamImg" alt="Live PC Display">
+      <div class="screen-touch-overlay" id="screenOverlay"></div>
+    </div>
+
+    <div class="quick-bar">
+      <button class="q-btn" onclick="sendClick('left')">ЛКМ</button>
+      <button class="q-btn" onclick="sendClick('right')">ПКМ</button>
+      <button class="q-btn" onclick="sendSpecial('double_click')">2x Клік</button>
+      <button class="q-btn" onclick="toggleKeyboardDrawer()">Клавіші</button>
+      <button class="q-btn" onclick="sendSpecial('esc')">Esc</button>
+    </div>
+  </div>
+
+  <div class="tab-content" id="tabTrackpad">
+    <div id="trackpadArea">
+      <div class="trackpad-hint">
+        <strong>Сенсорна панель</strong><br>
+        Водіть пальцем для руху курсору<br>
+        Тап — лівий клік, тап двома пальцями — правий клік
+      </div>
+
+      <div class="scroll-strip" id="scrollStrip">
+        <div class="scroll-strip-label">Прокрутка</div>
+      </div>
+    </div>
+
+    <div class="mouse-btns-bar">
+      <button class="mouse-click-btn" onclick="sendClick('left')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 0-4 4v12a4 4 0 0 0 8 0V6a4 4 0 0 0-4-4z"/><path d="M12 2v6"/></svg>
+        Ліва кнопка (ЛКМ)
+      </button>
+      <button class="mouse-click-btn" onclick="sendClick('right')">
+        Права кнопка (ПКМ)
+      </button>
+    </div>
+  </div>
+
+  <div id="keyDrawer">
+    <div class="key-input-row">
+      <input type="text" id="textInput" class="key-input" placeholder="Введіть текст для надсилання на ПК...">
+      <button class="key-send-btn" onclick="sendTypedText()">Надіслати</button>
+    </div>
+    <div style="display: flex; gap: 6px; justify-content: space-between;">
+      <button class="q-btn" onclick="sendSpecial('enter')">Enter ↵</button>
+      <button class="q-btn" onclick="sendSpecial('backspace')">Backspace ⌫</button>
+      <button class="q-btn" onclick="sendSpecial('space')">Space</button>
+      <button class="q-btn" onclick="sendSpecial('tab')">Tab</button>
+    </div>
+  </div>
+
+  <script>
+    let pcWidth = 1920;
+    let pcHeight = 1080;
+    let authToken = sessionStorage.getItem('nervedesk_mobile_token') || '';
+
+    function vibrate(ms = 15) {
+      if (navigator.vibrate) {
+        navigator.vibrate(ms);
+      }
+    }
+
+    function showPinModal(msg = '') {
+      const modal = document.getElementById('pinModal');
+      modal.style.display = 'flex';
+      const input = document.getElementById('pinInput');
+      input.value = '';
+      const err = document.getElementById('pinError');
+      err.innerText = msg;
+      input.focus();
+    }
+
+    function hidePinModal() {
+      document.getElementById('pinModal').style.display = 'none';
+      startStream();
+    }
+
+    function appendPinDigit(digit) {
+      const input = document.getElementById('pinInput');
+      if (input.value.length < 6) {
+        input.value += digit;
+        vibrate(10);
+        if (input.value.length === 6) {
+          submitPin();
+        }
+      }
+    }
+
+    function backspacePin() {
+      const input = document.getElementById('pinInput');
+      input.value = input.value.slice(0, -1);
+      vibrate(10);
+    }
+
+    function clearPin() {
+      const input = document.getElementById('pinInput');
+      input.value = '';
+      vibrate(10);
+    }
+
+    async function submitPin() {
+      const input = document.getElementById('pinInput');
+      const pin = input.value.trim();
+      if (pin.length !== 6) {
+        document.getElementById('pinError').innerText = 'Введіть 6 цифр PIN-коду';
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin: pin })
+        });
+        const data = await res.json();
+        if (data.ok && data.token) {
+          authToken = data.token;
+          sessionStorage.setItem('nervedesk_mobile_token', authToken);
+          hidePinModal();
+          vibrate(20);
+        } else {
+          input.classList.add('error');
+          setTimeout(() => input.classList.remove('error'), 500);
+          document.getElementById('pinError').innerText = 'Невірний PIN-код. Спробуйте ще раз';
+          vibrate(40);
+        }
+      } catch (e) {
+        document.getElementById('pinError').innerText = 'Помилка зв\'язку з ПК';
+      }
+    }
+
+    document.getElementById('pinInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        submitPin();
+      }
+    });
+
+    async function initAuthAndStatus() {
+      if (!authToken) {
+        showPinModal();
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/status', {
+          headers: { 'X-Auth-Token': authToken }
+        });
+        const data = await res.json();
+        if (data.authorized) {
+          if (data.width && data.height) {
+            pcWidth = data.width;
+            pcHeight = data.height;
+          }
+          hidePinModal();
+        } else {
+          sessionStorage.removeItem('nervedesk_mobile_token');
+          authToken = '';
+          showPinModal();
+        }
+      } catch (e) {
+        showPinModal();
+      }
+    }
+
+    function startStream() {
+      if (!authToken) return;
+      const img = document.getElementById('streamImg');
+      img.src = '/stream?token=' + encodeURIComponent(authToken);
+    }
+
+    function switchTab(tab) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+      if (tab === 'screen') {
+        document.getElementById('tabScreenBtn').classList.add('active');
+        document.getElementById('tabScreen').classList.add('active');
+      } else {
+        document.getElementById('tabTrackpadBtn').classList.add('active');
+        document.getElementById('tabTrackpad').classList.add('active');
+      }
+      vibrate(10);
+    }
+
+    function toggleKeyboardDrawer() {
+      const d = document.getElementById('keyDrawer');
+      const isHidden = d.style.display === 'none' || d.style.display === '';
+      d.style.display = isHidden ? 'flex' : 'none';
+      if (isHidden) {
+        document.getElementById('textInput').focus();
+      }
+      vibrate(10);
+    }
+
+    function postAction(payload) {
+      payload.token = authToken;
+      fetch('/api/input', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Auth-Token': authToken
+        },
+        body: JSON.stringify(payload)
+      }).then(res => {
+        if (res.status === 401) {
+          sessionStorage.removeItem('nervedesk_mobile_token');
+          authToken = '';
+          showPinModal('Сесію завершено або змінено PIN');
+        }
+      }).catch(() => {});
+    }
+
+    function sendClick(btn = 'left') {
+      vibrate(20);
+      postAction({ action: 'click', button: btn });
+    }
+
+    function sendSpecial(type) {
+      vibrate(15);
+      postAction({ action: 'special', key: type });
+    }
+
+    function sendTypedText() {
+      const input = document.getElementById('textInput');
+      const text = input.value;
+      if (text) {
+        postAction({ action: 'type_text', text: text });
+        input.value = '';
+        vibrate(20);
+      }
+    }
+
+    document.getElementById('textInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        sendTypedText();
+      }
+    });
+
+    const overlay = document.getElementById('screenOverlay');
+    const streamImg = document.getElementById('streamImg');
+    let isTouchingScreen = false;
+    let touchStartTime = 0;
+    let touchStartPos = { x: 0, y: 0 };
+
+    function getCoordsOnPC(clientX, clientY) {
+      const rect = streamImg.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return null;
+
+      const relX = (clientX - rect.left) / rect.width;
+      const relY = (clientY - rect.top) / rect.height;
+
+      if (relX < 0 || relX > 1 || relY < 0 || relY > 1) return null;
+
+      return {
+        x: Math.round(relX * pcWidth),
+        y: Math.round(relY * pcHeight)
+      };
+    }
+
+    overlay.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        const pcPos = getCoordsOnPC(touch.clientX, touch.clientY);
+        if (pcPos) {
+          isTouchingScreen = true;
+          touchStartTime = Date.now();
+          touchStartPos = { x: touch.clientX, y: touch.clientY };
+          postAction({ action: 'cursor_pos', x: pcPos.x, y: pcPos.y });
+          postAction({ action: 'mouse_down', button: 'left' });
+        }
+      }
+    }, { passive: false });
+
+    overlay.addEventListener('touchmove', (e) => {
+      if (isTouchingScreen && e.touches.length === 1) {
+        const touch = e.touches[0];
+        const pcPos = getCoordsOnPC(touch.clientX, touch.clientY);
+        if (pcPos) {
+          postAction({ action: 'cursor_pos', x: pcPos.x, y: pcPos.y });
+        }
+      }
+    }, { passive: false });
+
+    overlay.addEventListener('touchend', (e) => {
+      if (isTouchingScreen) {
+        isTouchingScreen = false;
+        postAction({ action: 'mouse_up', button: 'left' });
+        vibrate(15);
+      }
+    }, { passive: false });
+
+    const trackpad = document.getElementById('trackpadArea');
+    let lastTrackpadX = 0;
+    let lastTrackpadY = 0;
+    let trackpadTouchTime = 0;
+    let totalMoved = 0;
+
+    trackpad.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) {
+        lastTrackpadX = e.touches[0].clientX;
+        lastTrackpadY = e.touches[0].clientY;
+        trackpadTouchTime = Date.now();
+        totalMoved = 0;
+      } else if (e.touches.length === 2) {
+        vibrate(25);
+        postAction({ action: 'click', button: 'right' });
+      }
+    }, { passive: false });
+
+    trackpad.addEventListener('touchmove', (e) => {
+      if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        const dx = (touch.clientX - lastTrackpadX) * 1.6;
+        const dy = (touch.clientY - lastTrackpadY) * 1.6;
+        lastTrackpadX = touch.clientX;
+        lastTrackpadY = touch.clientY;
+        totalMoved += Math.abs(dx) + Math.abs(dy);
+
+        postAction({ action: 'move_by', dx: Math.round(dx), dy: Math.round(dy) });
+      }
+    }, { passive: false });
+
+    trackpad.addEventListener('touchend', (e) => {
+      const duration = Date.now() - trackpadTouchTime;
+      if (duration < 250 && totalMoved < 8) {
+        vibrate(15);
+        postAction({ action: 'click', button: 'left' });
+      }
+    }, { passive: false });
+
+    const scrollStrip = document.getElementById('scrollStrip');
+    let lastScrollY = 0;
+
+    scrollStrip.addEventListener('touchstart', (e) => {
+      if (e.touches.length > 0) {
+        lastScrollY = e.touches[0].clientY;
+      }
+    }, { passive: false });
+
+    scrollStrip.addEventListener('touchmove', (e) => {
+      if (e.touches.length > 0) {
+        const currentY = e.touches[0].clientY;
+        const delta = (lastScrollY - currentY) * 6;
+        lastScrollY = currentY;
+        if (Math.abs(delta) > 2) {
+          postAction({ action: 'scroll', delta: Math.round(delta) });
+        }
+      }
+    }, { passive: false });
+
+    initAuthAndStatus();
+  </script>
+</body>
+</html>

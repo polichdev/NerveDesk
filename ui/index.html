@@ -755,7 +755,14 @@
         <div class="nav-icon">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
         </div>
-        <span data-i18n="nav_cast">Трансляція дисплея</span>
+        <span data-i18n="nav_cast">Дублювання екрана</span>
+      </div>
+
+      <div class="nav-item" id="navMobile" onclick="switchTab('mobile')" title="Мобільний пульт">
+        <div class="nav-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="3"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+        </div>
+        <span data-i18n="nav_mobile">Мобільний пульт</span>
       </div>
     </div>
 
@@ -771,7 +778,6 @@
 
   <div class="main-wrap">
     <div class="content-area">
-      <!-- VIEW: HOME -->
       <div class="view-container active" id="viewHome">
         <div class="view-header">
           <div class="view-title" data-i18n="home_title">Головна</div>
@@ -779,7 +785,6 @@
         </div>
 
         <div class="home-grid">
-          <!-- Metrics Column -->
           <div style="display: flex; flex-direction: column; gap: 12px;">
             <div class="section-title" data-i18n="sec_system_metrics">Системні метрики</div>
             
@@ -792,19 +797,13 @@
             <div class="diag-card">
               <div class="diag-label" data-i18n="metric_framerate">Частота кадрів стріму</div>
               <div class="diag-val" id="diagFps">0.0 FPS</div>
-              <div class="diag-sub" data-i18n="metric_framerate_sub">Конвеєр DirectX 11 без копіювання</div>
+              <div class="diag-sub" data-i18n="metric_framerate_sub">Захоплення екрана DirectX 11</div>
             </div>
 
             <div class="diag-card">
               <div class="diag-label" data-i18n="metric_bandwidth">Пропускна здатність</div>
               <div class="diag-val" id="diagBitrate">0.0 Mbps</div>
-              <div class="diag-sub" data-i18n="metric_bandwidth_sub">H.264 низька затримка CBR</div>
-            </div>
-
-            <div class="diag-card">
-              <div class="diag-label" data-i18n="metric_virtual_display">Віртуальний дисплей</div>
-              <div class="diag-val" id="diagDisplay" style="font-size: 18px;" data-i18n="status_attached">Підключено</div>
-              <div class="diag-sub" data-i18n="metric_virtual_display_sub">Драйвер Microsoft IddCx UMDF</div>
+              <div class="diag-sub" data-i18n="metric_bandwidth_sub">Передача зображення локальною мережею</div>
             </div>
 
             <div class="diag-card">
@@ -814,7 +813,6 @@
             </div>
           </div>
 
-          <!-- Modules Column -->
           <div style="display: flex; flex-direction: column; gap: 12px;">
             <div class="section-title" data-i18n="sec_active_modules">Активні модулі та служби</div>
 
@@ -845,8 +843,8 @@
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
                 </div>
                 <div class="setting-text">
-                  <div class="setting-name" data-i18n="mod_cast_name">Проєкція віртуального дисплея</div>
-                  <div class="setting-desc" data-i18n="mod_cast_desc">Розширення або дублювання робочого столу на додатковий екран</div>
+                  <div class="setting-name" data-i18n="mod_cast_name">Дублювання екрана</div>
+                  <div class="setting-desc" data-i18n="mod_cast_desc">Показувати екран ПК на ноутбуці через мережу</div>
                 </div>
               </div>
               <div class="setting-right">
@@ -880,11 +878,31 @@
                 </button>
               </div>
             </div>
+
+            <div class="setting-card">
+              <div class="setting-left">
+                <div class="setting-icon" style="color: #f59e0b;">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="3"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+                </div>
+                <div class="setting-text">
+                  <div class="setting-name" data-i18n="mod_mobile_name">Мобільний пульт та екран</div>
+                  <div class="setting-desc" data-i18n="mod_mobile_desc">Керуйте мишею по зображенню та використовуйте тачпад зі смартфона</div>
+                </div>
+              </div>
+              <div class="setting-right">
+                <label class="switch">
+                  <input type="checkbox" id="homeMobileToggle" checked onchange="toggleMobileServer(this.checked)">
+                  <span class="slider"></span>
+                </label>
+                <button class="btn btn-secondary" onclick="switchTab('mobile')" title="Відкрити QR-код та налаштування" data-i18n-title="open_mobile_qr">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- VIEW: KVM (MOUSE WITHOUT BORDERS) -->
       <div class="view-container" id="viewKvm">
         <div class="view-header">
           <div class="view-title" data-i18n="kvm_title">Безмежна миша</div>
@@ -1062,29 +1080,35 @@
         </div>
       </div>
 
-      <!-- VIEW: CAST (VIRTUAL DISPLAY PROJECTION) -->
       <div class="view-container" id="viewCast">
         <div class="view-header">
-          <div class="view-title" data-i18n="cast_title">Проєкція віртуального дисплея</div>
-          <div class="view-desc" data-i18n="cast_desc">Проєктуйте, розширюйте або дублюйте екран на додатковий ноутбук чи ПК за допомогою віртуального драйвера Microsoft IddCx.</div>
+          <div class="view-title" data-i18n="cast_title">Дублювання екрана</div>
+          <div class="view-desc" data-i18n="cast_desc">Покажіть поточний екран ПК на ноутбуці або іншому ПК через локальну мережу. Зображення автоматично впишеться в екран приймача зі збереженням пропорцій.</div>
         </div>
 
-        <div class="section-title" data-i18n="sec_projection_cfg">Конфігурація проєкції</div>
         <div class="setting-card">
           <div class="setting-left">
-            <div class="setting-icon">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-            </div>
             <div class="setting-text">
-              <div class="setting-name" data-i18n="projection_mode_name">Режим проєкції</div>
-              <div class="setting-desc" data-i18n="projection_mode_desc">Оберіть спосіб виведення: як додатковий незалежний монітор чи дублювання основного дисплея.</div>
+              <div class="setting-name" data-i18n="mirror_target_name">Пристрій приймача</div>
+              <div class="setting-desc" data-i18n="mirror_target_desc">Відкрийте NerveDesk на ноутбуці та виберіть його зі списку.</div>
             </div>
           </div>
           <div class="setting-right">
-            <select id="castModeSelect" class="select-input">
-              <option value="extend" data-i18n="mode_extend">Розширити робочий стіл (незалежний 2-й монітор)</option>
-              <option value="duplicate" data-i18n="mode_duplicate">Дублювати головний екран (дзеркало)</option>
-            </select>
+            <select id="mirrorTargetSelect" class="select-input" onchange="saveMirrorTarget()"></select>
+            <button class="btn btn-secondary" onclick="refreshMirrorTargets()" data-i18n="mirror_refresh">Оновити</button>
+          </div>
+        </div>
+
+        <div class="setting-card">
+          <div class="setting-left">
+            <div class="setting-text">
+              <div class="setting-name" data-i18n="mirror_source_name">Що показувати</div>
+              <div class="setting-desc" data-i18n="mirror_source_desc">Вікно Word може бути за Meet на ПК, але не згортайте його.</div>
+            </div>
+          </div>
+          <div class="setting-right">
+            <select id="mirrorSourceSelect" class="select-input"></select>
+            <button class="btn btn-secondary" onclick="refreshCaptureWindows()" data-i18n="mirror_refresh">Оновити</button>
           </div>
         </div>
 
@@ -1094,43 +1118,94 @@
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
             </div>
             <div class="setting-text">
-              <div class="setting-name" data-i18n="stream_name">Трансляція віртуального дисплея</div>
-              <div class="setting-desc" data-i18n="stream_desc">Активуйте потік DirectX 11 з наднизькою затримкою для створення апаратно-прискореного монітора.</div>
+              <div class="setting-name" data-i18n="stream_name">Трансляція екрана</div>
+              <div class="setting-desc" data-i18n="stream_desc">Виберіть ноутбук і вміст, який потрібно показати, а потім почніть трансляцію.</div>
             </div>
           </div>
           <div class="setting-right">
-            <button class="btn btn-secondary" onclick="openWindowsDisplaySettings()" data-i18n="btn_display_settings">Параметри дисплея Windows</button>
             <button class="btn" id="btnCastToggle" onclick="toggleCastProjection()" data-i18n="btn_project_start">Почати трансляцію</button>
-          </div>
-        </div>
-
-        <div class="section-title" data-i18n="sec_driver">Драйвер та прискорення</div>
-        <div class="setting-card">
-          <div class="setting-left">
-            <div class="setting-icon" style="color: #38bdf8;">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m10 15 5-3-5-3v6z"/></svg>
-            </div>
-            <div class="setting-text">
-              <div class="setting-name" data-i18n="driver_status_name">Стан драйвера Microsoft IddCx UMDF</div>
-              <div class="setting-desc" id="vDisplayStatusDesc" data-i18n="driver_ready">Віртуальний монітор готовий. Windows повністю керує роздільною здатністю та масштабуванням.</div>
-            </div>
-          </div>
-          <div class="setting-right">
-            <button class="btn btn-secondary" id="btnInstallDriver" onclick="installDriver()" style="display: none; padding: 4px 10px; font-size: 12px; border-color: #f59e0b; color: #fbbf24;" data-i18n="btn_install_driver">Встановити драйвер IddCx</button>
-            <button class="btn btn-secondary" id="btnUninstallDriver" onclick="uninstallDriver()" style="display: none; padding: 4px 10px; font-size: 12px; border-color: rgba(239,68,68,0.4); color: #ef4444;" data-i18n="btn_uninstall_driver">Видалити драйвер</button>
-            <span class="badge" id="vDisplayBadge" data-i18n="badge_checking">Перевірка...</span>
           </div>
         </div>
       </div>
 
-      <!-- VIEW: SETTINGS -->
+      <div class="view-container" id="viewMobile">
+        <div class="view-header">
+          <div class="view-title" data-i18n="mobile_title">Мобільний пульт (Керування з телефона)</div>
+          <div class="view-desc" data-i18n="mobile_desc">Керуйте курсором миші, вводом тексту та переглядайте зображення екрана в реальному часі зі смартфона чи планшета без встановлення додатків.</div>
+        </div>
+
+        <div class="setting-card">
+          <div class="setting-left">
+            <div class="setting-icon" style="color: #10b981;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+            </div>
+            <div class="setting-text">
+              <div class="setting-name" data-i18n="mobile_service_name">Служба мобільного веб-доступу</div>
+              <div class="setting-desc" id="mobileStatusDesc" data-i18n="mobile_service_desc">Локальний веб-сервер активний. Доступний для пристроїв у домашній Wi-Fi мережі.</div>
+            </div>
+          </div>
+          <div class="setting-right">
+            <label class="switch">
+              <input type="checkbox" id="mobileServerMasterToggle" checked onchange="toggleMobileServer(this.checked)">
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="section-title" data-i18n="sec_mobile_connect">Швидке підключення через QR-код</div>
+        <div class="setting-card" style="align-items: stretch; flex-direction: column; gap: 20px;">
+          <div style="display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap;">
+            <div id="mobileQrContainer" style="background: #ffffff; padding: 12px; border-radius: 12px; display: flex; align-items: center; justify-content: center; width: 204px; height: 204px; border: 1px solid var(--card-border); flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+              <div style="color: #64748b; font-size: 12px;">Генерація QR...</div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 14px; flex: 1; min-width: 260px;">
+              <div style="font-weight: 600; font-size: 15px; color: var(--text);" data-i18n="mobile_steps_title">Як підключити телефон:</div>
+              <ol style="font-size: 13px; color: var(--text-muted); line-height: 1.6; margin: 0 0 0 18px; padding: 0; display: flex; flex-direction: column; gap: 4px;">
+                <li data-i18n="mobile_step_1">Підключіть телефон до тієї ж Wi-Fi мережі, що й ПК.</li>
+                <li data-i18n="mobile_step_2">Відскануйте QR-код камерою або введіть адресу в браузері.</li>
+                <li data-i18n="mobile_step_3">Введіть 6-значний PIN-код для безпечного входу.</li>
+                <li data-i18n="mobile_step_4">Керуйте комп'ютером у режимі «Екран» або «Тачпад».</li>
+              </ol>
+
+              <div style="display: flex; align-items: center; gap: 12px; background: rgba(0, 120, 212, 0.08); border: 1px solid rgba(0, 120, 212, 0.25); border-radius: 10px; padding: 10px 14px; flex-wrap: wrap;">
+                <div>
+                  <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); font-weight: 700;" data-i18n="mobile_pin_label">PIN-код доступу</div>
+                  <div id="mobilePinDisplay" style="font-size: 26px; font-weight: 800; letter-spacing: 5px; color: var(--accent); font-family: monospace;">------</div>
+                </div>
+                <button class="btn btn-secondary" onclick="regenerateMobilePin()" style="margin-left: auto; display: flex; align-items: center; gap: 6px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                  <span data-i18n="btn_regen_pin">Оновити PIN</span>
+                </button>
+              </div>
+
+              <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                <input type="text" id="mobileUrlInput" class="code-input" readonly style="flex: 1; min-width: 180px; font-weight: 600;">
+                <button class="btn btn-secondary" onclick="copyMobileUrl()" data-i18n="btn_copy_url">Скопіювати</button>
+                <button class="btn" onclick="openMobileInBrowser()" data-i18n="btn_open_browser">Відкрити в браузері</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-title" data-i18n="sec_mobile_features">Можливості керування</div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px;">
+          <div class="diag-card">
+            <div class="diag-label" data-i18n="feature_live_touch">Живе зображення + Тач</div>
+            <div style="font-size: 12px; color: var(--text-muted); line-height: 1.4;" data-i18n="feature_live_touch_desc">Відеопотік монітора з наднизькою затримкою. Дотик до будь-якої частини картинки миттєво переміщує курсор ПК.</div>
+          </div>
+          <div class="diag-card">
+            <div class="diag-label" data-i18n="feature_trackpad">Сенсорний трекпад</div>
+            <div style="font-size: 12px; color: var(--text-muted); line-height: 1.4;" data-i18n="feature_trackpad_desc">Плавний рух курсору пальцем, тап одним пальцем (ЛКМ), тап двома пальцями (ПКМ) та смуга вертикального скролу.</div>
+          </div>
+        </div>
+      </div>
+
       <div class="view-container" id="viewSettings">
         <div class="view-header">
           <div class="view-title" data-i18n="settings_title">Загальні налаштування</div>
           <div class="view-desc" data-i18n="settings_desc">Налаштування параметрів програми, оформлення, мови та мережевих зв'язків.</div>
         </div>
 
-        <!-- Theme Selection Card -->
         <div class="setting-card">
           <div class="setting-left">
             <div class="setting-icon" style="color: #f59e0b;">
@@ -1150,7 +1225,6 @@
           </div>
         </div>
 
-        <!-- Language Selection Card -->
         <div class="setting-card">
           <div class="setting-left">
             <div class="setting-icon" style="color: #38bdf8;">
@@ -1169,7 +1243,6 @@
           </div>
         </div>
 
-        <!-- Startup Card -->
         <div class="setting-card">
           <div class="setting-left">
             <div class="setting-icon">
@@ -1188,7 +1261,6 @@
           </div>
         </div>
 
-        <!-- Subnet Card -->
         <div class="setting-card">
           <div class="setting-left">
             <div class="setting-icon">
@@ -1210,7 +1282,6 @@
     </div>
   </div>
 
-  <!-- Toast Notification -->
   <div id="fileToast">
     <div style="color: var(--success); flex-shrink: 0;">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
@@ -1223,14 +1294,14 @@
   </div>
 
   <script>
-    // I18N DICTIONARY
     const translations = {
       uk: {
         app_title: "NerveDesk",
         nav_home: "Головна",
         nav_section_navigation: "Навігація",
         nav_kvm: "Безмежна миша",
-        nav_cast: "Трансляція дисплея",
+        nav_cast: "Дублювання екрана",
+        nav_mobile: "Мобільний пульт",
         nav_settings: "Налаштування",
         
         home_title: "Головна",
@@ -1239,21 +1310,22 @@
         metric_input_latency: "Затримка вводу",
         metric_input_latency_sub: "Субмілісекундний прямий UDP",
         metric_framerate: "Частота кадрів стріму",
-        metric_framerate_sub: "Конвеєр DirectX 11 без копіювання",
+        metric_framerate_sub: "Захоплення екрана DirectX 11",
         metric_bandwidth: "Пропускна здатність",
-        metric_bandwidth_sub: "H.264 низька затримка CBR",
-        metric_virtual_display: "Віртуальний дисплей",
-        metric_virtual_display_sub: "Драйвер Microsoft IddCx UMDF",
+        metric_bandwidth_sub: "Передача зображення локальною мережею",
         metric_edge: "Активна межа переходу",
         metric_edge_sub: "Перетин межі екрана",
         
         sec_active_modules: "Активні модулі та служби",
         mod_kvm_name: "Безмежна миша (KVM)",
         mod_kvm_desc: "Спільне керування мишею та клавіатурою між ПК",
-        mod_cast_name: "Проєкція віртуального дисплея",
-        mod_cast_desc: "Розширення або дублювання робочого столу на додатковий екран",
+        mod_cast_name: "Дублювання екрана",
+        mod_cast_desc: "Показувати екран ПК на ноутбуці через мережу",
         mod_transfer_name: "Перетягування файлів (Drag & Drop)",
         mod_transfer_desc: "Перетягуйте файли через межу екрана або копіюйте через буфер обміну",
+        mod_mobile_name: "Мобільний пульт та екран",
+        mod_mobile_desc: "Керуйте мишею по зображенню та використовуйте тачпад зі смартфона",
+        open_mobile_qr: "Відкрити QR-код та налаштування",
         open_folder_btn: "Відкрити отримані файли",
         
         kvm_title: "Безмежна миша",
@@ -1303,31 +1375,40 @@
         hotkey_name: "Аварійне повернення керування",
         hotkey_desc: "Натисніть цю комбінацію для миттєвого повернення фокусу на головний комп'ютер.",
         
-        cast_title: "Проєкція віртуального дисплея",
-        cast_desc: "Проєктуйте, розширюйте або дублюйте екран на додатковий ноутбук чи ПК за допомогою віртуального драйвера Microsoft IddCx.",
-        sec_projection_cfg: "Конфігурація проєкції",
-        projection_mode_name: "Режим проєкції",
-        projection_mode_desc: "Оберіть спосіб виведення: як додатковий незалежний монітор чи дублювання основного дисплея.",
-        mode_extend: "Розширити робочий стіл (незалежний 2-й монітор)",
-        mode_duplicate: "Дублювати головний екран (дзеркало)",
-        stream_name: "Трансляція віртуального дисплея",
-        stream_desc: "Активуйте потік DirectX 11 з наднизькою затримкою для створення апаратно-прискореного монітора.",
-        btn_display_settings: "Параметри дисплея Windows",
+        cast_title: "Дублювання екрана",
+        cast_desc: "Покажіть поточний екран ПК на ноутбуці або іншому ПК через локальну мережу. Зображення автоматично впишеться в екран приймача зі збереженням пропорцій.",
+        mirror_target_name: "Пристрій приймача",
+        mirror_target_desc: "Відкрийте NerveDesk на ноутбуці та виберіть його зі списку.",
+        mirror_source_name: "Що показувати",
+        mirror_source_desc: "Вікно Word може бути за Meet на ПК, але не згортайте його.",
+        mirror_entire_screen: "Увесь головний екран",
+        mirror_refresh: "Оновити",
+        mirror_no_target: "Пристроїв не знайдено",
+        stream_name: "Трансляція екрана",
+        stream_desc: "Виберіть ноутбук і вміст, який потрібно показати, а потім почніть трансляцію.",
         btn_project_start: "Почати трансляцію",
         btn_project_stop: "Зупинити трансляцію",
-        sec_driver: "Драйвер та прискорення",
-        driver_status_name: "Стан драйвера Microsoft IddCx UMDF",
-        driver_ready: "Віртуальний монітор готовий. Windows повністю керує роздільною здатністю та масштабуванням.",
-        driver_extended: "Додатковий віртуальний монітор активний. Робочий стіл незалежно розширено.",
-        driver_not_installed_desc: "Виявлено лише один екран. Встановіть драйвер IddCx для створення незалежного 2-го монітора.",
-        btn_install_driver: "Встановити драйвер IddCx",
-        btn_uninstall_driver: "Видалити драйвер",
-        badge_checking: "Перевірка...",
-        badge_driver_ready: "Віртуальний дисплей готовий",
-        badge_driver_missing: "Драйвер не встановлено",
-        badge_projecting: "Трансляція активна",
-        badge_active: "Активно",
-        badge_ready: "Готово",
+
+        mobile_title: "Мобільний пульт (Керування з телефона)",
+        mobile_desc: "Керуйте курсором миші, вводом тексту та переглядайте зображення екрана в реальному часі зі смартфона чи планшета без встановлення додатків.",
+        mobile_service_name: "Служба мобільного веб-доступу",
+        mobile_service_desc: "Локальний веб-сервер активний. Доступний для пристроїв у домашній Wi-Fi мережі.",
+        sec_mobile_connect: "Швидке підключення через QR-код",
+        mobile_steps_title: "Як підключити телефон:",
+        mobile_step_1: "Підключіть телефон до тієї ж Wi-Fi мережі, що й ПК.",
+        mobile_step_2: "Відскануйте QR-код камерою або введіть адресу в браузері.",
+        mobile_step_3: "Введіть 6-значний PIN-код для безпечного входу.",
+        mobile_step_4: "Керуйте комп'ютером у режимі «Екран» або «Тачпад».",
+        mobile_pin_label: "PIN-код доступу",
+        btn_regen_pin: "Оновити PIN",
+        btn_copy_url: "Скопіювати",
+        btn_open_browser: "Відкрити в браузері",
+        sec_mobile_features: "Можливості керування",
+        feature_live_touch: "Живе зображення + Тач",
+        feature_live_touch_desc: "Відеопотік монітора з наднизькою затримкою. Дотик до будь-якої частини картинки миттєво переміщує курсор ПК.",
+        feature_trackpad: "Сенсорний трекпад",
+        feature_trackpad_desc: "Плавний рух курсору пальцем, тап одним пальцем (ЛКМ), тап двома пальцями (ПКМ) та смуга вертикального скролу.",
+        toast_copied_url: "Посилання скопійовано в буфер обміну!",
         
         settings_title: "Загальні налаштування",
         settings_desc: "Налаштування параметрів програми, оформлення, мови та мережевих зв'язків.",
@@ -1346,11 +1427,8 @@
         alert_enter_device_name: "Будь ласка, введіть ім'я цільового пристрою",
         alert_enter_key: "Будь ласка, введіть ключ безпеки",
         alert_conn_failed: "Помилка підключення: ",
-        alert_proj_single_display: "Виявлено лише 1 монітор. Щоб використовувати екран як незалежний 2-й монітор, потрібен віртуальний драйвер IddCx.\n\nВстановити драйвер IddCx зараз?",
+        alert_mirror_pair_first: "Відкрийте NerveDesk на ноутбуці, натисніть «Оновити» й виберіть його зі списку.",
         alert_proj_error: "Помилка трансляції: ",
-        alert_install_err: "Не вдалося запустити встановлення драйвера: ",
-        alert_uninstall_confirm: "Ви впевнені, що хочете повністю видалити драйвер віртуального дисплея IddCx та всі його компоненти?",
-        alert_uninstall_err: "Не вдалося запустити видалення драйвера: ",
         alert_folder_err: "Не вдалося відкрити теку файлів: ",
         toast_file_received: "Отримано файл: ",
         toast_file_desc: "Збережено у Завантаження\\NerveDesk та готово до вставки",
@@ -1361,7 +1439,8 @@
         nav_home: "Home",
         nav_section_navigation: "Navigation",
         nav_kvm: "Mouse Without Borders",
-        nav_cast: "Virtual Display Cast",
+        nav_cast: "Screen Mirror",
+        nav_mobile: "Mobile Remote",
         nav_settings: "Settings",
         
         home_title: "Home",
@@ -1370,21 +1449,22 @@
         metric_input_latency: "Input Latency",
         metric_input_latency_sub: "Sub-millisecond Direct UDP",
         metric_framerate: "Display Stream Framerate",
-        metric_framerate_sub: "DirectX 11 Zero-Copy Pipeline",
+        metric_framerate_sub: "DirectX 11 screen capture",
         metric_bandwidth: "Network Throughput",
-        metric_bandwidth_sub: "H.264 Low-Latency CBR",
-        metric_virtual_display: "Virtual Display Device",
-        metric_virtual_display_sub: "Microsoft IddCx UMDF Driver",
+        metric_bandwidth_sub: "Video over the local network",
         metric_edge: "Active Transition Edge",
         metric_edge_sub: "Screen Boundary Crossing",
         
         sec_active_modules: "Active Modules & Services",
         mod_kvm_name: "Mouse Without Borders (KVM)",
         mod_kvm_desc: "Share keyboard and mouse seamlessly between computers",
-        mod_cast_name: "Virtual Display Projection",
-        mod_cast_desc: "Extend or duplicate desktop to secondary screen",
+        mod_cast_name: "Screen Mirror",
+        mod_cast_desc: "Show this PC's screen on a laptop over the network",
         mod_transfer_name: "File Drag & Drop",
         mod_transfer_desc: "Drag files across screen borders with mouse or copy to clipboard",
+        mod_mobile_name: "Mobile Remote & Screen",
+        mod_mobile_desc: "Control PC cursor over live image and use phone as trackpad",
+        open_mobile_qr: "Open QR code & settings",
         open_folder_btn: "Open Received Files",
         
         kvm_title: "Mouse Without Borders",
@@ -1434,31 +1514,40 @@
         hotkey_name: "Emergency Escape Hotkey",
         hotkey_desc: "Press this combination to immediately release input focus back to the primary computer.",
         
-        cast_title: "Virtual Display Projection",
-        cast_desc: "Project, extend, or duplicate your desktop to a secondary laptop or PC via Microsoft IddCx Virtual Display Driver.",
-        sec_projection_cfg: "Projection Configuration",
-        projection_mode_name: "Projection Mode",
-        projection_mode_desc: "Choose whether to extend the desktop as a secondary monitor or mirror your primary display.",
-        mode_extend: "Extend Desktop (Independent 2nd Monitor)",
-        mode_duplicate: "Duplicate Primary Display (Mirror Screen)",
-        stream_name: "Virtual Display Projection Stream",
-        stream_desc: "Activate low-latency DirectX 11 stream to turn the remote PC into a hardware-accelerated monitor.",
-        btn_display_settings: "Windows Display Settings",
+        cast_title: "Screen Mirror",
+        cast_desc: "Show this PC's current screen on a laptop or PC over the local network. The picture fits the receiver screen while preserving its proportions.",
+        mirror_target_name: "Receiving device",
+        mirror_target_desc: "Open NerveDesk on the laptop and select it from the list.",
+        mirror_source_name: "What to show",
+        mirror_source_desc: "Word can stay behind Meet on this PC; keep its window open and not minimized.",
+        mirror_entire_screen: "Entire primary screen",
+        mirror_refresh: "Refresh",
+        mirror_no_target: "No devices found",
+        stream_name: "Screen stream",
+        stream_desc: "Choose the laptop and what to show, then start streaming.",
         btn_project_start: "Project Display",
         btn_project_stop: "Stop Projection",
-        sec_driver: "Driver & Acceleration",
-        driver_status_name: "Microsoft IddCx UMDF Driver Status",
-        driver_ready: "Virtual monitor ready. Windows handles resolution, scaling, and positioning natively.",
-        driver_extended: "Secondary virtual monitor active. Windows desktop extended independently.",
-        driver_not_installed_desc: "Single display detected. Install IddCx driver to create an independent 2nd monitor.",
-        btn_install_driver: "Install IddCx Driver",
-        btn_uninstall_driver: "Uninstall Driver",
-        badge_checking: "Checking...",
-        badge_driver_ready: "Virtual Display Ready",
-        badge_driver_missing: "Driver Not Installed",
-        badge_projecting: "Projecting (Active)",
-        badge_active: "Active",
-        badge_ready: "Ready",
+
+        mobile_title: "Mobile Remote (Smartphone Control)",
+        mobile_desc: "Control mouse cursor, keyboard, and stream live PC screen to any phone or tablet without installing apps.",
+        mobile_service_name: "Mobile Web Access Service",
+        mobile_service_desc: "Local web server is active and accessible to devices in your local Wi-Fi network.",
+        sec_mobile_connect: "Quick Connect via QR Code",
+        mobile_steps_title: "How to connect your phone:",
+        mobile_step_1: "Connect your phone to the same Wi-Fi network as this PC.",
+        mobile_step_2: "Scan the QR code with your camera or enter the address below.",
+        mobile_step_3: "Enter the 6-digit security PIN to authorize access.",
+        mobile_step_4: "Control your PC via «Live Display» or «Trackpad» mode.",
+        mobile_pin_label: "Access PIN",
+        btn_regen_pin: "Regenerate PIN",
+        btn_copy_url: "Copy Link",
+        btn_open_browser: "Open in Browser",
+        sec_mobile_features: "Control Features",
+        feature_live_touch: "Live Display + Touch",
+        feature_live_touch_desc: "Ultra-low latency screen stream. Tapping anywhere moves the PC cursor directly under your finger.",
+        feature_trackpad: "Touch Trackpad",
+        feature_trackpad_desc: "Smooth cursor motion, 1-finger tap (Left click), 2-finger tap (Right click), and vertical scroll bar.",
+        toast_copied_url: "Link copied to clipboard!",
         
         settings_title: "General Settings",
         settings_desc: "Configure application parameters, hardware bindings, and network settings.",
@@ -1477,11 +1566,8 @@
         alert_enter_device_name: "Please enter target Device Name",
         alert_enter_key: "Please enter Security Key",
         alert_conn_failed: "Connection failed: ",
-        alert_proj_single_display: "Only 1 monitor was detected. To use the secondary screen as an independent 2nd monitor, the IddCx virtual display driver is required.\n\nInstall IddCx Driver now?",
+        alert_mirror_pair_first: "Open NerveDesk on the laptop, click Refresh, and select it from the list.",
         alert_proj_error: "Projection error: ",
-        alert_install_err: "Failed to launch driver installer: ",
-        alert_uninstall_confirm: "Are you sure you want to completely uninstall the IddCx virtual display driver and all associated components?",
-        alert_uninstall_err: "Failed to launch driver uninstaller: ",
         alert_folder_err: "Failed to open received folder: ",
         toast_file_received: "File Received: ",
         toast_file_desc: "Saved to Downloads\\NerveDesk and ready to paste",
@@ -1505,29 +1591,24 @@
       const langSelect = document.getElementById('settingLangSelect');
       if (langSelect) langSelect.value = lang;
 
-      // Update all data-i18n elements
       document.querySelectorAll('[data-i18n]').forEach(el => {
         const key = el.getAttribute('data-i18n');
         el.innerText = t(key);
       });
 
-      // Update placeholders
       document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
         const key = el.getAttribute('data-i18n-placeholder');
         el.placeholder = t(key);
       });
 
-      // Update titles
       document.querySelectorAll('[data-i18n-title]').forEach(el => {
         const key = el.getAttribute('data-i18n-title');
         el.title = t(key);
       });
 
-      // Re-evaluate dynamic state texts
       updateDynamicTexts();
     }
 
-    // THEME MANAGEMENT
     function setTheme(theme) {
       currentTheme = theme;
       localStorage.setItem('nervedesk_theme', theme);
@@ -1563,7 +1644,6 @@
       });
     }
 
-    // TAURI BRIDGE
     async function callTauri(cmd, args) {
       if (window.__TAURI__?.core?.invoke) {
         return await window.__TAURI__.core.invoke(cmd, args);
@@ -1577,7 +1657,6 @@
       throw new Error("Tauri API not accessible");
     }
 
-    // NAVIGATION
     function switchTab(tabId) {
       document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
       document.querySelectorAll('.view-container').forEach(el => el.classList.remove('active'));
@@ -1585,18 +1664,87 @@
       if (tabId === 'home') {
         document.getElementById('navHome').classList.add('active');
         document.getElementById('viewHome').classList.add('active');
-        checkDriverStatus();
       } else if (tabId === 'kvm') {
         document.getElementById('navKvm').classList.add('active');
         document.getElementById('viewKvm').classList.add('active');
       } else if (tabId === 'cast') {
         document.getElementById('navCast').classList.add('active');
         document.getElementById('viewCast').classList.add('active');
-        checkDriverStatus();
+        refreshMirrorTargets();
+        refreshCaptureWindows();
       } else if (tabId === 'settings') {
         document.getElementById('navSettings').classList.add('active');
         document.getElementById('viewSettings').classList.add('active');
+      } else if (tabId === 'mobile') {
+        document.getElementById('navMobile').classList.add('active');
+        document.getElementById('viewMobile').classList.add('active');
+        updateMobileRemoteInfo();
       }
+    }
+
+    async function updateMobileRemoteInfo() {
+      try {
+        const info = await callTauri('get_mobile_remote_info');
+        if (info) {
+          const urlInput = document.getElementById('mobileUrlInput');
+          if (urlInput) urlInput.value = info.url;
+
+          const qrBox = document.getElementById('mobileQrContainer');
+          if (qrBox && info.qr_svg) {
+            qrBox.innerHTML = info.qr_svg;
+          }
+
+          const pinDisplay = document.getElementById('mobilePinDisplay');
+          if (pinDisplay && info.pin) {
+            pinDisplay.innerText = info.pin;
+          }
+
+          const masterToggle = document.getElementById('mobileServerMasterToggle');
+          if (masterToggle) masterToggle.checked = info.is_active;
+
+          const homeToggle = document.getElementById('homeMobileToggle');
+          if (homeToggle) homeToggle.checked = info.is_active;
+
+          const desc = document.getElementById('mobileStatusDesc');
+          if (desc) {
+            desc.innerText = info.is_active
+              ? t('mobile_service_desc')
+              : 'Служба вимкнена. Увімкніть тумблер для доступу зі смартфона.';
+          }
+        }
+      } catch (e) {}
+    }
+
+    async function regenerateMobilePin() {
+      try {
+        const info = await callTauri('regenerate_mobile_pin');
+        if (info) {
+          const pinDisplay = document.getElementById('mobilePinDisplay');
+          if (pinDisplay && info.pin) {
+            pinDisplay.innerText = info.pin;
+          }
+        }
+      } catch (e) {}
+    }
+
+    async function toggleMobileServer(checked) {
+      try {
+        await callTauri('toggle_mobile_remote', { enable: checked });
+        await updateMobileRemoteInfo();
+      } catch (e) {}
+    }
+
+    function copyMobileUrl() {
+      const urlInput = document.getElementById('mobileUrlInput');
+      if (urlInput && urlInput.value) {
+        navigator.clipboard.writeText(urlInput.value).then(() => {
+          alert(t('toast_copied_url'));
+        }).catch(() => {});
+      }
+    }
+
+    function openMobileInBrowser() {
+      callTauri('open_mobile_remote_url').catch(() => {});
     }
 
     let activeEdge = 'Right';
@@ -1615,19 +1763,16 @@
     }
 
     function updateDynamicTexts() {
-      // Screen edge button and metric
       const edgeBtn = document.getElementById('edgeToggleBtn');
       if (edgeBtn) edgeBtn.innerText = getEdgeLabel(activeEdge);
       const diagEdge = document.getElementById('diagEdge');
       if (diagEdge) diagEdge.innerText = getEdgeLabel(activeEdge);
 
-      // Projection button
       const castBtn = document.getElementById('btnCastToggle');
       if (castBtn) {
         castBtn.innerText = isProjecting ? t('btn_project_stop') : t('btn_project_start');
       }
 
-      // Peer status
       const peerSub = document.getElementById('peerBoxSub');
       const savedPeer = localStorage.getItem('paired_device_name');
       if (peerSub && savedPeer) {
@@ -1875,99 +2020,101 @@
       }
     }
 
-    function toggleVirtualDisplay(checked) {
-      document.getElementById('diagDisplay').innerText = checked ? t('status_attached') : t('status_detached');
-      callTauri('toggle_virtual_display', { enable: checked }).catch(() => {});
+    function saveMirrorTarget() {
+      const target = document.getElementById('mirrorTargetSelect').value;
+      if (target) localStorage.setItem('mirror_target_ip', target);
     }
 
-    function openWindowsDisplaySettings() {
-      callTauri('open_display_settings').catch(() => {});
+    async function refreshCaptureWindows() {
+      const select = document.getElementById('mirrorSourceSelect');
+      const previous = select.value;
+      let windows = [];
+      try {
+        windows = await callTauri('list_capture_windows');
+      } catch (_) {}
+      select.replaceChildren();
+      const screen = document.createElement('option');
+      screen.value = '';
+      screen.textContent = t('mirror_entire_screen');
+      select.appendChild(screen);
+      for (const window of windows) {
+        const option = document.createElement('option');
+        option.value = window.id;
+        option.textContent = window.title;
+        select.appendChild(option);
+      }
+      if (windows.some(window => window.id === previous)) select.value = previous;
+    }
+
+    async function refreshMirrorTargets() {
+      const select = document.getElementById('mirrorTargetSelect');
+      const previous = select.value || localStorage.getItem('mirror_target_ip') || '';
+      let devices = [];
+      try {
+        devices = await callTauri('discover_devices');
+      } catch (_) {}
+      select.replaceChildren();
+      const empty = document.createElement('option');
+      empty.value = '';
+      empty.textContent = t('mirror_no_target');
+      select.appendChild(empty);
+      devices.sort((a, b) => a.name.localeCompare(b.name));
+      for (const device of devices) {
+        const option = document.createElement('option');
+        option.value = device.ip;
+        option.textContent = `${device.name} (${device.ip})`;
+        select.appendChild(option);
+      }
+      const paired = localStorage.getItem('paired_device_name');
+      if (paired && !devices.some(device => device.name.toLowerCase() === paired.toLowerCase())) {
+        const option = document.createElement('option');
+        option.value = paired;
+        option.textContent = paired;
+        select.appendChild(option);
+      }
+      if (devices.some(device => device.ip === previous)) {
+        select.value = previous;
+      } else if (paired && devices.some(device => device.name.toLowerCase() === paired.toLowerCase())) {
+        select.value = devices.find(device => device.name.toLowerCase() === paired.toLowerCase()).ip;
+      } else if (devices.length === 1) {
+        select.value = devices[0].ip;
+      } else if (paired) {
+        select.value = paired;
+      }
+      saveMirrorTarget();
     }
 
     async function toggleCastProjection() {
       const btn = document.getElementById('btnCastToggle');
       if (!isProjecting) {
-        const mode = document.getElementById('castModeSelect').value;
-        const target = localStorage.getItem('paired_device_name') || 'laptop';
-
-        if (mode === 'extend') {
-          try {
-            const hasSecondDisplay = await callTauri('get_display_driver_status');
-            if (!hasSecondDisplay) {
-              const ok = confirm(t('alert_proj_single_display'));
-              if (ok) {
-                installDriver();
-                return;
-              }
-            }
-          } catch (_) {}
+        let target = document.getElementById('mirrorTargetSelect').value;
+        if (!target) {
+          await refreshMirrorTargets();
+          target = document.getElementById('mirrorTargetSelect').value;
+        }
+        if (!target) {
+          alert(t('alert_mirror_pair_first'));
+          switchTab('cast');
+          return;
         }
 
         try {
           await callTauri('start_virtual_display_cast', {
             targetName: target,
-            extendMode: mode === 'extend'
+            extendMode: false,
+            sourceWindow: document.getElementById('mirrorSourceSelect').value || null
           });
           isProjecting = true;
           btn.innerText = t('btn_project_stop');
           btn.style.background = 'var(--danger)';
-          document.getElementById('vDisplayBadge').innerText = t('badge_projecting');
-          document.getElementById('vDisplayBadge').style.background = '#15803d';
         } catch (e) {
           alert(t('alert_proj_error') + e);
         }
       } else {
-        callTauri('stop_virtual_display_cast').catch(() => {});
+        await callTauri('stop_virtual_display_cast').catch(() => {});
         isProjecting = false;
         btn.innerText = t('btn_project_start');
         btn.style.background = '';
-        checkDriverStatus();
-      }
-    }
-
-    async function checkDriverStatus() {
-      try {
-        const hasSecondDisplay = await callTauri('get_display_driver_status');
-        const badge = document.getElementById('vDisplayBadge');
-        const desc = document.getElementById('vDisplayStatusDesc');
-        const installBtn = document.getElementById('btnInstallDriver');
-        const uninstallBtn = document.getElementById('btnUninstallDriver');
-        if (isProjecting) return;
-        if (hasSecondDisplay) {
-          if (badge) {
-            badge.innerText = t('badge_driver_ready');
-            badge.style.background = '#15803d';
-          }
-          if (desc) desc.innerText = t('driver_extended');
-          if (installBtn) installBtn.style.display = 'none';
-          if (uninstallBtn) uninstallBtn.style.display = 'inline-block';
-        } else {
-          if (badge) {
-            badge.innerText = t('badge_driver_missing');
-            badge.style.background = 'var(--warning)';
-          }
-          if (desc) desc.innerText = t('driver_not_installed_desc');
-          if (installBtn) installBtn.style.display = 'inline-block';
-          if (uninstallBtn) uninstallBtn.style.display = 'none';
-        }
-      } catch (e) {}
-    }
-
-    async function installDriver() {
-      try {
-        await callTauri('install_virtual_display_driver');
-      } catch (e) {
-        alert(t('alert_install_err') + e);
-      }
-    }
-
-    async function uninstallDriver() {
-      const ok = confirm(t('alert_uninstall_confirm'));
-      if (!ok) return;
-      try {
-        await callTauri('uninstall_virtual_display_driver');
-      } catch (e) {
-        alert(t('alert_uninstall_err') + e);
       }
     }
 
@@ -2024,7 +2171,6 @@
     }
 
     async function initSystemInfo() {
-      // Initialize language & theme
       setTheme(currentTheme);
       setLanguage(currentLang);
 
@@ -2094,27 +2240,23 @@
         if (autoElem) autoElem.checked = !!autostart;
       } catch (e) {}
 
-      checkDriverStatus();
+      updateMobileRemoteInfo();
     }
 
     setTimeout(initSystemInfo, 100);
 
-    // PERIODIC METRICS
     setInterval(async () => {
       try {
         const m = await callTauri('get_metrics');
-        checkDriverStatus();
+        if (isProjecting && !m.projection_active) {
+          isProjecting = false;
+          const castBtn = document.getElementById('btnCastToggle');
+          castBtn.innerText = t('btn_project_start');
+          castBtn.style.background = '';
+        }
         document.getElementById('diagRtt').innerText = m.rtt_ms > 0 ? m.rtt_ms.toFixed(2) + " ms" : "0.00 ms";
         document.getElementById('diagFps').innerText = m.video_fps.toFixed(1) + " FPS";
         document.getElementById('diagBitrate').innerText = m.bandwidth_mbps.toFixed(1) + " Mbps";
-        document.getElementById('diagDisplay').innerText = m.virtual_display_active ? t('status_attached') : t('status_detached');
-        
-        const vBadge = document.getElementById('vDisplayBadge');
-        if (vBadge && !isProjecting) {
-          vBadge.innerText = m.virtual_display_active ? t('badge_active') : t('badge_ready');
-          vBadge.style.background = m.virtual_display_active ? "#15803d" : "";
-        }
-
         if (m.screen_edge && activeEdge !== m.screen_edge) {
           activeEdge = m.screen_edge;
           document.getElementById('edgeToggleBtn').innerText = getEdgeLabel(activeEdge);

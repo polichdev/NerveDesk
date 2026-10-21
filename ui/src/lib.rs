@@ -76,6 +76,7 @@ pub struct MobileRemoteInfo {
     pub port: u16,
     pub url: String,
     pub qr_svg: String,
+    pub pin: String,
 }
 
 pub struct AppState {
@@ -760,13 +761,21 @@ fn get_mobile_remote_info(state: State<'_, AppState>) -> MobileRemoteInfo {
     let is_active = state.mobile_server.is_active();
     let url = format!("http://{}:{}", ip, port);
     let qr_svg = mobile_server::generate_qr_svg(&url).unwrap_or_default();
+    let pin = state.mobile_server.get_pin();
     MobileRemoteInfo {
         is_active,
         ip,
         port,
         url,
         qr_svg,
+        pin,
     }
+}
+
+#[command]
+fn regenerate_mobile_pin(state: State<'_, AppState>) -> MobileRemoteInfo {
+    state.mobile_server.regenerate_pin();
+    get_mobile_remote_info(state)
 }
 
 #[command]
@@ -1212,6 +1221,7 @@ pub fn run() {
             });
 
             viewer_for_mirror.set_input_channel(Some(input_tx.clone()));
+            input::disable_edge_detection();
             let mut frames = 0u64;
             let mut report = Instant::now();
             loop {
@@ -1220,11 +1230,9 @@ pub fn run() {
                     Err(_) => break,
                 };
 
-                // ACK негайно — не чекаємо декодування, щоб ПК міг відправляти наступний кадр без затримки
                 let _ = input_tx.send(vec![0x06]);
                 frames += 1;
 
-                // Декодування + відображення у фоні (fire-and-forget)
                 let viewer = viewer_for_mirror.clone();
                 tokio::task::spawn_blocking(move || {
                     match mirror_stream::decode_bgra(width, height, &jpeg) {
@@ -1243,6 +1251,7 @@ pub fn run() {
             viewer_for_mirror.stop();
             write_task.abort();
             fps_for_mirror.store(0, Ordering::Relaxed);
+            input::restore_edge_detection();
         }
     });
 
@@ -1382,6 +1391,7 @@ pub fn run() {
             get_autostart_enabled,
             set_autostart_enabled,
             get_mobile_remote_info,
+            regenerate_mobile_pin,
             toggle_mobile_remote,
             open_mobile_remote_url
         ])
