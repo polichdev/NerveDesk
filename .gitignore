@@ -1,4 +1,5 @@
 target/
+ui/tauri.driver.generated.json
 **/*.rs.bk
 Cargo.lock
 

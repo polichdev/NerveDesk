@@ -39,6 +39,41 @@ impl Default for DxgiCaptureConfig {
     }
 }
 
+impl DxgiCaptureConfig {
+    pub fn primary_display() -> Result<Self> {
+        let factory: IDXGIFactory1 = unsafe {
+            CreateDXGIFactory1()
+                .map_err(|e| NerveError::Platform(format!("Failed to create DXGI factory: {e}")))?
+        };
+        let mut first_attached = None;
+        for adapter_index in 0..32 {
+            let adapter = match unsafe { factory.EnumAdapters1(adapter_index) } {
+                Ok(adapter) => adapter,
+                Err(_) => break,
+            };
+            for output_index in 0..32 {
+                let output = match unsafe { adapter.EnumOutputs(output_index) } {
+                    Ok(output) => output,
+                    Err(_) => break,
+                };
+                let desc = unsafe { output.GetDesc() }
+                    .map_err(|e| NerveError::Platform(format!("Failed to inspect DXGI output: {e}")))?;
+                if !desc.AttachedToDesktop.as_bool() {
+                    continue;
+                }
+                let config = Self { adapter_index, output_index, timeout_ms: 16 };
+                if desc.DesktopCoordinates.left == 0 && desc.DesktopCoordinates.top == 0 {
+                    return Ok(config);
+                }
+                if first_attached.is_none() {
+                    first_attached = Some(config);
+                }
+            }
+        }
+        first_attached.ok_or_else(|| NerveError::Platform("No active desktop display found".into()))
+    }
+}
+
 pub struct GpuFrame<'a> {
     pub texture: ID3D11Texture2D,
     pub width: u32,

@@ -17,13 +17,12 @@ NerveDesk separates real-time input transmission and high-bandwidth video stream
   │                                                     ├─ Windows SendInput
   │                                                     │  (Synthesize Motion/Keys)
   │                                                     │
-  ├─ DXGI Desktop Duplication (GPU VRAM)                │
-  │         │                                           │
-  │  H.264 Hardware Encoder                             │
-  │         │                                           │
-  │         └───> [UDP Frame Stream: Port 48101] ─────> Hardware Decoder
-  │                                                     │         │
-  │                                                     │   Render Surface / IddCx
+  ├─ DXGI Desktop Duplication (screen mirror)           │
+  ├─ Windows Graphics Capture (chosen window)           │
+  │         └── JPEG ───> [TCP 48104] ────────────────> JPEG decoder ─> viewer
+  │
+  └─ NerveDesk IddCx swap chain (extend)
+            └── zlib ───> [UDP 48101] ────────────────> zlib decoder ─> viewer
 ```
 
 ## Subsystem Details
@@ -35,7 +34,15 @@ NerveDesk separates real-time input transmission and high-bandwidth video stream
 - The client receives the payload via an asynchronous background receiver and injects input via native Windows `SendInput`.
 
 ### Display & Video Streaming Pipeline
-- Desktop frames are captured directly from GPU VRAM via DXGI Desktop Duplication.
-- Frames are encoded using hardware-accelerated video codecs (NVENC, AMF, OneVPL).
-- Video chunks are streamed across a dedicated UDP video socket to the target machine.
-- Frames are decoded on the receiving GPU and displayed via HTML5 Canvas or directed to a virtual monitor using the Microsoft IddCx indirect display driver.
+- In screen mirror mode, DXGI Desktop Duplication captures the primary physical display.
+- In window mirror mode, Windows Graphics Capture captures the selected window,
+  even while another window overlaps it. Minimized windows may stop producing
+  frames.
+- In extend mode, the NerveDesk IddCx driver creates a separate Windows display.
+  It consumes IddCx swap-chain frames and transfers BGRA pixels to the local
+  NerveDesk application over loopback TCP on port 48103.
+- Mirror mode JPEG-encodes BGRA frames and sends framed images over TCP 48104.
+  The receiver decodes them and presents the latest frame in a fullscreen
+  Win32 window. The driver-backed path still uses zlib over UDP 48101.
+  Hardware H.264 encoding and decoding remain future work.
+- See [Driver build and release](DRIVER.md) for signing and packaging.

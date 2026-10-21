@@ -1,54 +1,60 @@
 [Version]
-Signature   = "$WINDOWS NT$"
-Class       = Display
-ClassGuid   = {4d36e968-e325-11ce-bfc1-08002be10318}
-Provider    = %ManufacturerName%
-CatalogFile = NerveDeskDisplay.cat
-DriverVer   = 10/20/2026, 1.0.0.0
-PnpLockdown = 1
-
-[DestinationDirs]
-DefaultDestDir = 13
-
-[SourceDisksNames]
-1 = %DiskName%,,,""
-
-[SourceDisksFiles]
-NerveDeskDisplay.dll = 1
+Signature="$Windows NT$"
+Class=Display
+ClassGuid={4D36E968-E325-11CE-BFC1-08002BE10318}
+ClassVer=2.0
+Provider=%Manufacturer%
+CatalogFile=NerveDeskDisplay.cat
+DriverVer=10/21/2026,1.0.0.0
+PnpLockdown=1
 
 [Manufacturer]
-%ManufacturerName% = Standard,NTamd64.10.0...16299
+%Manufacturer%=Standard,NTamd64.10.0...22000
 
-[Standard.NTamd64.10.0...16299]
-%DeviceName% = NerveDeskDisplay_Install, Root\NerveDeskDisplay
+[Standard.NTamd64.10.0...22000]
+%DeviceName%=NerveDesk_Install,Root\NerveDeskDisplay
 
-[NerveDeskDisplay_Install.NT]
-CopyFiles = NerveDeskDisplay_Files
+[SourceDisksFiles]
+NerveDeskDisplay.dll=1
 
-[NerveDeskDisplay_Files]
+[SourceDisksNames]
+1=%DiskName%,,,
+
+[NerveDesk_Install.NT]
+Include=WUDFRD.inf
+Needs=WUDFRD.NT
+CopyFiles=DriverCopy
+
+[NerveDesk_Install.NT.hw]
+Include=WUDFRD.inf
+Needs=WUDFRD.NT.HW
+AddReg=DeviceSettings
+
+[DeviceSettings]
+HKR,,"UpperFilters",0x00010000,"IndirectKmd"
+HKR,"WUDF","DeviceGroupId",0x00000000,"NerveDeskDisplayGroup"
+
+[NerveDesk_Install.NT.Services]
+Include=WUDFRD.inf
+Needs=WUDFRD.NT.Services
+
+[NerveDesk_Install.NT.Wdf]
+UmdfService=NerveDeskDisplay,NerveDeskDisplay_Service
+UmdfServiceOrder=NerveDeskDisplay
+UmdfKernelModeClientPolicy=AllowKernelModeClients
+
+[NerveDeskDisplay_Service]
+UmdfLibraryVersion=2.25.0
+ServiceBinary=%12%\UMDF\NerveDeskDisplay.dll
+UmdfExtensions=IddCx0102
+
+[DestinationDirs]
+DriverCopy=12,UMDF
+
+[DriverCopy]
 NerveDeskDisplay.dll
 
-[NerveDeskDisplay_Install.NT.Services]
-AddService = WUDFRd, 0x000001fa, WUDFRd_ServiceInstall
-
-[WUDFRd_ServiceInstall]
-DisplayName   = %WudfRdDisplayName%
-ServiceType   = 1
-StartType     = 3
-ErrorControl  = 1
-ServiceBinary = %12%\WUDFRd.sys
-
-[NerveDeskDisplay_Install.NT.Wdf]
-UmdfService              = NerveDeskDisplay, NerveDeskDisplay_Install_Umdf
-UmdfServiceOrder         = NerveDeskDisplay
-UmdfHostProcessSharing   = ProcessSharingDisabled
-
-[NerveDeskDisplay_Install_Umdf]
-UmdfLibraryVersion = 2.25.0
-ServiceBinary      = %13%\NerveDeskDisplay.dll
-
 [Strings]
-ManufacturerName  = "NerveDesk Team"
-DiskName          = "NerveDesk Virtual Display Installation Disk"
-DeviceName        = "NerveDesk Virtual Display Adapter"
-WudfRdDisplayName = "Windows Driver Foundation - User-mode Driver Framework Reflector"
+Manufacturer="NerveDesk"
+DiskName="NerveDesk Virtual Display"
+DeviceName="NerveDesk Virtual Display Adapter"

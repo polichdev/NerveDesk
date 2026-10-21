@@ -73,7 +73,7 @@ impl VideoFrameReassembler {
         Self {
             frames: HashMap::new(),
             last_completed_frame_id: 0,
-            max_frame_age_ms: 100,
+            max_frame_age_ms: 500,
         }
     }
 
@@ -100,6 +100,12 @@ impl VideoFrameReassembler {
         }
 
         self.cleanup_stale_frames();
+
+        if !self.frames.contains_key(&header.frame_id) && self.frames.len() >= 4 {
+            if let Some(oldest_id) = self.frames.keys().min().copied() {
+                self.frames.remove(&oldest_id);
+            }
+        }
 
         let total_chunks = header.total_chunks as usize;
         let entry = self.frames.entry(header.frame_id).or_insert_with(|| {

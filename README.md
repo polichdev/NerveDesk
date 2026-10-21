@@ -7,7 +7,6 @@
 [![Tokio Async](https://img.shields.io/badge/Tokio-Async_Runtime-8A2BE2.svg)](https://tokio.rs/)
 [![Windows API](https://img.shields.io/badge/Windows-API_winapi-0078D7.svg?logo=windows&logoColor=white)](https://learn.microsoft.com/en-us/windows/win32/)
 [![Raw UDP](https://img.shields.io/badge/Networking-Raw_UDP-00A4EF.svg)](https://en.wikipedia.org/wiki/User_Datagram_Protocol)
-[![H.264 Codec](https://img.shields.io/badge/Video-H.264_Hardware-FF0000.svg)](https://en.wikipedia.org/wiki/Advanced_Video_Coding)
 [![MSVC CRT Static](https://img.shields.io/badge/MSVC-Static_CRT-5C2D91.svg)](https://learn.microsoft.com/en-us/cpp/build/reference/md-mt-ld-use-run-time-library)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -15,9 +14,9 @@
 
 ## Overview
 
-**NerveDesk** is a high-performance, ultra-low-latency hybrid KVM (Keyboard, Video, Mouse) and virtual display streaming platform engineered natively for Windows in Rust. It enables seamless cross-device mouse and keyboard transitions across physical boundary edges with sub-millisecond input response, alongside high-frame-rate hardware-accelerated desktop mirroring and virtual secondary monitor projection.
+**NerveDesk** is a Windows KVM (Keyboard, Video, Mouse) and display streaming project built primarily in Rust. It supports mouse and keyboard sharing and has a display transport for mirroring and virtual secondary monitor projection. The display pipeline currently uses CPU-side BGRA compression and needs performance validation.
 
-NerveDesk eliminates Head-of-Line blocking through decoupled binary datagram protocols over raw UDP, captures desktop frames directly within GPU memory via DXGI Desktop Duplication, and links directly into the Windows display subsystem via a dedicated Microsoft Indirect Display Driver (IddCx).
+NerveDesk sends input over UDP. Mirror mode captures the primary display through DXGI Desktop Duplication or a selected window through Windows Graphics Capture, then sends JPEG frames over TCP. Extend mode uses the NerveDesk IddCx driver to add a Windows display and stream it over the local network.
 
 ---
 
@@ -31,9 +30,9 @@ NerveDesk eliminates Head-of-Line blocking through decoupled binary datagram pro
 - **Crossbeam Channels & Parking Lot**: Lock-free synchronization and low-overhead primitives across streaming threads
 
 ### Display & Media Pipeline
-- **DirectX 11 (DXGI Desktop Duplication)**: Zero-copy GPU desktop frame grabbing bypassing system RAM staging
-- **Hardware Video Acceleration**: Pipeline abstractions for NVENC, AMD AMF, and Intel OneVPL H.264 streaming
-- **Microsoft IddCx UMDF v2 Driver**: C++ indirect display driver creating virtual hardware displays recognized natively by Windows Display Settings
+- **DirectX 11 (DXGI Desktop Duplication)**: Captures an existing Windows display for mirror mode
+- **Mirror video transport**: JPEG frames over TCP 48104; the driver-backed stream retains zlib/UDP 48101
+- **NerveDesk IddCx UMDF Driver**: C++ indirect display driver source for a virtual Windows display; release requires WDK build and Microsoft-approved signing
 
 ### Desktop GUI & Presentation — `ui/`
 - **Tauri v2**: Lightweight desktop shell integrating Rust backend logic with an isolated webview renderer
@@ -48,9 +47,9 @@ NerveDesk eliminates Head-of-Line blocking through decoupled binary datagram pro
 - **Seamless Border Crossing**: Mouse transitions across configured screen edges (Top, Bottom, Left, Right) automatically locking local cursor and streaming raw coordinate deltas to target host.
 - **Bi-Directional Input Synchronization**: Full mouse motion, multi-button states, scroll wheels, and virtual key events dispatched using low-level Win32 `SendInput`.
 - **PowerToys-Inspired Pairing**: Device discovery and pairing secured through alphanumeric security keys and unique machine names without exposing raw IP addresses.
-- **Dedicated Virtual Display Streaming**: Mirror the host desktop or project an additional virtual workspace to a connected client at 60+ FPS.
+- **Dedicated Virtual Display Streaming**: Mirror the host desktop or project an additional virtual workspace to a connected client; frame rate depends on the network and current CPU-based codec.
 - **Low-Overhead Background Service**: Automatic UDP listener operating in background threads with minimal CPU and memory footprints.
-- **Standalone Single-File Executable**: Built with statically linked MSVC runtime libraries (`+crt-static`), requiring zero external dependencies or runtimes.
+- **Windows application bundle**: The PC host release must include the signed NerveDesk display driver package. The laptop receiver does not install a display driver.
 
 ---
 
@@ -58,15 +57,17 @@ NerveDesk eliminates Head-of-Line blocking through decoupled binary datagram pro
 
 - [Architecture & Data Flow](docs/ARCHITECTURE.md)
 - [Repository Structure](docs/STRUCTURE.md)
+- [Driver build and release](docs/DRIVER.md)
+- [Mirror a screen now, without the driver](docs/MIRROR.md)
 
 ---
 
 ## Building from Source
 
 ### Prerequisites
-- Windows 10 / 11 (64-bit)
+- Windows 11 (64-bit) for extended display mode with the bundled IddCx driver
 - Rust 1.80+ (MSVC toolchain: `x86_64-pc-windows-msvc`)
-- Visual Studio 2022 with C++ Build Tools and Windows SDK
+- Visual Studio 2022 with C++ Build Tools, Windows SDK, and Windows Driver Kit for the driver
 
 ### Build Standalone Executable
 To compile the standalone GUI executable with statically linked MSVC runtime:
@@ -80,6 +81,10 @@ The compiled binary will be located at:
 ```powershell
 target\release\NerveDesk.exe
 ```
+
+This standalone executable does not contain the IddCx driver package. Extended
+display mode requires the signed driver installer described in
+[Driver build and release](docs/DRIVER.md). Mirror mode can be used without it.
 
 ### Running CLI Daemons
 Run the host streaming daemon:

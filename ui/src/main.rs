@@ -57,6 +57,9 @@ fn terminate_other_instances() {
 }
 
 fn main() {
+    if nervedesk_ui_lib::handle_driver_cli() {
+        return;
+    }
     #[cfg(target_os = "windows")]
     terminate_other_instances();
 

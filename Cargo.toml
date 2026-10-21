@@ -22,6 +22,10 @@ license = "MIT OR Apache-2.0"
 tokio = { version = "1.40", features = ["full"] }
 socket2 = "0.5"
 windows = { version = "0.58", features = [
+    "Foundation",
+    "Graphics_Capture",
+    "Graphics_DirectX",
+    "Graphics_DirectX_Direct3D11",
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_Input_KeyboardAndMouse",
@@ -40,8 +44,11 @@ windows = { version = "0.58", features = [
     "Win32_UI_Shell",
     "Win32_System_Com",
     "Win32_System_Ole",
+    "Win32_System_WinRT_Direct3D11",
+    "Win32_System_WinRT_Graphics_Capture",
     "Win32_System_Variant",
     "Win32_Security",
+    "Win32_Devices_DeviceAndDriverInstallation",
     "Win32_System_Diagnostics_ToolHelp",
 ] }
 crossbeam-channel = "0.5"

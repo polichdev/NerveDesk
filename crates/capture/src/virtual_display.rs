@@ -1,60 +1,58 @@
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-use tracing::info;
-
-use common::Result;
+use common::{NerveError, Result};
+use windows::Win32::Graphics::Gdi::{
+    EnumDisplayDevicesW, DISPLAY_DEVICEW, DISPLAY_DEVICE_ATTACHED_TO_DESKTOP,
+};
 
 pub const NERVEDESK_HARDWARE_ID: &str = "Root\\NerveDeskDisplay";
 pub const NERVEDESK_DEVICE_DESC: &str = "NerveDesk Virtual Display";
 
-pub struct VirtualDisplayManager {
-    is_plugged: Arc<AtomicBool>,
-}
+pub struct VirtualDisplayManager;
 
 impl VirtualDisplayManager {
     pub fn new() -> Self {
-        Self {
-            is_plugged: Arc::new(AtomicBool::new(false)),
-        }
+        Self
     }
 
     pub fn plug_display(&self) -> Result<()> {
-        if self.is_plugged.load(Ordering::SeqCst) {
-            info!("Virtual display is already plugged in");
-            return Ok(());
+        if self.is_plugged() {
+            Ok(())
+        } else {
+            Err(NerveError::Platform(
+                "NerveDesk display is not attached. Install the signed NerveDesk driver and extend the desktop in Windows Display Settings.".into(),
+            ))
         }
-
-        info!("Requesting creation of virtual display device ({})", NERVEDESK_HARDWARE_ID);
-
-        self.is_plugged.store(true, Ordering::SeqCst);
-        info!("Virtual display plugged successfully. Windows desktop extended.");
-        Ok(())
     }
 
     pub fn unplug_display(&self) -> Result<()> {
-        if !self.is_plugged.load(Ordering::SeqCst) {
-            return Ok(());
-        }
-
-        info!("Removing virtual display device...");
-        self.is_plugged.store(false, Ordering::SeqCst);
-        info!("Virtual display unplugged.");
         Ok(())
     }
 
     pub fn is_plugged(&self) -> bool {
-        self.is_plugged.load(Ordering::SeqCst)
+        for index in 0..32 {
+            let mut device = DISPLAY_DEVICEW::default();
+            device.cb = std::mem::size_of::<DISPLAY_DEVICEW>() as u32;
+            let found = unsafe { EnumDisplayDevicesW(None, index, &mut device, 0) };
+            if !found.as_bool() {
+                break;
+            }
+            let name_end = device
+                .DeviceString
+                .iter()
+                .position(|&c| c == 0)
+                .unwrap_or(device.DeviceString.len());
+            let name = String::from_utf16_lossy(&device.DeviceString[..name_end]);
+            if name.contains(NERVEDESK_DEVICE_DESC)
+                && device.StateFlags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP != 0
+            {
+                return true;
+            }
+        }
+        false
     }
 }
 
 impl Default for VirtualDisplayManager {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-impl Drop for VirtualDisplayManager {
-    fn drop(&mut self) {
-        let _ = self.unplug_display();
     }
 }

@@ -10,6 +10,10 @@ add_definitions(
     -D_WIN32_WINNT=0x0A00
     -DWINVER=0x0A00
     -DUMDF_USING_NTSTATUS
+    -DUMDF_DRIVER
+    -DIDDCX_VERSION_MAJOR=1
+    -DIDDCX_VERSION_MINOR=2
+    -DIDDCX_MINIMUM_VERSION_REQUIRED=2
 )
 
 include_directories(
@@ -19,7 +23,6 @@ include_directories(
 add_library(NerveDeskDisplay SHARED
     Driver.h
     Driver.cpp
-    Edid.h
 )
 
 target_link_libraries(NerveDeskDisplay PRIVATE
@@ -27,6 +30,8 @@ target_link_libraries(NerveDeskDisplay PRIVATE
     WdfDriverSupport
     dxgi
     d3d11
+    ws2_32
+    OneCoreUAP
 )
 
 set_target_properties(NerveDeskDisplay PROPERTIES

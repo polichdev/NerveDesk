@@ -32,6 +32,7 @@ static LBUTTON_DOWN: AtomicBool = AtomicBool::new(false);
 static LAST_CURSOR_POS: Mutex<Option<POINT>> = Mutex::new(None);
 static EDGE_DETECTOR: Mutex<Option<EdgeDetector>> = Mutex::new(None);
 static CENTER_PT: Mutex<POINT> = Mutex::new(POINT { x: 960, y: 540 });
+static SAVED_EDGE_CONFIG: Mutex<Option<EdgeConfig>> = Mutex::new(None);
 
 pub fn set_keyboard_sharing(enabled: bool) {
     KEYBOARD_SHARING_ENABLED.store(enabled, Ordering::SeqCst);
@@ -47,6 +48,17 @@ pub fn is_lbutton_down() -> bool {
 
 pub fn set_active_edge(edge: ScreenEdge) {
     set_active_edge_and_resolution(edge, 0, 0);
+}
+
+pub fn disable_edge_detection() {
+    if let Ok(mut guard) = EDGE_DETECTOR.lock() {
+        *guard = None;
+    }
+    if CAPTURE_ACTIVE.swap(false, Ordering::SeqCst) {
+        if let Ok(mut guard) = LAST_CURSOR_POS.lock() {
+            *guard = None;
+        }
+    }
 }
 
 pub fn set_active_edge_and_resolution(edge: ScreenEdge, client_w: i32, client_h: i32) {
@@ -85,8 +97,27 @@ pub fn set_active_edge_and_resolution(edge: ScreenEdge, client_w: i32, client_h:
         client_edge: edge,
         trigger_threshold: 4,
     };
+    if let Ok(mut saved) = SAVED_EDGE_CONFIG.lock() {
+        *saved = Some(config.clone());
+    }
     if let Ok(mut guard) = EDGE_DETECTOR.lock() {
         *guard = Some(EdgeDetector::new(config));
+    }
+}
+
+pub fn restore_edge_detection() {
+    let config = if let Ok(guard) = SAVED_EDGE_CONFIG.lock() {
+        guard.clone()
+    } else {
+        None
+    };
+    if let Some(cfg) = config {
+        if let Ok(mut center) = CENTER_PT.lock() {
+            *center = POINT { x: cfg.host_width / 2, y: cfg.host_height / 2 };
+        }
+        if let Ok(mut guard) = EDGE_DETECTOR.lock() {
+            *guard = Some(EdgeDetector::new(cfg));
+        }
     }
 }
 

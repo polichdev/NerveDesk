@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use tracing::{info, trace};
 
-use common::Result;
+use common::{NerveError, Result};
 use windows::Win32::Graphics::Direct3D11::ID3D11Texture2D;
 
 #[derive(Debug, Clone)]
@@ -101,14 +101,20 @@ impl HardwareVideoEncoder {
         timestamp_us: u64,
         force_keyframe: bool,
     ) -> Result<EncodedVideoFrame> {
+        let expected_len = (width as usize)
+            .checked_mul(height as usize)
+            .and_then(|pixels| pixels.checked_mul(4))
+            .ok_or_else(|| NerveError::Protocol("Invalid video dimensions".into()))?;
+        if width == 0 || height == 0 || width > 7680 || height > 4320 || bgra.len() != expected_len {
+            return Err(NerveError::Protocol("Invalid BGRA frame size".into()));
+        }
         let frame_id = self.frame_counter.fetch_add(1, Ordering::Relaxed);
         let is_keyframe = force_keyframe
             || (frame_id % self.config.keyframe_interval as u64 == 0)
             || (frame_id == 1);
-
-        let (target_w, target_h, src_data) = if width > 2560 {
-            let tw = width / 2;
-            let th = height / 2;
+        let (target_w, target_h, src_data) = if width > 3840 || height > 2160 {
+            let tw = (width / 2).max(1);
+            let th = (height / 2).max(1);
             let mut scaled = vec![0u8; (tw * th * 4) as usize];
             for y in 0..th {
                 let src_row = (y * 2 * width * 4) as usize;
@@ -140,5 +146,20 @@ impl HardwareVideoEncoder {
 
     pub fn config(&self) -> &VideoEncoderConfig {
         &self.config
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{HardwareVideoEncoder, VideoEncoderConfig};
+
+    #[test]
+    fn mirror_keeps_native_width_above_old_downscale_threshold() {
+        let encoder = HardwareVideoEncoder::new(VideoEncoderConfig::default()).unwrap();
+        let pixels = vec![42u8; 2562 * 2 * 4];
+        let frame = encoder.encode_bgra(2562, 2, &pixels, 0, true).unwrap();
+        assert_eq!(u16::from_le_bytes(frame.data[0..2].try_into().unwrap()), 2562);
+        assert_eq!(u16::from_le_bytes(frame.data[2..4].try_into().unwrap()), 2);
+        assert!(encoder.encode_bgra(2562, 2, &pixels[..8], 0, true).is_err());
     }
 }

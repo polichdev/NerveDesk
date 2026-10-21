@@ -19,6 +19,8 @@ nerve-desk/
 │   └── STRUCTURE.md            Repository directory structure and crate layout
 ├── driver/
 │   └── idd-virtual-display/    Microsoft IddCx Virtual Display Driver (C++ UMDF)
+├── tools/
+│   └── package-windows.ps1      Bundle the signed driver with the Windows installer
 └── ui/
     ├── index.html              Single-page application dashboard interface
     ├── Cargo.toml              Desktop binary package configuration
