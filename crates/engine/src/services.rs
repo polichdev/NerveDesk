@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use tokio::io::AsyncReadExt;
-use tracing::{error, warn};
+use tracing::{error, info, warn};
 
 use codec::{HardwareVideoDecoder, VideoDecoderConfig};
 use common::InputEvent;
@@ -30,14 +30,18 @@ pub fn start_background_services(state: &AppState, on_file_received: Option<File
 
 fn spawn_discovery_emitter(state: &AppState) {
     let paired_ip_for_disc = state.paired_peer_ip.clone();
+    let edge_for_disc = state.screen_edge.clone();
     engine_async_spawn(async move {
         let my_name = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Desktop-PC".into());
         let (sw, sh) = get_screen_dimensions();
         let beacon = DiscoveryBeacon::new(my_name, DeviceRole::Host, 48100, 48101, sw, sh);
-        if let Ok(emitter) = DiscoveryBeaconEmitter::new(beacon).await {
+        if let Ok(mut emitter) = DiscoveryBeaconEmitter::new(beacon).await {
             let mut ticker = tokio::time::interval(Duration::from_secs(1));
             loop {
                 ticker.tick().await;
+                if let Ok(edge) = edge_for_disc.lock() {
+                    emitter.set_screen_edge(edge.clone());
+                }
                 let _ = emitter.emit_beacon().await;
                 let paired_ip = paired_ip_for_disc.lock().ok().and_then(|ip| ip.clone());
                 if let Some(ip) = paired_ip {
@@ -54,6 +58,8 @@ fn spawn_discovery_listener(state: &AppState) {
     let discovered_for_disc = state.discovered_devices.clone();
     let seen_for_disc = state.device_last_seen.clone();
     let peer_device_for_disc = state.peer_device.clone();
+    let paired_ip_for_disc = state.paired_peer_ip.clone();
+    let edge_for_disc = state.screen_edge.clone();
 
     engine_async_spawn(async move {
         if let Ok(listener) = DiscoveryListener::bind().await {
@@ -65,12 +71,28 @@ fn spawn_discovery_listener(state: &AppState) {
                     }
                     if peer_addr.port() != 48103 {
                         let (sw, sh) = get_screen_dimensions();
+                        let local_edge = edge_for_disc
+                            .lock()
+                            .map(|e| e.clone())
+                            .unwrap_or_else(|_| "Right".into());
                         let reply =
-                            DiscoveryBeacon::new(my_name, DeviceRole::Host, 48100, 48101, sw, sh);
+                            DiscoveryBeacon::new(my_name, DeviceRole::Host, 48100, 48101, sw, sh)
+                                .with_edge(local_edge);
                         let address = SocketAddr::new(peer_addr.ip(), 48103);
                         let _ = listener.reply_to(&reply, address).await;
                     }
                     let ip = peer_addr.ip().to_string();
+                    let is_paired = paired_ip_for_disc
+                        .lock()
+                        .ok()
+                        .and_then(|p| p.clone())
+                        .as_deref()
+                        == Some(ip.as_str());
+                    if is_paired {
+                        if let Some(edge) = edge_from_name(&beacon.screen_edge) {
+                            input::set_remote_edge(edge);
+                        }
+                    }
                     if let Ok(mut seen) = seen_for_disc.lock() {
                         seen.insert(ip.clone(), Instant::now());
                     }
@@ -84,6 +106,7 @@ fn spawn_discovery_listener(state: &AppState) {
                             existing.role = role_str.to_string();
                             existing.screen_width = beacon.screen_width;
                             existing.screen_height = beacon.screen_height;
+                            existing.screen_edge = beacon.screen_edge.clone();
                         } else {
                             map.insert(
                                 ip.clone(),
@@ -95,6 +118,7 @@ fn spawn_discovery_listener(state: &AppState) {
                                     video_port: beacon.video_port,
                                     screen_width: beacon.screen_width,
                                     screen_height: beacon.screen_height,
+                                    screen_edge: beacon.screen_edge.clone(),
                                 },
                             );
                         }
@@ -110,6 +134,16 @@ fn spawn_discovery_listener(state: &AppState) {
             }
         }
     });
+}
+
+fn edge_from_name(name: &str) -> Option<input::ScreenEdge> {
+    match name {
+        "Left" => Some(input::ScreenEdge::Left),
+        "Right" => Some(input::ScreenEdge::Right),
+        "Top" => Some(input::ScreenEdge::Top),
+        "Bottom" => Some(input::ScreenEdge::Bottom),
+        _ => None,
+    }
 }
 
 fn spawn_input_receiver(state: &AppState, on_file_received: Option<FileReceivedCallback>) {
@@ -173,7 +207,9 @@ fn spawn_input_receiver(state: &AppState, on_file_received: Option<FileReceivedC
                             drag_badge_for_rx.show(0, 0, file_name);
                         } else {
                             drag_badge_for_rx.hide();
-                            net::clear_file_drag();
+                            if file_name == "cancel" {
+                                net::clear_file_drag();
+                            }
                         }
                         continue;
                     }
@@ -205,18 +241,14 @@ fn spawn_input_receiver(state: &AppState, on_file_received: Option<FileReceivedC
                         if drag_badge_for_rx.is_active() {
                             drag_badge_for_rx.hide();
                             let target_dir = net::get_target_dir_at_cursor();
+                            info!("File drop target: {}", target_dir.display());
                             let moved = net::commit_file_drop(target_dir);
                             if !moved.is_empty() {
                                 if let Some(ref cb) = on_file_received {
-                                    let names: Vec<String> = moved
+                                    cb(moved
                                         .iter()
-                                        .filter_map(|p| {
-                                            p.file_name()
-                                                .and_then(|n| n.to_str())
-                                                .map(|s| s.to_string())
-                                        })
-                                        .collect();
-                                    cb(names);
+                                        .map(|p| p.to_string_lossy().into_owned())
+                                        .collect());
                                 }
                             }
                         }
@@ -286,7 +318,7 @@ fn spawn_clipboard_receiver(state: &AppState) {
                     return;
                 }
                 let len = u32::from_be_bytes(len_buf) as usize;
-                if len == 0 || len > 2 * 1024 * 1024 {
+                if len == 0 || len > 64 * 1024 * 1024 + 1024 {
                     return;
                 }
                 let mut payload_buf = vec![0u8; len];
@@ -294,22 +326,48 @@ fn spawn_clipboard_receiver(state: &AppState) {
                     return;
                 }
 
-                if let Ok(clip_packet) = serde_json::from_slice::<ClipboardPacket>(&payload_buf) {
+                let incoming = if payload_buf.starts_with(b"NCBI") && payload_buf.len() >= 10 {
+                    let token_len = u16::from_be_bytes([payload_buf[4], payload_buf[5]]) as usize;
+                    let offset = 6 + token_len;
+                    if token_len > 256 || payload_buf.len() < offset + 4 {
+                        None
+                    } else {
+                        let token = String::from_utf8_lossy(&payload_buf[6..offset]).into_owned();
+                        let format =
+                            u32::from_be_bytes(payload_buf[offset..offset + 4].try_into().unwrap());
+                        let bytes = payload_buf.split_off(offset + 4);
+                        Some((token, clipboard::ClipboardPayload::Image { format, bytes }))
+                    }
+                } else {
+                    serde_json::from_slice::<ClipboardPacket>(&payload_buf)
+                        .ok()
+                        .map(|packet| {
+                            (packet.token, clipboard::ClipboardPayload::Text(packet.text))
+                        })
+                };
+                if let Some((token, payload)) = incoming {
                     if let Ok(guard) = key_ref.lock() {
                         if let Some(ref key) = *guard {
-                            if !key.is_empty()
-                                && !clip_packet.token.is_empty()
-                                && clip_packet.token != *key
-                            {
+                            if !key.is_empty() && !token.is_empty() && token != *key {
                                 return;
                             }
                         }
                     }
 
-                    let payload = clipboard::ClipboardPayload::Text(clip_packet.text.clone());
                     let h = payload.compute_hash();
                     if hash_ref.swap(h, Ordering::SeqCst) != h {
-                        let _ = clipboard::ClipboardWriter::write_text(&clip_packet.text);
+                        let result = match payload {
+                            clipboard::ClipboardPayload::Text(text) => {
+                                clipboard::ClipboardWriter::write_text(&text)
+                            }
+                            clipboard::ClipboardPayload::Image { format, bytes } => {
+                                clipboard::ClipboardWriter::write_image(format, &bytes)
+                            }
+                            clipboard::ClipboardPayload::Files(_) => return,
+                        };
+                        if let Err(e) = result {
+                            warn!("Writing remote clipboard failed: {e}");
+                        }
                     }
                 }
             });
@@ -365,6 +423,27 @@ fn spawn_clipboard_sender(state: &AppState) {
                                     let _ = stream.write_all(&bytes);
                                     let _ = stream.flush();
                                 }
+                            }
+                        }
+                        clipboard::ClipboardPayload::Image { format, bytes } => {
+                            if bytes.len() > 64 * 1024 * 1024 || token.len() > 256 {
+                                continue;
+                            }
+                            let mut packet = Vec::with_capacity(10 + token.len() + bytes.len());
+                            packet.extend_from_slice(b"NCBI");
+                            packet.extend_from_slice(&(token.len() as u16).to_be_bytes());
+                            packet.extend_from_slice(token.as_bytes());
+                            packet.extend_from_slice(&format.to_be_bytes());
+                            packet.extend_from_slice(&bytes);
+                            let target_addr = format!("{}:48102", ip);
+                            if let Ok(mut stream) = std::net::TcpStream::connect_timeout(
+                                &target_addr.parse().unwrap(),
+                                Duration::from_millis(800),
+                            ) {
+                                use std::io::Write;
+                                let _ = stream.write_all(&(packet.len() as u32).to_be_bytes());
+                                let _ = stream.write_all(&packet);
+                                let _ = stream.flush();
                             }
                         }
                         _ => {}

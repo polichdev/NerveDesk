@@ -43,6 +43,7 @@ pub struct DiscoveredDevice {
     pub video_port: u16,
     pub screen_width: u32,
     pub screen_height: u32,
+    pub screen_edge: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -74,7 +75,7 @@ pub struct AppState {
     pub mirror_enabled: Arc<AtomicBool>,
     pub mode: Mutex<String>,
     pub peer_device: Arc<Mutex<Option<String>>>,
-    pub screen_edge: Mutex<String>,
+    pub screen_edge: Arc<Mutex<String>>,
     pub display_manager: VirtualDisplayManager,
     pub hook_manager: Mutex<Option<InputHookManager>>,
     pub kvm_workers: Mutex<Vec<tokio::task::JoinHandle<()>>>,
@@ -110,7 +111,6 @@ impl AppState {
         let paired_peer_ip = Arc::new(Mutex::new(None));
         let folder_sync = FolderSync::new();
         folder_sync.start_saved();
-        mobile_server.start();
 
         Self {
             is_kvm_active: Arc::new(AtomicBool::new(false)),
@@ -119,7 +119,7 @@ impl AppState {
             mirror_enabled: Arc::new(AtomicBool::new(false)),
             mode: Mutex::new("Idle".into()),
             peer_device: Arc::new(Mutex::new(None)),
-            screen_edge: Mutex::new("Right".into()),
+            screen_edge: Arc::new(Mutex::new("Right".into())),
             display_manager: VirtualDisplayManager::new(),
             hook_manager: Mutex::new(None),
             kvm_workers: Mutex::new(Vec::new()),
