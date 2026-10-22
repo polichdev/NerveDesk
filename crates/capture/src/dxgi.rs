@@ -4,13 +4,10 @@ use tracing::{info, warn};
 use common::{NerveError, Result};
 
 use windows::core::Interface;
-use windows::Win32::Graphics::Direct3D::{
-    D3D_DRIVER_TYPE_UNKNOWN, D3D_FEATURE_LEVEL_11_0,
-};
+use windows::Win32::Graphics::Direct3D::{D3D_DRIVER_TYPE_UNKNOWN, D3D_FEATURE_LEVEL_11_0};
 use windows::Win32::Graphics::Direct3D11::{
-    D3D11CreateDevice, ID3D11Device, ID3D11DeviceContext, ID3D11Texture2D,
-    D3D11_CPU_ACCESS_READ, D3D11_CREATE_DEVICE_BGRA_SUPPORT,
-    D3D11_MAP_READ, D3D11_MAPPED_SUBRESOURCE, D3D11_SDK_VERSION,
+    D3D11CreateDevice, ID3D11Device, ID3D11DeviceContext, ID3D11Texture2D, D3D11_CPU_ACCESS_READ,
+    D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_MAPPED_SUBRESOURCE, D3D11_MAP_READ, D3D11_SDK_VERSION,
     D3D11_TEXTURE2D_DESC, D3D11_USAGE_STAGING,
 };
 use windows::Win32::Graphics::Dxgi::Common::{
@@ -18,8 +15,8 @@ use windows::Win32::Graphics::Dxgi::Common::{
 };
 use windows::Win32::Graphics::Dxgi::{
     CreateDXGIFactory1, IDXGIAdapter1, IDXGIFactory1, IDXGIOutput, IDXGIOutput1,
-    IDXGIOutputDuplication, IDXGIResource, DXGI_ERROR_ACCESS_LOST,
-    DXGI_ERROR_WAIT_TIMEOUT, DXGI_OUTDUPL_FRAME_INFO,
+    IDXGIOutputDuplication, IDXGIResource, DXGI_ERROR_ACCESS_LOST, DXGI_ERROR_WAIT_TIMEOUT,
+    DXGI_OUTDUPL_FRAME_INFO,
 };
 
 #[derive(Debug, Clone)]
@@ -56,12 +53,17 @@ impl DxgiCaptureConfig {
                     Ok(output) => output,
                     Err(_) => break,
                 };
-                let desc = unsafe { output.GetDesc() }
-                    .map_err(|e| NerveError::Platform(format!("Failed to inspect DXGI output: {e}")))?;
+                let desc = unsafe { output.GetDesc() }.map_err(|e| {
+                    NerveError::Platform(format!("Failed to inspect DXGI output: {e}"))
+                })?;
                 if !desc.AttachedToDesktop.as_bool() {
                     continue;
                 }
-                let config = Self { adapter_index, output_index, timeout_ms: 16 };
+                let config = Self {
+                    adapter_index,
+                    output_index,
+                    timeout_ms: 16,
+                };
                 if desc.DesktopCoordinates.left == 0 && desc.DesktopCoordinates.top == 0 {
                     return Ok(config);
                 }
@@ -96,10 +98,9 @@ impl<'a> GpuFrame<'a> {
         }
 
         unsafe {
-            self.duplicator.context.CopyResource(
-                &self.duplicator.staging_texture,
-                &self.texture,
-            );
+            self.duplicator
+                .context
+                .CopyResource(&self.duplicator.staging_texture, &self.texture);
 
             let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
             self.duplicator
@@ -196,9 +197,9 @@ impl DxgiOutputDuplicator {
                     None => return Ok(None),
                 };
 
-                let texture: ID3D11Texture2D = resource
-                    .cast()
-                    .map_err(|e| NerveError::Platform(format!("Failed to cast resource to ID3D11Texture2D: {e}")))?;
+                let texture: ID3D11Texture2D = resource.cast().map_err(|e| {
+                    NerveError::Platform(format!("Failed to cast resource to ID3D11Texture2D: {e}"))
+                })?;
 
                 let acquire_duration = start.elapsed();
 
@@ -212,9 +213,7 @@ impl DxgiOutputDuplicator {
                     duplicator: self,
                 }))
             }
-            Err(e) if e.code() == DXGI_ERROR_WAIT_TIMEOUT => {
-                Ok(None)
-            }
+            Err(e) if e.code() == DXGI_ERROR_WAIT_TIMEOUT => Ok(None),
             Err(e) if e.code() == DXGI_ERROR_ACCESS_LOST => {
                 warn!("DXGI access lost (resolution change or desktop switch). Reinitializing duplication...");
                 self.reinitialize()?;
@@ -264,9 +263,9 @@ impl DxgiOutputDuplicator {
         };
 
         let adapter = unsafe {
-            factory
-                .EnumAdapters1(adapter_index)
-                .map_err(|e| NerveError::Platform(format!("Failed to enumerate adapter {adapter_index}: {e}")))?
+            factory.EnumAdapters1(adapter_index).map_err(|e| {
+                NerveError::Platform(format!("Failed to enumerate adapter {adapter_index}: {e}"))
+            })?
         };
 
         let mut device: Option<ID3D11Device> = None;
@@ -305,20 +304,20 @@ impl DxgiOutputDuplicator {
         };
 
         let adapter: IDXGIAdapter1 = unsafe {
-            factory
-                .EnumAdapters1(adapter_index)
-                .map_err(|e| NerveError::Platform(format!("Failed to get adapter {adapter_index}: {e}")))?
+            factory.EnumAdapters1(adapter_index).map_err(|e| {
+                NerveError::Platform(format!("Failed to get adapter {adapter_index}: {e}"))
+            })?
         };
 
         let output: IDXGIOutput = unsafe {
-            adapter
-                .EnumOutputs(output_index)
-                .map_err(|e| NerveError::Platform(format!("Failed to get output {output_index}: {e}")))?
+            adapter.EnumOutputs(output_index).map_err(|e| {
+                NerveError::Platform(format!("Failed to get output {output_index}: {e}"))
+            })?
         };
 
-        let output1: IDXGIOutput1 = output
-            .cast()
-            .map_err(|e| NerveError::Platform(format!("Failed to cast output to IDXGIOutput1: {e}")))?;
+        let output1: IDXGIOutput1 = output.cast().map_err(|e| {
+            NerveError::Platform(format!("Failed to cast output to IDXGIOutput1: {e}"))
+        })?;
 
         let desc = unsafe {
             output
@@ -363,7 +362,9 @@ impl DxgiOutputDuplicator {
         unsafe {
             device
                 .CreateTexture2D(&desc, None, Some(&mut texture))
-                .map_err(|e| NerveError::Platform(format!("Failed to create staging texture: {e}")))?;
+                .map_err(|e| {
+                    NerveError::Platform(format!("Failed to create staging texture: {e}"))
+                })?;
         }
 
         texture.ok_or_else(|| NerveError::Platform("Staging texture pointer null".into()))
