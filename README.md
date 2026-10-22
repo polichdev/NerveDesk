@@ -9,8 +9,20 @@
 [![Raw UDP](https://img.shields.io/badge/Networking-Raw_UDP-00A4EF.svg)](https://en.wikipedia.org/wiki/User_Datagram_Protocol)
 [![MSVC CRT Static](https://img.shields.io/badge/MSVC-Static_CRT-5C2D91.svg)](https://learn.microsoft.com/en-us/cpp/build/reference/md-mt-ld-use-run-time-library)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+<br>
+[![Seamless KVM](https://img.shields.io/badge/KVM-Mouse_%26_Keyboard-00C7B7.svg)](#core-features)
+[![Virtual Display](https://img.shields.io/badge/Virtual_Display-IddCx_4K-7952B3.svg)](#core-features)
+[![Screen Mirror](https://img.shields.io/badge/Screen_Mirror-DXGI_%2F_WGC-0078D7.svg)](#core-features)
+[![Audio Bridge](https://img.shields.io/badge/Audio_Bridge-WASAPI_Loopback-E95420.svg)](#core-features)
+[![Folder Sync](https://img.shields.io/badge/Folder_Sync-Bi--Directional-2EA44F.svg)](#core-features)
+[![Async Clipboard](https://img.shields.io/badge/Clipboard-Text_%26_Images-D93F0B.svg)](#core-features)
+[![Mobile Remote](https://img.shields.io/badge/Mobile_Remote-Web_PIN-D4A017.svg)](#core-features)
 
 NerveDesk is a lightweight, low-latency hybrid KVM (Keyboard, Video, Mouse) and virtual display streaming application for Windows, built with Rust and Tauri v2. It connects multiple computers over a local network into a unified workspace, enabling seamless cursor transitions across monitor boundaries, virtual secondary screen projection, audio streaming, clipboard synchronization, and directory replication.
+
+---
+
+![NerveDesk Preview](docs/preview.jpg)
 
 ---
 
