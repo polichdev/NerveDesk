@@ -37,7 +37,7 @@
         "installerIcon": "icons/icon.ico",
         "headerImage": "windows/installer-header.bmp",
         "sidebarImage": "windows/installer-sidebar.bmp",
-        "languages": ["Ukrainian", "English"]
+        "languages": ["English"]
       }
     },
     "copyright": "Copyright (C) 2026 NerveDesk",
