@@ -27,14 +27,16 @@ struct Args {
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-                "info,client=debug,net=debug,codec=debug".into()
-            }),
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "info,client=debug,net=debug,codec=debug".into()),
         )
         .init();
 
     let args = Args::parse();
-    info!("Starting NerveDesk Client Service v{}", env!("CARGO_PKG_VERSION"));
+    info!(
+        "Starting NerveDesk Client Service v{}",
+        env!("CARGO_PKG_VERSION")
+    );
 
     let mut input_receiver = UdpInputReceiver::bind(args.bind)
         .await
@@ -84,7 +86,8 @@ async fn main() -> Result<()> {
 
                         if last_report.elapsed() >= Duration::from_secs(2) {
                             if frames_received > 0 {
-                                let fps = frames_received as f64 / last_report.elapsed().as_secs_f64();
+                                let fps =
+                                    frames_received as f64 / last_report.elapsed().as_secs_f64();
                                 let avg_latency_ms =
                                     (total_latency_us as f64 / frames_received as f64) / 1000.0;
                                 info!(

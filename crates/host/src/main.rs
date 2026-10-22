@@ -42,7 +42,10 @@ async fn main() -> Result<()> {
         .init();
 
     let args = Args::parse();
-    info!("Starting NerveDesk Host Daemon v{}", env!("CARGO_PKG_VERSION"));
+    info!(
+        "Starting NerveDesk Host Daemon v{}",
+        env!("CARGO_PKG_VERSION")
+    );
 
     let input_sender = UdpInputSender::new(args.target)
         .await
@@ -50,8 +53,8 @@ async fn main() -> Result<()> {
 
     let (event_tx, event_rx) = crossbeam_channel::unbounded::<InputEvent>();
 
-    let hook_manager = InputHookManager::start(event_tx)
-        .context("Failed to install low-level Windows hooks")?;
+    let hook_manager =
+        InputHookManager::start(event_tx).context("Failed to install low-level Windows hooks")?;
 
     if args.trap {
         hook_manager.set_capturing(true);
@@ -107,24 +110,20 @@ async fn main() -> Result<()> {
                     .as_micros() as u64;
 
                 match duplicator.acquire_frame() {
-                    Ok(Some(frame)) => {
-                        match encoder.encode_frame(&frame.texture, now_us, false) {
-                            Ok(encoded_frame) => {
-                                match video_sender.send_frame(&encoded_frame).await {
-                                    Ok(sent_bytes) => {
-                                        frames_streamed += 1;
-                                        bytes_streamed += sent_bytes;
-                                    }
-                                    Err(e) => {
-                                        warn!("Failed to stream video frame: {:?}", e);
-                                    }
-                                }
+                    Ok(Some(frame)) => match encoder.encode_frame(&frame.texture, now_us, false) {
+                        Ok(encoded_frame) => match video_sender.send_frame(&encoded_frame).await {
+                            Ok(sent_bytes) => {
+                                frames_streamed += 1;
+                                bytes_streamed += sent_bytes;
                             }
                             Err(e) => {
-                                warn!("Hardware encoding error: {:?}", e);
+                                warn!("Failed to stream video frame: {:?}", e);
                             }
+                        },
+                        Err(e) => {
+                            warn!("Hardware encoding error: {:?}", e);
                         }
-                    }
+                    },
                     Ok(None) => {
                         tokio::time::sleep(Duration::from_millis(1)).await;
                     }
@@ -177,10 +176,7 @@ async fn main() -> Result<()> {
 
             if last_report.elapsed() >= Duration::from_secs(5) {
                 if packet_count > 0 {
-                    info!(
-                        "Input stats: {} packets streamed in last 5s",
-                        packet_count
-                    );
+                    info!("Input stats: {} packets streamed in last 5s", packet_count);
                     packet_count = 0;
                 }
                 last_report = tokio::time::Instant::now();

@@ -1,5 +1,5 @@
-use bytemuck::{Pod, Zeroable};
 use crate::error::{NerveError, Result};
+use bytemuck::{Pod, Zeroable};
 
 pub const PROTOCOL_MAGIC: [u8; 4] = *b"NRVE";
 pub const VIDEO_PROTOCOL_MAGIC: [u8; 4] = *b"NRVV";
@@ -65,7 +65,9 @@ impl VideoChunkHeader {
             return Err(NerveError::Protocol("Invalid video packet magic".into()));
         }
         if self.version != PROTOCOL_VERSION {
-            return Err(NerveError::Protocol("Unsupported video protocol version".into()));
+            return Err(NerveError::Protocol(
+                "Unsupported video protocol version".into(),
+            ));
         }
         Ok(())
     }
@@ -99,7 +101,9 @@ impl TryFrom<u8> for PacketType {
             7 => Ok(Self::Heartbeat),
             8 => Ok(Self::CursorPosition),
             9 => Ok(Self::FileDrag),
-            other => Err(NerveError::Protocol(format!("Unknown packet type: {other}"))),
+            other => Err(NerveError::Protocol(format!(
+                "Unknown packet type: {other}"
+            ))),
         }
     }
 }
@@ -178,7 +182,9 @@ impl TryFrom<u8> for MouseButton {
             2 => Ok(Self::Middle),
             3 => Ok(Self::X1),
             4 => Ok(Self::X2),
-            other => Err(NerveError::Protocol(format!("Unknown mouse button: {other}"))),
+            other => Err(NerveError::Protocol(format!(
+                "Unknown mouse button: {other}"
+            ))),
         }
     }
 }
@@ -196,7 +202,9 @@ impl TryFrom<u8> for ButtonState {
         match val {
             0 => Ok(Self::Released),
             1 => Ok(Self::Pressed),
-            other => Err(NerveError::Protocol(format!("Unknown button state: {other}"))),
+            other => Err(NerveError::Protocol(format!(
+                "Unknown button state: {other}"
+            ))),
         }
     }
 }
@@ -324,7 +332,9 @@ pub fn encode_packet(
             let payload_size = std::mem::size_of::<MouseMovePayload>();
             let total = header_size + payload_size;
             if buf.len() < total {
-                return Err(NerveError::Protocol("Buffer too small for MouseMove".into()));
+                return Err(NerveError::Protocol(
+                    "Buffer too small for MouseMove".into(),
+                ));
             }
             let header = PacketHeader::new(PacketType::MouseMove, sequence, timestamp_us);
             buf[..header_size].copy_from_slice(bytemuck::bytes_of(&header));
@@ -332,14 +342,13 @@ pub fn encode_packet(
             Ok(total)
         }
         InputEvent::CursorPosition { x, y } => {
-            let payload = CursorPositionPayload {
-                x: *x,
-                y: *y,
-            };
+            let payload = CursorPositionPayload { x: *x, y: *y };
             let payload_size = std::mem::size_of::<CursorPositionPayload>();
             let total = header_size + payload_size;
             if buf.len() < total {
-                return Err(NerveError::Protocol("Buffer too small for CursorPosition".into()));
+                return Err(NerveError::Protocol(
+                    "Buffer too small for CursorPosition".into(),
+                ));
             }
             let header = PacketHeader::new(PacketType::CursorPosition, sequence, timestamp_us);
             buf[..header_size].copy_from_slice(bytemuck::bytes_of(&header));
@@ -355,7 +364,9 @@ pub fn encode_packet(
             let payload_size = std::mem::size_of::<MouseButtonPayload>();
             let total = header_size + payload_size;
             if buf.len() < total {
-                return Err(NerveError::Protocol("Buffer too small for MouseButton".into()));
+                return Err(NerveError::Protocol(
+                    "Buffer too small for MouseButton".into(),
+                ));
             }
             let header = PacketHeader::new(PacketType::MouseButton, sequence, timestamp_us);
             buf[..header_size].copy_from_slice(bytemuck::bytes_of(&header));
@@ -371,7 +382,9 @@ pub fn encode_packet(
             let payload_size = std::mem::size_of::<MouseWheelPayload>();
             let total = header_size + payload_size;
             if buf.len() < total {
-                return Err(NerveError::Protocol("Buffer too small for MouseWheel".into()));
+                return Err(NerveError::Protocol(
+                    "Buffer too small for MouseWheel".into(),
+                ));
             }
             let header = PacketHeader::new(PacketType::MouseWheel, sequence, timestamp_us);
             buf[..header_size].copy_from_slice(bytemuck::bytes_of(&header));
@@ -401,7 +414,9 @@ pub fn encode_packet(
             buf[header_size..total].copy_from_slice(bytemuck::bytes_of(&payload));
             Ok(total)
         }
-        InputEvent::Ping { client_timestamp_us } => {
+        InputEvent::Ping {
+            client_timestamp_us,
+        } => {
             let payload = PingPayload {
                 client_timestamp_us: *client_timestamp_us,
             };
@@ -415,7 +430,9 @@ pub fn encode_packet(
             buf[header_size..total].copy_from_slice(bytemuck::bytes_of(&payload));
             Ok(total)
         }
-        InputEvent::Pong { client_timestamp_us } => {
+        InputEvent::Pong {
+            client_timestamp_us,
+        } => {
             let payload = PingPayload {
                 client_timestamp_us: *client_timestamp_us,
             };
@@ -430,14 +447,18 @@ pub fn encode_packet(
             Ok(total)
         }
         InputEvent::Heartbeat { device_name } => {
-            let mut payload = HeartbeatPayload { device_name: [0; 32] };
+            let mut payload = HeartbeatPayload {
+                device_name: [0; 32],
+            };
             let bytes = device_name.as_bytes();
             let len = bytes.len().min(32);
             payload.device_name[..len].copy_from_slice(&bytes[..len]);
             let payload_size = std::mem::size_of::<HeartbeatPayload>();
             let total = header_size + payload_size;
             if buf.len() < total {
-                return Err(NerveError::Protocol("Buffer too small for Heartbeat".into()));
+                return Err(NerveError::Protocol(
+                    "Buffer too small for Heartbeat".into(),
+                ));
             }
             let header = PacketHeader::new(PacketType::Heartbeat, sequence, timestamp_us);
             buf[..header_size].copy_from_slice(bytemuck::bytes_of(&header));
@@ -469,7 +490,9 @@ pub fn encode_packet(
 pub fn decode_packet(buf: &[u8]) -> Result<(PacketHeader, InputEvent)> {
     let header_size = std::mem::size_of::<PacketHeader>();
     if buf.len() < header_size {
-        return Err(NerveError::Protocol("Buffer smaller than packet header".into()));
+        return Err(NerveError::Protocol(
+            "Buffer smaller than packet header".into(),
+        ));
     }
 
     let header: PacketHeader = bytemuck::pod_read_unaligned(&buf[..header_size]);
@@ -483,7 +506,8 @@ pub fn decode_packet(buf: &[u8]) -> Result<(PacketHeader, InputEvent)> {
             if payload_bytes.len() < payload_size {
                 return Err(NerveError::Protocol("Truncated MouseMove payload".into()));
             }
-            let payload: MouseMovePayload = bytemuck::pod_read_unaligned(&payload_bytes[..payload_size]);
+            let payload: MouseMovePayload =
+                bytemuck::pod_read_unaligned(&payload_bytes[..payload_size]);
             InputEvent::MouseMove {
                 dx: payload.dx,
                 dy: payload.dy,
@@ -492,9 +516,12 @@ pub fn decode_packet(buf: &[u8]) -> Result<(PacketHeader, InputEvent)> {
         PacketType::CursorPosition => {
             let payload_size = std::mem::size_of::<CursorPositionPayload>();
             if payload_bytes.len() < payload_size {
-                return Err(NerveError::Protocol("Truncated CursorPosition payload".into()));
+                return Err(NerveError::Protocol(
+                    "Truncated CursorPosition payload".into(),
+                ));
             }
-            let payload: CursorPositionPayload = bytemuck::pod_read_unaligned(&payload_bytes[..payload_size]);
+            let payload: CursorPositionPayload =
+                bytemuck::pod_read_unaligned(&payload_bytes[..payload_size]);
             InputEvent::CursorPosition {
                 x: payload.x,
                 y: payload.y,
@@ -505,7 +532,8 @@ pub fn decode_packet(buf: &[u8]) -> Result<(PacketHeader, InputEvent)> {
             if payload_bytes.len() < payload_size {
                 return Err(NerveError::Protocol("Truncated MouseButton payload".into()));
             }
-            let payload: MouseButtonPayload = bytemuck::pod_read_unaligned(&payload_bytes[..payload_size]);
+            let payload: MouseButtonPayload =
+                bytemuck::pod_read_unaligned(&payload_bytes[..payload_size]);
             InputEvent::MouseButton {
                 button: MouseButton::try_from(payload.button)?,
                 state: ButtonState::try_from(payload.state)?,
@@ -516,7 +544,8 @@ pub fn decode_packet(buf: &[u8]) -> Result<(PacketHeader, InputEvent)> {
             if payload_bytes.len() < payload_size {
                 return Err(NerveError::Protocol("Truncated MouseWheel payload".into()));
             }
-            let payload: MouseWheelPayload = bytemuck::pod_read_unaligned(&payload_bytes[..payload_size]);
+            let payload: MouseWheelPayload =
+                bytemuck::pod_read_unaligned(&payload_bytes[..payload_size]);
             InputEvent::MouseWheel {
                 delta: payload.delta,
                 horizontal: payload.horizontal != 0,
@@ -527,7 +556,8 @@ pub fn decode_packet(buf: &[u8]) -> Result<(PacketHeader, InputEvent)> {
             if payload_bytes.len() < payload_size {
                 return Err(NerveError::Protocol("Truncated Keyboard payload".into()));
             }
-            let payload: KeyboardPayload = bytemuck::pod_read_unaligned(&payload_bytes[..payload_size]);
+            let payload: KeyboardPayload =
+                bytemuck::pod_read_unaligned(&payload_bytes[..payload_size]);
             InputEvent::Keyboard {
                 vk_code: payload.vk_code,
                 scan_code: payload.scan_code,
@@ -558,18 +588,26 @@ pub fn decode_packet(buf: &[u8]) -> Result<(PacketHeader, InputEvent)> {
         PacketType::Heartbeat => {
             let payload_size = std::mem::size_of::<HeartbeatPayload>();
             if payload_bytes.len() >= payload_size {
-                let payload: HeartbeatPayload = bytemuck::pod_read_unaligned(&payload_bytes[..payload_size]);
-                let end = payload.device_name.iter().position(|&b| b == 0).unwrap_or(32);
+                let payload: HeartbeatPayload =
+                    bytemuck::pod_read_unaligned(&payload_bytes[..payload_size]);
+                let end = payload
+                    .device_name
+                    .iter()
+                    .position(|&b| b == 0)
+                    .unwrap_or(32);
                 let name = String::from_utf8_lossy(&payload.device_name[..end]).to_string();
                 InputEvent::Heartbeat { device_name: name }
             } else {
-                InputEvent::Heartbeat { device_name: String::new() }
+                InputEvent::Heartbeat {
+                    device_name: String::new(),
+                }
             }
         }
         PacketType::FileDrag => {
             let payload_size = std::mem::size_of::<FileDragPayload>();
             if payload_bytes.len() >= payload_size {
-                let payload: FileDragPayload = bytemuck::pod_read_unaligned(&payload_bytes[..payload_size]);
+                let payload: FileDragPayload =
+                    bytemuck::pod_read_unaligned(&payload_bytes[..payload_size]);
                 let end = payload.file_name.iter().position(|&b| b == 0).unwrap_or(32);
                 let name = String::from_utf8_lossy(&payload.file_name[..end]).to_string();
                 InputEvent::FileDrag {

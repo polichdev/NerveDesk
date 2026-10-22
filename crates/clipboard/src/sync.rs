@@ -1,7 +1,7 @@
+use crossbeam_channel::Sender;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread::JoinHandle;
-use crossbeam_channel::Sender;
 use tracing::{info, trace};
 
 use crate::format::ClipboardPayload;
@@ -10,16 +10,13 @@ use common::{NerveError, Result};
 use windows::core::s;
 use windows::Win32::Foundation::{HANDLE, HGLOBAL, HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::DataExchange::{
-    AddClipboardFormatListener, CloseClipboard, EmptyClipboard, GetClipboardData,
-    OpenClipboard, RemoveClipboardFormatListener, SetClipboardData,
+    AddClipboardFormatListener, CloseClipboard, EmptyClipboard, GetClipboardData, OpenClipboard,
+    RemoveClipboardFormatListener, SetClipboardData,
 };
-use windows::Win32::System::Memory::{
-    GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE,
-};
+use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExA, DefWindowProcA, DestroyWindow, DispatchMessageA, GetMessageA,
-    PostMessageA, RegisterClassA, UnregisterClassA, MSG, WNDCLASSA, WS_OVERLAPPED,
-    WM_CLIPBOARDUPDATE, WM_USER,
+    CreateWindowExA, DefWindowProcA, DestroyWindow, DispatchMessageA, GetMessageA, PostMessageA,
+    RegisterClassA, UnregisterClassA, MSG, WM_CLIPBOARDUPDATE, WM_USER, WNDCLASSA, WS_OVERLAPPED,
 };
 
 const CF_UNICODETEXT: u32 = 13;
@@ -42,10 +39,7 @@ pub struct ClipboardListener {
 }
 
 impl ClipboardListener {
-    pub fn start(
-        sender: Sender<ClipboardPayload>,
-        last_seen_hash: Arc<AtomicU64>,
-    ) -> Result<Self> {
+    pub fn start(sender: Sender<ClipboardPayload>, last_seen_hash: Arc<AtomicU64>) -> Result<Self> {
         let (init_tx, init_rx) = crossbeam_channel::bounded::<Result<usize>>(1);
         let hash_clone = last_seen_hash.clone();
 
@@ -72,7 +66,10 @@ impl ClipboardListener {
                     class_name,
                     s!("NerveDeskClipboardWindow"),
                     WS_OVERLAPPED,
-                    0, 0, 0, 0,
+                    0,
+                    0,
+                    0,
+                    0,
                     HWND::default(),
                     None,
                     HINSTANCE::default(),
@@ -107,7 +104,10 @@ impl ClipboardListener {
                         if let Some(payload) = read_clipboard_content() {
                             let hash = payload.compute_hash();
                             if hash_clone.swap(hash, Ordering::SeqCst) != hash {
-                                trace!("Local clipboard changed, dispatching update (hash={:x})", hash);
+                                trace!(
+                                    "Local clipboard changed, dispatching update (hash={:x})",
+                                    hash
+                                );
                                 let _ = sender.try_send(payload);
                             }
                         }
@@ -220,7 +220,9 @@ impl ClipboardWriter {
                 std::thread::sleep(std::time::Duration::from_millis(15));
             }
             if !opened {
-                return Err(NerveError::Platform("Failed to open clipboard for writing".into()));
+                return Err(NerveError::Platform(
+                    "Failed to open clipboard for writing".into(),
+                ));
             }
 
             let _ = EmptyClipboard();
@@ -244,7 +246,9 @@ impl ClipboardWriter {
 
             if let Err(e) = SetClipboardData(CF_UNICODETEXT, HANDLE(h_global.0)) {
                 let _ = CloseClipboard();
-                return Err(NerveError::Platform(format!("SetClipboardData failed: {e}")));
+                return Err(NerveError::Platform(format!(
+                    "SetClipboardData failed: {e}"
+                )));
             }
 
             let _ = CloseClipboard();
@@ -287,7 +291,9 @@ impl ClipboardWriter {
                 std::thread::sleep(std::time::Duration::from_millis(15));
             }
             if !opened {
-                return Err(NerveError::Platform("Failed to open clipboard for writing".into()));
+                return Err(NerveError::Platform(
+                    "Failed to open clipboard for writing".into(),
+                ));
             }
 
             let _ = EmptyClipboard();
@@ -320,7 +326,9 @@ impl ClipboardWriter {
 
             if let Err(e) = SetClipboardData(CF_HDROP, HANDLE(h_global.0)) {
                 let _ = CloseClipboard();
-                return Err(NerveError::Platform(format!("SetClipboardData failed: {e}")));
+                return Err(NerveError::Platform(format!(
+                    "SetClipboardData failed: {e}"
+                )));
             }
 
             let _ = CloseClipboard();
