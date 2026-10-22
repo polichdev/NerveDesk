@@ -26,6 +26,8 @@ pub struct DiscoveryBeacon {
     pub video_port: u16,
     pub screen_width: u32,
     pub screen_height: u32,
+    #[serde(default = "default_screen_edge")]
+    pub screen_edge: String,
 }
 
 impl DiscoveryBeacon {
@@ -46,8 +48,18 @@ impl DiscoveryBeacon {
             video_port,
             screen_width,
             screen_height,
+            screen_edge: default_screen_edge(),
         }
     }
+
+    pub fn with_edge(mut self, edge: String) -> Self {
+        self.screen_edge = edge;
+        self
+    }
+}
+
+fn default_screen_edge() -> String {
+    "Right".into()
 }
 
 pub struct DiscoveryBeaconEmitter {
@@ -57,6 +69,9 @@ pub struct DiscoveryBeaconEmitter {
 }
 
 impl DiscoveryBeaconEmitter {
+    pub fn set_screen_edge(&mut self, edge: String) {
+        self.beacon.screen_edge = edge;
+    }
     pub async fn new(beacon: DiscoveryBeacon) -> Result<Self> {
         let std_socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))
             .map_err(|e| NerveError::Io(e))?;
@@ -164,5 +179,32 @@ impl DiscoveryListener {
             .await
             .map_err(NerveError::Io)?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn advertises_edge_and_accepts_older_beacons() {
+        let beacon =
+            DiscoveryBeacon::new("Laptop".into(), DeviceRole::Host, 48100, 48101, 1600, 900)
+                .with_edge("Top".into());
+        let encoded = serde_json::to_value(&beacon).unwrap();
+        assert_eq!(
+            serde_json::from_value::<DiscoveryBeacon>(encoded.clone())
+                .unwrap()
+                .screen_edge,
+            "Top"
+        );
+        let mut older = encoded;
+        older.as_object_mut().unwrap().remove("screen_edge");
+        assert_eq!(
+            serde_json::from_value::<DiscoveryBeacon>(older)
+                .unwrap()
+                .screen_edge,
+            "Right"
+        );
     }
 }

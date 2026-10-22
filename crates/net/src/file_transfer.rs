@@ -18,6 +18,17 @@ pub fn get_staging_dir() -> PathBuf {
 }
 
 pub fn get_default_transfer_dir() -> PathBuf {
+    if let Some(desktop) = get_desktop_dir() {
+        return desktop;
+    }
+    for variable in ["OneDrive", "OneDriveConsumer", "OneDriveCommercial"] {
+        if let Some(root) = std::env::var_os(variable) {
+            let desktop = PathBuf::from(root).join("Desktop");
+            if desktop.is_dir() {
+                return desktop;
+            }
+        }
+    }
     if let Some(user_profile) = std::env::var_os("USERPROFILE") {
         let desktop = PathBuf::from(&user_profile).join("Desktop");
         if desktop.exists() {
@@ -31,6 +42,47 @@ pub fn get_default_transfer_dir() -> PathBuf {
     } else {
         std::env::temp_dir()
     }
+}
+
+fn get_desktop_dir() -> Option<PathBuf> {
+    #[cfg(target_os = "windows")]
+    unsafe {
+        use windows::Win32::Foundation::HANDLE;
+        use windows::Win32::System::Com::CoTaskMemFree;
+        use windows::Win32::UI::Shell::{
+            FOLDERID_Desktop, SHGetFolderPathW, SHGetKnownFolderPath, CSIDL_DESKTOPDIRECTORY,
+            KNOWN_FOLDER_FLAG,
+        };
+        if let Ok(path) =
+            SHGetKnownFolderPath(&FOLDERID_Desktop, KNOWN_FOLDER_FLAG(0), HANDLE::default())
+        {
+            let value = path.to_string().ok();
+            CoTaskMemFree(Some(path.0.cast()));
+            if let Some(directory) = value.map(PathBuf::from).filter(|p| p.is_dir()) {
+                return Some(directory);
+            }
+        }
+        let mut legacy_path = [0u16; 260];
+        if SHGetFolderPathW(
+            None,
+            CSIDL_DESKTOPDIRECTORY as i32,
+            None,
+            0,
+            &mut legacy_path,
+        )
+        .is_ok()
+        {
+            let length = legacy_path
+                .iter()
+                .position(|c| *c == 0)
+                .unwrap_or(legacy_path.len());
+            let directory = PathBuf::from(String::from_utf16_lossy(&legacy_path[..length]));
+            return directory.is_dir().then_some(directory);
+        }
+        return None;
+    }
+    #[allow(unreachable_code)]
+    None
 }
 
 fn url_to_path(url: &str) -> Option<PathBuf> {
@@ -91,11 +143,8 @@ pub fn get_target_dir_at_cursor() -> PathBuf {
                 let class_name = String::from_utf16_lossy(&class_buf[..len as usize]);
 
                 if class_name == "Progman" || class_name == "WorkerW" {
-                    if let Some(user_profile) = std::env::var_os("USERPROFILE") {
-                        let desktop = PathBuf::from(user_profile).join("Desktop");
-                        if desktop.exists() {
-                            return desktop;
-                        }
+                    if let Some(desktop) = get_desktop_dir() {
+                        return desktop;
                     }
                 } else if class_name == "CabinetWClass" || class_name == "ExploreWClass" {
                     let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
@@ -130,26 +179,24 @@ pub fn get_target_dir_at_cursor() -> PathBuf {
     get_default_transfer_dir()
 }
 
-pub fn get_dragged_or_selected_files() -> Vec<PathBuf> {
+pub fn get_dragged_files(source_window: isize) -> Vec<PathBuf> {
     #[cfg(target_os = "windows")]
     unsafe {
         use windows::core::{Interface, VARIANT};
-        use windows::Win32::Foundation::{HGLOBAL, HWND};
+        use windows::Win32::Foundation::HWND;
         use windows::Win32::System::Com::{
             CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
         };
-        use windows::Win32::System::DataExchange::{
-            CloseClipboard, GetClipboardData, IsClipboardFormatAvailable, OpenClipboard,
-        };
-        use windows::Win32::System::Memory::{GlobalLock, GlobalUnlock};
         use windows::Win32::UI::Shell::{
-            IShellFolderViewDual, IShellWindows, IWebBrowser2, ShellWindows,
+            IShellFolderViewDual, IShellWindows, IWebBrowser2, ShellWindows, SWC_DESKTOP,
+            SWFO_NEEDDISPATCH,
         };
-        use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+        use windows::Win32::UI::WindowsAndMessaging::GetClassNameW;
 
-        let mut results = Vec::new();
+        if source_window == 0 {
+            return Vec::new();
+        }
         let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-        let fg = GetForegroundWindow();
 
         if let Ok(sw) = CoCreateInstance::<_, IShellWindows>(&ShellWindows, None, CLSCTX_ALL) {
             if let Ok(count) = sw.Count() {
@@ -157,43 +204,18 @@ pub fn get_dragged_or_selected_files() -> Vec<PathBuf> {
                     let v = VARIANT::from(i);
                     if let Ok(item) = sw.Item(&v) {
                         if let Ok(wb) = item.cast::<IWebBrowser2>() {
-                            let is_target = if !fg.is_invalid() {
-                                if let Ok(whwnd) = wb.HWND() {
-                                    whwnd.0 as isize == fg.0 as isize
-                                } else {
-                                    false
-                                }
-                            } else {
-                                false
-                            };
+                            let is_target =
+                                wb.HWND().is_ok_and(|hwnd| hwnd.0 as isize == source_window);
+
+                            if !is_target {
+                                continue;
+                            }
 
                             if let Ok(doc) = wb.Document() {
                                 if let Ok(view) = doc.cast::<IShellFolderViewDual>() {
-                                    if let Ok(items) = view.SelectedItems() {
-                                        if let Ok(n) = items.Count() {
-                                            if n > 0 {
-                                                let mut cur_window_files = Vec::new();
-                                                for j in 0..n {
-                                                    let vj = VARIANT::from(j);
-                                                    if let Ok(f_item) = items.Item(&vj) {
-                                                        if let Ok(path_bstr) = f_item.Path() {
-                                                            let p = PathBuf::from(
-                                                                path_bstr.to_string(),
-                                                            );
-                                                            if p.exists() {
-                                                                cur_window_files.push(p);
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                                if is_target && !cur_window_files.is_empty() {
-                                                    return cur_window_files;
-                                                }
-                                                if results.is_empty() {
-                                                    results = cur_window_files;
-                                                }
-                                            }
-                                        }
+                                    let files = selected_files_from_view(&view);
+                                    if !files.is_empty() {
+                                        return files;
                                     }
                                 }
                             }
@@ -203,44 +225,61 @@ pub fn get_dragged_or_selected_files() -> Vec<PathBuf> {
             }
         }
 
-        if !results.is_empty() {
-            return results;
-        }
-
-        if OpenClipboard(HWND::default()).is_ok() {
-            if IsClipboardFormatAvailable(15).is_ok() {
-                if let Ok(handle) = GetClipboardData(15) {
-                    let ptr = GlobalLock(HGLOBAL(handle.0));
-                    if !ptr.is_null() {
-                        let header_p = ptr as *const u32;
-                        let p_files = *header_p as usize;
-                        let f_wide = *((ptr as *const u8).add(16) as *const i32);
-                        if f_wide != 0 {
-                            let mut p = (ptr as *const u8).add(p_files) as *const u16;
-                            while *p != 0 {
-                                let mut len = 0;
-                                let start = p;
-                                while *p != 0 {
-                                    len += 1;
-                                    p = p.add(1);
-                                }
-                                let slice = std::slice::from_raw_parts(start, len);
-                                let path = PathBuf::from(String::from_utf16_lossy(slice));
-                                if path.exists() {
-                                    results.push(path);
-                                }
-                                p = p.add(1);
+        let mut class_buf = [0u16; 256];
+        let len = GetClassNameW(HWND(source_window as *mut _), &mut class_buf);
+        let class_name = String::from_utf16_lossy(&class_buf[..len as usize]);
+        if class_name == "Progman" || class_name == "WorkerW" {
+            if let Ok(sw) = CoCreateInstance::<_, IShellWindows>(&ShellWindows, None, CLSCTX_ALL) {
+                let mut desktop_hwnd = 0;
+                if let Ok(dispatch) = sw.FindWindowSW(
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    SWC_DESKTOP,
+                    &mut desktop_hwnd,
+                    SWFO_NEEDDISPATCH,
+                ) {
+                    if let Ok(view) = dispatch.cast::<IShellFolderViewDual>() {
+                        let files = selected_files_from_view(&view);
+                        if !files.is_empty() {
+                            return files;
+                        }
+                    }
+                    if let Ok(browser) = dispatch.cast::<IWebBrowser2>() {
+                        if let Ok(doc) = browser.Document() {
+                            if let Ok(view) = doc.cast::<IShellFolderViewDual>() {
+                                return selected_files_from_view(&view);
                             }
                         }
-                        let _ = GlobalUnlock(HGLOBAL(handle.0));
                     }
                 }
             }
-            let _ = CloseClipboard();
         }
 
-        results
+        Vec::new()
     }
+}
+
+#[cfg(target_os = "windows")]
+unsafe fn selected_files_from_view(
+    view: &windows::Win32::UI::Shell::IShellFolderViewDual,
+) -> Vec<PathBuf> {
+    use windows::core::VARIANT;
+    let mut files = Vec::new();
+    if let Ok(items) = view.SelectedItems() {
+        if let Ok(count) = items.Count() {
+            for index in 0..count {
+                if let Ok(item) = items.Item(&VARIANT::from(index)) {
+                    if let Ok(path) = item.Path() {
+                        let path = PathBuf::from(path.to_string());
+                        if path.is_file() {
+                            files.push(path);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    files
 }
 
 pub fn notify_shell_update(file_path: &Path, dir_path: &Path) {
@@ -481,12 +520,11 @@ where
         received_files.push(final_path);
     }
 
-    let _ = socket.write_all(b"OK\n").await;
-
     let mut pending_target = None;
     if let Ok(mut guard) = PENDING_DROP_DIR.lock() {
         pending_target = guard.take();
     }
+    let save_immediately = pending_target.is_some();
 
     let mut final_files = Vec::new();
     if let Some(target_dir) = pending_target {
@@ -503,6 +541,11 @@ where
                 }
             }
         }
+        if final_files.len() != file_count {
+            return Err(NerveError::Platform(
+                "Could not save every dropped file".into(),
+            ));
+        }
     } else {
         if let Ok(mut guard) = STAGED_FILES.lock() {
             guard.extend(received_files.clone());
@@ -510,7 +553,10 @@ where
         final_files = received_files;
     }
 
-    on_files_received(final_files);
+    if save_immediately {
+        on_files_received(final_files);
+    }
+    socket.write_all(b"OK\n").await?;
     Ok(())
 }
 
@@ -576,7 +622,12 @@ impl FileTransferClient {
         stream.flush().await?;
 
         let mut ack = [0u8; 3];
-        let _ = stream.read_exact(&mut ack).await;
+        stream.read_exact(&mut ack).await?;
+        if &ack != b"OK\n" {
+            return Err(NerveError::Protocol(
+                "File transfer was not acknowledged".into(),
+            ));
+        }
 
         Ok(total_bytes)
     }

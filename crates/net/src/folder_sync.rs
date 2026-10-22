@@ -151,7 +151,10 @@ enum Message {
     Auth {
         proof: String,
     },
-    ManifestRequest,
+    ManifestRequest {
+        #[serde(default)]
+        include_existing: bool,
+    },
     Manifest {
         files: Manifest,
         baseline: Manifest,
@@ -494,10 +497,7 @@ impl FolderSync {
                 .cloned()
                 .ok_or("Pair is not approved")?
         };
-        if device_name().to_ascii_lowercase() >= pair.peer_name.to_ascii_lowercase() {
-            return Err("Run sync on the other computer; it coordinates this pair".into());
-        }
-        self.sync_pair(&pair)?;
+        self.sync_pair_with_mode(&pair, true)?;
         Ok(self.status())
     }
 
@@ -987,6 +987,7 @@ impl FolderSync {
         };
         write_frame(&mut socket, &Message::Ok)?;
         let root = Path::new(&pair.local_dir);
+        let mut include_existing_for_session = false;
         loop {
             if !self.config.lock().unwrap().enabled {
                 return Ok(());
@@ -996,9 +997,15 @@ impl FolderSync {
                 Err(_) => return Ok(()),
             };
             match message {
-                Message::ManifestRequest => {
+                Message::ManifestRequest { include_existing } => {
+                    include_existing_for_session = include_existing;
                     let current_pair = self.find_pair(&id)?;
-                    let files = scan_excluding(root, &current_pair.initial_files)?;
+                    let ignored = if include_existing {
+                        BTreeSet::new()
+                    } else {
+                        current_pair.initial_files.clone()
+                    };
+                    let files = scan_excluding(root, &ignored)?;
                     write_frame(
                         &mut socket,
                         &Message::Manifest {
@@ -1149,7 +1156,9 @@ impl FolderSync {
                     }
                     let current_pair = self.find_pair(&id)?;
                     if files.len() > MAX_FILES
-                        || !current_pair.initial_files.is_subset(&ignored)
+                        || (include_existing_for_session && !ignored.is_empty())
+                        || (!include_existing_for_session
+                            && !current_pair.initial_files.is_subset(&ignored))
                         || scan_excluding(root, &ignored)? != files
                     {
                         write_frame(
@@ -1162,6 +1171,9 @@ impl FolderSync {
                     }
                     self.update_pair(&id, |p| {
                         p.baseline = files;
+                        if include_existing_for_session {
+                            p.initial_files.clear();
+                        }
                         p.last_sync_ms = Some(now_ms());
                     })?;
                     write_frame(&mut socket, &Message::Ok)?;
@@ -1243,6 +1255,10 @@ impl FolderSync {
     }
 
     fn sync_pair(&self, pair: &SyncPair) -> Result<(), String> {
+        self.sync_pair_with_mode(pair, false)
+    }
+
+    fn sync_pair_with_mode(&self, pair: &SyncPair, include_existing: bool) -> Result<(), String> {
         let _guard = self
             .session
             .try_lock()
@@ -1251,22 +1267,31 @@ impl FolderSync {
             return Err("Folder sync is disabled".into());
         }
         self.active.store(true, Ordering::SeqCst);
-        let result = self.sync_pair_inner(pair);
+        let result = self.sync_pair_inner_at_mode(pair, PORT, include_existing);
         self.active.store(false, Ordering::SeqCst);
         result
     }
 
-    fn sync_pair_inner(&self, pair: &SyncPair) -> Result<(), String> {
-        self.sync_pair_inner_at(pair, PORT)
+    #[cfg(test)]
+    fn sync_pair_inner_at(&self, pair: &SyncPair, port: u16) -> Result<(), String> {
+        self.sync_pair_inner_at_mode(pair, port, false)
     }
 
-    fn sync_pair_inner_at(&self, pair: &SyncPair, port: u16) -> Result<(), String> {
+    fn sync_pair_inner_at_mode(
+        &self,
+        pair: &SyncPair,
+        port: u16,
+        include_existing: bool,
+    ) -> Result<(), String> {
         let mut socket = connect_pair_at(pair, port)?;
         let root = Path::new(&pair.local_dir);
         let (mut remote, remote_baseline, peer_approved, remote_initial) =
-            remote_manifest(&mut socket)?;
-        let ignored: BTreeSet<String> =
-            pair.initial_files.union(&remote_initial).cloned().collect();
+            remote_manifest_with_mode(&mut socket, include_existing)?;
+        let ignored: BTreeSet<String> = if include_existing {
+            BTreeSet::new()
+        } else {
+            pair.initial_files.union(&remote_initial).cloned().collect()
+        };
         let local = scan_excluding(root, &ignored)?;
         remote.retain(|path, _| !ignored.contains(path));
         if !peer_approved {
@@ -1340,7 +1365,7 @@ impl FolderSync {
             }
         }
         let final_local = scan_excluding(root, &ignored)?;
-        let (mut final_remote, _, _, _) = remote_manifest(&mut socket)?;
+        let (mut final_remote, _, _, _) = remote_manifest_with_mode(&mut socket, include_existing)?;
         final_remote.retain(|path, _| !ignored.contains(path));
         if final_local != final_remote {
             return Err("Folders changed during sync; retrying".into());
@@ -1355,6 +1380,9 @@ impl FolderSync {
         expect_ok(read_frame(&mut socket)?)?;
         self.update_pair(&pair.id, |p| {
             p.baseline = final_local;
+            if include_existing {
+                p.initial_files.clear();
+            }
             p.last_sync_ms = Some(now_ms());
         })
     }
@@ -1571,7 +1599,14 @@ fn connect_pair_at(pair: &SyncPair, port: u16) -> Result<TcpStream, String> {
 fn remote_manifest(
     socket: &mut TcpStream,
 ) -> Result<(Manifest, Manifest, bool, BTreeSet<String>), String> {
-    write_frame(socket, &Message::ManifestRequest)?;
+    remote_manifest_with_mode(socket, false)
+}
+
+fn remote_manifest_with_mode(
+    socket: &mut TcpStream,
+    include_existing: bool,
+) -> Result<(Manifest, Manifest, bool, BTreeSet<String>), String> {
+    write_frame(socket, &Message::ManifestRequest { include_existing })?;
     match read_frame(socket)? {
         Message::Manifest {
             files,
@@ -1803,7 +1838,7 @@ mod tests {
         let receiver = {
             let right = right.clone();
             thread::spawn(move || {
-                for _ in 0..4 {
+                for _ in 0..6 {
                     let (socket, address) = listener.accept().unwrap();
                     right.serve(socket, address).unwrap();
                 }
@@ -1841,6 +1876,34 @@ mod tests {
             b"left changed"
         );
         assert_eq!(scan(&left_root).unwrap(), scan(&right_root).unwrap());
+        fs::write(
+            left_root.join("previously-ignored.txt"),
+            b"existing content",
+        )
+        .unwrap();
+        left.update_pair(&left_pair.id, |p| {
+            p.initial_files.insert("previously-ignored.txt".into());
+        })
+        .unwrap();
+        let current = left.find_pair(&left_pair.id).unwrap();
+        left.sync_pair_inner_at(&current, port).unwrap();
+        assert!(!right_root.join("previously-ignored.txt").exists());
+        let current = left.find_pair(&left_pair.id).unwrap();
+        left.sync_pair_inner_at_mode(&current, port, true).unwrap();
+        assert_eq!(
+            fs::read(right_root.join("previously-ignored.txt")).unwrap(),
+            b"existing content"
+        );
+        assert!(left
+            .find_pair(&left_pair.id)
+            .unwrap()
+            .initial_files
+            .is_empty());
+        assert!(right
+            .find_pair(&left_pair.id)
+            .unwrap()
+            .initial_files
+            .is_empty());
         receiver.join().unwrap();
         fs::remove_dir_all(base).unwrap();
     }
