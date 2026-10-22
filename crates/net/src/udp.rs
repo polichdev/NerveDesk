@@ -7,8 +7,7 @@ use tokio::net::UdpSocket;
 use tracing::{trace, warn};
 
 use common::{
-    decode_packet, encode_packet, InputEvent, NerveError, PacketHeader, Result,
-    MAX_PACKET_SIZE,
+    decode_packet, encode_packet, InputEvent, NerveError, PacketHeader, Result, MAX_PACKET_SIZE,
 };
 
 pub struct UdpInputSender {
@@ -30,8 +29,7 @@ impl UdpInputSender {
             .bind(&any_addr.into())
             .map_err(|e| NerveError::Io(e))?;
 
-        let socket = UdpSocket::from_std(std_socket.into())
-            .map_err(|e| NerveError::Io(e))?;
+        let socket = UdpSocket::from_std(std_socket.into()).map_err(|e| NerveError::Io(e))?;
 
         Ok(Self {
             socket,
@@ -110,8 +108,7 @@ impl UdpInputReceiver {
             .bind(&bind_addr.into())
             .map_err(|e| NerveError::Io(e))?;
 
-        let socket = UdpSocket::from_std(std_socket.into())
-            .map_err(|e| NerveError::Io(e))?;
+        let socket = UdpSocket::from_std(std_socket.into()).map_err(|e| NerveError::Io(e))?;
 
         Ok(Self {
             socket,
@@ -131,7 +128,10 @@ impl UdpInputReceiver {
 
             match decode_packet(&buf[..len]) {
                 Ok((header, event)) => {
-                    if header.sequence <= self.last_sequence && self.last_sequence.saturating_sub(header.sequence) < 5000 && header.sequence > 10 {
+                    if header.sequence <= self.last_sequence
+                        && self.last_sequence.saturating_sub(header.sequence) < 5000
+                        && header.sequence > 10
+                    {
                         continue;
                     }
 

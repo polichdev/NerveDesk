@@ -1,5 +1,5 @@
-use std::net::SocketAddr;
 use socket2::{Domain, Protocol, Socket, Type};
+use std::net::SocketAddr;
 use tokio::net::UdpSocket;
 use tracing::trace;
 
@@ -24,8 +24,7 @@ impl VideoSender {
             .bind(&any_addr.into())
             .map_err(|e| NerveError::Io(e))?;
 
-        let socket = UdpSocket::from_std(std_socket.into())
-            .map_err(|e| NerveError::Io(e))?;
+        let socket = UdpSocket::from_std(std_socket.into()).map_err(|e| NerveError::Io(e))?;
 
         Ok(Self {
             socket,
@@ -82,8 +81,7 @@ impl VideoReceiver {
             .bind(&bind_addr.into())
             .map_err(|e| NerveError::Io(e))?;
 
-        let socket = UdpSocket::from_std(std_socket.into())
-            .map_err(|e| NerveError::Io(e))?;
+        let socket = UdpSocket::from_std(std_socket.into()).map_err(|e| NerveError::Io(e))?;
 
         Ok(Self {
             socket,
@@ -92,7 +90,8 @@ impl VideoReceiver {
     }
 
     pub async fn recv_frame(&mut self) -> Result<(u64, bool, u64, Vec<u8>)> {
-        let mut buf = vec![0u8; MAX_VIDEO_PAYLOAD_SIZE + std::mem::size_of::<VideoChunkHeader>() + 64];
+        let mut buf =
+            vec![0u8; MAX_VIDEO_PAYLOAD_SIZE + std::mem::size_of::<VideoChunkHeader>() + 64];
 
         loop {
             let (len, _peer) = self

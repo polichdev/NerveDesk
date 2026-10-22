@@ -1,12 +1,12 @@
+use common::{NerveError, Result};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tracing::{error, info, warn};
-use common::{NerveError, Result};
 
-pub const FILE_TRANSFER_PORT: u16 = 48104;
+pub const FILE_TRANSFER_PORT: u16 = 48106;
 const FILE_TRANSFER_MAGIC: &[u8; 4] = b"NRVF";
 const CHUNK_SIZE: usize = 65536;
 
@@ -69,13 +69,15 @@ fn url_decode(s: &str) -> String {
 pub fn get_target_dir_at_cursor() -> PathBuf {
     #[cfg(target_os = "windows")]
     unsafe {
+        use windows::core::{Interface, VARIANT};
         use windows::Win32::Foundation::POINT;
+        use windows::Win32::System::Com::{
+            CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
+        };
+        use windows::Win32::UI::Shell::{IShellWindows, IWebBrowser2, ShellWindows};
         use windows::Win32::UI::WindowsAndMessaging::{
             GetAncestor, GetClassNameW, GetCursorPos, WindowFromPoint, GA_ROOT,
         };
-        use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED};
-        use windows::Win32::UI::Shell::{IShellWindows, IWebBrowser2, ShellWindows};
-        use windows::core::{Interface, VARIANT};
 
         let mut pt = POINT::default();
         if GetCursorPos(&mut pt).is_ok() {
@@ -97,7 +99,9 @@ pub fn get_target_dir_at_cursor() -> PathBuf {
                     }
                 } else if class_name == "CabinetWClass" || class_name == "ExploreWClass" {
                     let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-                    if let Ok(sw) = CoCreateInstance::<_, IShellWindows>(&ShellWindows, None, CLSCTX_ALL) {
+                    if let Ok(sw) =
+                        CoCreateInstance::<_, IShellWindows>(&ShellWindows, None, CLSCTX_ALL)
+                    {
                         if let Ok(count) = sw.Count() {
                             for i in 0..count {
                                 let v = VARIANT::from(i);
@@ -106,7 +110,9 @@ pub fn get_target_dir_at_cursor() -> PathBuf {
                                         if let Ok(whwnd) = wb.HWND() {
                                             if whwnd.0 as isize == target_hwnd.0 as isize {
                                                 if let Ok(url) = wb.LocationURL() {
-                                                    if let Some(path) = url_to_path(&url.to_string()) {
+                                                    if let Some(path) =
+                                                        url_to_path(&url.to_string())
+                                                    {
                                                         return path;
                                                     }
                                                 }
@@ -127,15 +133,19 @@ pub fn get_target_dir_at_cursor() -> PathBuf {
 pub fn get_dragged_or_selected_files() -> Vec<PathBuf> {
     #[cfg(target_os = "windows")]
     unsafe {
-        use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
-        use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED};
-        use windows::Win32::UI::Shell::{IShellWindows, IWebBrowser2, ShellWindows, IShellFolderViewDual};
         use windows::core::{Interface, VARIANT};
+        use windows::Win32::Foundation::{HGLOBAL, HWND};
+        use windows::Win32::System::Com::{
+            CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
+        };
         use windows::Win32::System::DataExchange::{
             CloseClipboard, GetClipboardData, IsClipboardFormatAvailable, OpenClipboard,
         };
         use windows::Win32::System::Memory::{GlobalLock, GlobalUnlock};
-        use windows::Win32::Foundation::{HGLOBAL, HWND};
+        use windows::Win32::UI::Shell::{
+            IShellFolderViewDual, IShellWindows, IWebBrowser2, ShellWindows,
+        };
+        use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
 
         let mut results = Vec::new();
         let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
@@ -167,7 +177,9 @@ pub fn get_dragged_or_selected_files() -> Vec<PathBuf> {
                                                     let vj = VARIANT::from(j);
                                                     if let Ok(f_item) = items.Item(&vj) {
                                                         if let Ok(path_bstr) = f_item.Path() {
-                                                            let p = PathBuf::from(path_bstr.to_string());
+                                                            let p = PathBuf::from(
+                                                                path_bstr.to_string(),
+                                                            );
                                                             if p.exists() {
                                                                 cur_window_files.push(p);
                                                             }
@@ -234,14 +246,22 @@ pub fn get_dragged_or_selected_files() -> Vec<PathBuf> {
 pub fn notify_shell_update(file_path: &Path, dir_path: &Path) {
     #[cfg(target_os = "windows")]
     unsafe {
-        use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryA};
         use windows::core::s;
+        use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryA};
         if let Ok(shell32) = LoadLibraryA(s!("shell32.dll")) {
             if let Some(proc) = GetProcAddress(shell32, s!("SHChangeNotify")) {
                 type SHChangeNotifyFn = unsafe extern "system" fn(i32, u32, *const u16, *const u16);
                 let func: SHChangeNotifyFn = std::mem::transmute(proc);
-                let wide_file: Vec<u16> = file_path.to_string_lossy().encode_utf16().chain(std::iter::once(0)).collect();
-                let wide_dir: Vec<u16> = dir_path.to_string_lossy().encode_utf16().chain(std::iter::once(0)).collect();
+                let wide_file: Vec<u16> = file_path
+                    .to_string_lossy()
+                    .encode_utf16()
+                    .chain(std::iter::once(0))
+                    .collect();
+                let wide_dir: Vec<u16> = dir_path
+                    .to_string_lossy()
+                    .encode_utf16()
+                    .chain(std::iter::once(0))
+                    .collect();
                 func(0x00000002, 0x0005, wide_file.as_ptr(), std::ptr::null());
                 func(0x00001000, 0x0005, wide_dir.as_ptr(), std::ptr::null());
             }
@@ -267,7 +287,9 @@ pub fn commit_file_drop(target_dir: PathBuf) -> Vec<PathBuf> {
     for src in files_to_move {
         if let Some(fname) = src.file_name().and_then(|n| n.to_str()) {
             let dest = get_unique_path(&target_dir, fname);
-            if std::fs::rename(&src, &dest).is_ok() || std::fs::copy(&src, &dest).map(|_| ()).is_ok() {
+            if std::fs::rename(&src, &dest).is_ok()
+                || std::fs::copy(&src, &dest).map(|_| ()).is_ok()
+            {
                 let _ = std::fs::remove_file(&src);
                 notify_shell_update(&dest, &target_dir);
                 moved.push(dest);
@@ -295,7 +317,10 @@ fn get_unique_path(dir: &Path, name: &str) -> PathBuf {
     if !p.exists() {
         return p;
     }
-    let stem = Path::new(name).file_stem().and_then(|s| s.to_str()).unwrap_or(name);
+    let stem = Path::new(name)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or(name);
     let ext = Path::new(name).extension().and_then(|s| s.to_str());
     for i in 1..10000 {
         let new_name = match ext {
@@ -392,7 +417,9 @@ where
     if let Ok(guard) = security_key.lock() {
         if let Some(ref key) = *guard {
             if !key.is_empty() && !token.is_empty() && token != *key {
-                return Err(NerveError::Protocol("Security key mismatch for file transfer".into()));
+                return Err(NerveError::Protocol(
+                    "Security key mismatch for file transfer".into(),
+                ));
             }
         }
     }
@@ -428,7 +455,10 @@ where
         let file_size = u64::from_be_bytes(size_buf);
 
         let final_path = get_unique_path(&staging_dir, safe_name);
-        let final_name = final_path.file_name().and_then(|n| n.to_str()).unwrap_or(safe_name);
+        let final_name = final_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(safe_name);
         let part_path = staging_dir.join(format!("{final_name}.part"));
 
         let mut out_file = tokio::fs::File::create(&part_path).await?;
@@ -464,7 +494,9 @@ where
         for src in received_files {
             if let Some(fname) = src.file_name().and_then(|n| n.to_str()) {
                 let dest = get_unique_path(&target_dir, fname);
-                if std::fs::rename(&src, &dest).is_ok() || std::fs::copy(&src, &dest).map(|_| ()).is_ok() {
+                if std::fs::rename(&src, &dest).is_ok()
+                    || std::fs::copy(&src, &dest).map(|_| ()).is_ok()
+                {
                     let _ = std::fs::remove_file(&src);
                     notify_shell_update(&dest, &target_dir);
                     final_files.push(dest);

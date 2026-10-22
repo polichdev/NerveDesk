@@ -1,7 +1,7 @@
-use std::net::SocketAddr;
-use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use socket2::{Domain, Protocol, Socket, Type};
+use std::net::SocketAddr;
+use std::time::Duration;
 use tokio::net::UdpSocket;
 use tracing::{info, trace, warn};
 
@@ -69,8 +69,7 @@ impl DiscoveryBeaconEmitter {
             .bind(&bind_addr.into())
             .map_err(|e| NerveError::Io(e))?;
 
-        let socket = UdpSocket::from_std(std_socket.into())
-            .map_err(|e| NerveError::Io(e))?;
+        let socket = UdpSocket::from_std(std_socket.into()).map_err(|e| NerveError::Io(e))?;
 
         let broadcast_addr: SocketAddr = format!("255.255.255.255:{}", DISCOVERY_PORT)
             .parse()
@@ -84,11 +83,15 @@ impl DiscoveryBeaconEmitter {
     }
 
     pub async fn emit_beacon(&self) -> Result<()> {
+        self.emit_to(self.broadcast_addr).await
+    }
+
+    pub async fn emit_to(&self, address: SocketAddr) -> Result<()> {
         let data = serde_json::to_vec(&self.beacon)
             .map_err(|e| NerveError::Serialization(e.to_string()))?;
 
         self.socket
-            .send_to(&data, self.broadcast_addr)
+            .send_to(&data, address)
             .await
             .map_err(|e| NerveError::Io(e))?;
 
@@ -126,8 +129,7 @@ impl DiscoveryListener {
             .bind(&bind_addr.into())
             .map_err(|e| NerveError::Io(e))?;
 
-        let socket = UdpSocket::from_std(std_socket.into())
-            .map_err(|e| NerveError::Io(e))?;
+        let socket = UdpSocket::from_std(std_socket.into()).map_err(|e| NerveError::Io(e))?;
 
         info!("Discovery listener bound to {}", bind_addr);
         Ok(Self { socket })
@@ -145,10 +147,22 @@ impl DiscoveryListener {
             .map_err(|e| NerveError::Serialization(e.to_string()))?;
 
         if beacon.magic != DISCOVERY_MAGIC {
-            return Err(NerveError::Protocol("Invalid discovery beacon magic".into()));
+            return Err(NerveError::Protocol(
+                "Invalid discovery beacon magic".into(),
+            ));
         }
 
         trace!("Received beacon from {}: {:?}", peer_addr, beacon);
         Ok((beacon, peer_addr))
+    }
+
+    pub async fn reply_to(&self, beacon: &DiscoveryBeacon, address: SocketAddr) -> Result<()> {
+        let data =
+            serde_json::to_vec(beacon).map_err(|e| NerveError::Serialization(e.to_string()))?;
+        self.socket
+            .send_to(&data, address)
+            .await
+            .map_err(NerveError::Io)?;
+        Ok(())
     }
 }
