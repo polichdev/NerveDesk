@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="uk">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
-  <title>NerveDesk</title>
+  <title></title>
   <style>
     :root {
       --bg: #121214;
@@ -115,6 +115,7 @@
 
     body {
       background: var(--bg);
+      border-top: 1px solid var(--card-border);
       color: var(--text);
       font-family: var(--font);
       font-size: 14px;
@@ -239,6 +240,10 @@
       display: flex;
     }
 
+    #viewHome {
+      max-width: 1320px;
+    }
+
     .view-header {
       display: flex;
       flex-direction: column;
@@ -272,8 +277,8 @@
 
     .home-grid {
       display: grid;
-      grid-template-columns: 1fr 1.25fr;
-      gap: 20px;
+      grid-template-columns: minmax(260px, 0.85fr) minmax(0, 1.15fr);
+      gap: 24px;
       align-items: start;
       margin-bottom: 24px;
       width: 100%;
@@ -342,6 +347,27 @@
       flex-shrink: 0;
       flex-wrap: wrap;
     }
+
+    .sync-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .sync-form-grid label { display: flex; flex-direction: column; gap: 7px; min-width: 0; color: var(--text-muted); font-size: 12px; }
+    .sync-form-grid label:last-child { grid-column: 1 / -1; }
+    .sync-form-grid .select-input, .sync-form-grid .code-input { width: 100%; min-width: 0; }
+    .sync-inline { display: flex; gap: 8px; min-width: 0; }
+    .sync-inline .code-input { flex: 1; }
+    .sync-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+    .sync-pair { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-top: 1px solid var(--card-border-subtle); }
+    .sync-pair-info { min-width: 0; overflow-wrap: anywhere; }
+    .sync-pair .sync-actions { margin-top: 0; flex-shrink: 0; }
+    .sync-connected-list { margin-top: 20px; }
+    .sync-status-line { margin-top: 14px; }
+    .sync-pair-events { display: flex; flex-direction: column; gap: 6px; max-height: 230px; overflow: auto; }
+    .sync-event { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 7px 0; border-top: 1px solid var(--card-border-subtle); font-size: 12px; color: var(--text-muted); overflow-wrap: anywhere; }
+    .sync-preview-list { max-height: 270px; overflow: auto; display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--text-muted); overflow-wrap: anywhere; }
+    .sync-request-backdrop { position: fixed; inset: 0; z-index: 1000; display: none; align-items: center; justify-content: center; padding: 20px; background: rgba(0, 0, 0, .65); }
+    .sync-request-backdrop.visible { display: flex; }
+    .sync-request-dialog { width: min(480px, 100%); padding: 24px; border: 1px solid var(--card-border); border-radius: 12px; background: var(--card-bg); box-shadow: 0 20px 60px rgba(0, 0, 0, .35); }
+    .sync-request-dialog h2 { margin-bottom: 12px; font-size: 18px; }
+    .sync-request-path { margin-top: 12px; padding: 10px; border: 1px solid var(--card-border); border-radius: 6px; font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; }
 
 
     .switch {
@@ -691,6 +717,8 @@
     }
 
     @media (max-width: 620px) {
+      .sync-form-grid { grid-template-columns: 1fr; }
+      .sync-pair { align-items: flex-start; flex-direction: column; }
       .setting-card {
         flex-direction: column;
         align-items: flex-start;
@@ -769,6 +797,12 @@
         </div>
         <span data-i18n="nav_home">Головна</span>
       </div>
+      <div class="nav-item" id="navDevices" onclick="switchTab('devices')" title="Пристрої">
+        <div class="nav-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        </div>
+        <span data-i18n="nav_devices">Пристрої</span>
+      </div>
     </div>
 
     <div class="nav-group-title" data-i18n="nav_section_navigation">Навігація</div>
@@ -785,6 +819,20 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
         </div>
         <span data-i18n="nav_cast">Дублювання екрана</span>
+      </div>
+
+      <div class="nav-item" id="navAudio" onclick="switchTab('audio')" title="Аудіоміст">
+        <div class="nav-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10v4h4l5 4V6l-5 4H4z"/><path d="M17 9a5 5 0 0 1 0 6"/><path d="M20 6a9 9 0 0 1 0 12"/></svg>
+        </div>
+        <span data-i18n="nav_audio">Аудіоміст</span>
+      </div>
+
+      <div class="nav-item" id="navSync" onclick="switchTab('sync')" title="Синхронізація папок">
+        <div class="nav-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h7l2 2h9v10H3z"/><path d="M7 3h7l2 2"/><path d="M8 14h8"/><path d="m13 11 3 3-3 3"/></svg>
+        </div>
+        <span data-i18n="nav_sync">Синхронізація папок</span>
       </div>
 
       <div class="nav-item" id="navMobile" onclick="switchTab('mobile')" title="Мобільний пульт">
@@ -875,27 +923,6 @@
 
             <div class="setting-card">
               <div class="setting-left">
-                <div class="setting-icon" style="color: #22c55e;">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
-                </div>
-                <div class="setting-text">
-                  <div class="setting-name" data-i18n="mod_transfer_name">Перетягування файлів (Drag & Drop)</div>
-                  <div class="setting-desc" data-i18n="mod_transfer_desc">Перетягуйте файли через межу екрана або копіюйте через буфер обміну</div>
-                </div>
-              </div>
-              <div class="setting-right">
-                <label class="switch">
-                  <input type="checkbox" id="homeTransferToggle" checked onchange="toggleFileTransfer(this.checked)">
-                  <span class="slider"></span>
-                </label>
-                <button class="btn btn-secondary" onclick="openReceivedFolder()" title="Відкрити отримані файли" data-i18n-title="open_folder_btn">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-                </button>
-              </div>
-            </div>
-
-            <div class="setting-card">
-              <div class="setting-left">
                 <div class="setting-icon" style="color: #f59e0b;">
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="3"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
                 </div>
@@ -914,33 +941,50 @@
                 </button>
               </div>
             </div>
+
+            <div class="setting-card">
+              <div class="setting-left">
+                <div class="setting-icon" style="color: #10b981;">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10v4h4l5 4V6l-5 4H4z"/><path d="M17 9a5 5 0 0 1 0 6"/><path d="M20 6a9 9 0 0 1 0 12"/></svg>
+                </div>
+                <div class="setting-text">
+                  <div class="setting-name" data-i18n="mod_audio_name">Аудіоміст</div>
+                  <div class="setting-desc" data-i18n="mod_audio_desc">Передавання системного звуку на інший ПК</div>
+                </div>
+              </div>
+              <div class="setting-right">
+                <label class="switch"><input type="checkbox" id="homeAudioToggle" onchange="toggleAudioModule(this.checked)"><span class="slider"></span></label>
+                <button class="btn btn-secondary" onclick="switchTab('audio')" title="Відкрити аудіоміст">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="setting-card">
+              <div class="setting-left">
+                <div class="setting-icon" style="color: #f97316;">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h7l2 2h9v10H3z"/><path d="M7 3h7l2 2"/><path d="M8 14h8"/><path d="m13 11 3 3-3 3"/></svg>
+                </div>
+                <div class="setting-text">
+                  <div class="setting-name" data-i18n="mod_sync_name">Синхронізація папок</div>
+                  <div class="setting-desc" data-i18n="mod_sync_desc">Автоматично підтримувати вибрані папки однаковими на двох ПК</div>
+                </div>
+              </div>
+              <div class="setting-right">
+                <label class="switch"><input type="checkbox" id="homeSyncToggle" onchange="toggleFolderSync(this.checked)"><span class="slider"></span></label>
+                <button class="btn btn-secondary" onclick="switchTab('sync')" title="Відкрити синхронізацію папок">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      <div class="view-container" id="viewKvm">
+      <div class="view-container" id="viewDevices">
         <div class="view-header">
-          <div class="view-title" data-i18n="kvm_title">Безмежна миша</div>
-          <div class="view-desc" data-i18n="kvm_desc">Безшовне спільне використання миші та клавіатури між комп'ютерами з локальним шифруванням.</div>
-        </div>
-
-        <div class="section-title" data-i18n="sec_activation">Активація</div>
-        <div class="setting-card">
-          <div class="setting-left">
-            <div class="setting-icon">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 0-4 4v12a4 4 0 0 0 8 0V6a4 4 0 0 0-4-4z"/><path d="M12 2v6"/></svg>
-            </div>
-            <div class="setting-text">
-              <div class="setting-name" data-i18n="kvm_activation_name">Служба безмежної миші</div>
-              <div class="setting-desc" data-i18n="kvm_activation_desc">Увімкнути безперешкодне переміщення курсору та введення клавіатури між спареними пристроями</div>
-            </div>
-          </div>
-          <div class="setting-right">
-            <label class="switch">
-              <input type="checkbox" id="kvmMasterToggle" onchange="toggleKvmMaster(this.checked)">
-              <span class="slider"></span>
-            </label>
-          </div>
+          <div class="view-title" data-i18n="devices_title">Пристрої</div>
+          <div class="view-desc" data-i18n="devices_desc">Ключ підключення та пристрої для всіх модулів.</div>
         </div>
 
         <div class="section-title" data-i18n="sec_encryption">Ключ шифрування та ім'я пристрою</div>
@@ -1040,6 +1084,33 @@
           </div>
         </div>
 
+      </div>
+
+      <div class="view-container" id="viewKvm">
+        <div class="view-header">
+          <div class="view-title" data-i18n="kvm_title">Безмежна миша</div>
+          <div class="view-desc" data-i18n="kvm_desc">Безшовне спільне використання миші та клавіатури між комп'ютерами з локальним шифруванням.</div>
+        </div>
+
+        <div class="section-title" data-i18n="sec_activation">Активація</div>
+        <div class="setting-card">
+          <div class="setting-left">
+            <div class="setting-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 0-4 4v12a4 4 0 0 0 8 0V6a4 4 0 0 0-4-4z"/><path d="M12 2v6"/></svg>
+            </div>
+            <div class="setting-text">
+              <div class="setting-name" data-i18n="kvm_activation_name">Служба безмежної миші</div>
+              <div class="setting-desc" data-i18n="kvm_activation_desc">Увімкнути безперешкодне переміщення курсору та введення клавіатури між спареними пристроями</div>
+            </div>
+          </div>
+          <div class="setting-right">
+            <label class="switch">
+              <input type="checkbox" id="kvmMasterToggle" onchange="toggleKvmMaster(this.checked)">
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+
         <div class="section-title" data-i18n="sec_behavior">Поведінка</div>
         <div style="display: flex; flex-direction: column; gap: 8px;">
           <div class="setting-card">
@@ -1078,6 +1149,27 @@
             </div>
           </div>
 
+          <div class="setting-card">
+            <div class="setting-left">
+              <div class="setting-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+              </div>
+              <div class="setting-text">
+                <div class="setting-name" data-i18n="mod_transfer_name">Перетягування файлів (Drag & Drop)</div>
+                <div class="setting-desc" data-i18n="mod_transfer_desc">Перетягуйте файли через межу екрана або копіюйте через буфер обміну</div>
+              </div>
+            </div>
+            <div class="setting-right">
+              <label class="switch">
+                <input type="checkbox" id="kvmTransferToggle" checked onchange="toggleFileTransfer(this.checked)">
+                <span class="slider"></span>
+              </label>
+              <button class="btn btn-secondary" onclick="openReceivedFolder()" title="Відкрити отримані файли" data-i18n-title="open_folder_btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h7l2 2h9v11H3z"/><path d="M3 7V5a2 2 0 0 1 2-2h5l2 2"/></svg>
+              </button>
+            </div>
+          </div>
+
         </div>
       </div>
 
@@ -1090,9 +1182,12 @@
         <div class="section-title" data-i18n="sec_activation">Активація</div>
         <div class="setting-card">
           <div class="setting-left">
+            <div class="setting-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            </div>
             <div class="setting-text">
-              <div class="setting-name" data-i18n="mod_cast_name">Дублювання екрана</div>
-              <div class="setting-desc" data-i18n="mod_cast_desc">Показувати екран ПК на ноутбуці через мережу</div>
+              <div class="setting-name" data-i18n="cast_activation_name">Служба дублювання екрана</div>
+              <div class="setting-desc" data-i18n="cast_activation_desc">Увімкнути трансляцію екрана на інший пристрій у локальній мережі</div>
             </div>
           </div>
           <div class="setting-right">
@@ -1103,6 +1198,7 @@
           </div>
         </div>
 
+        <div class="section-title" data-i18n="sec_mirror_controls">Налаштування трансляції</div>
         <div class="setting-card">
           <div class="setting-left">
             <div class="setting-text">
@@ -1145,16 +1241,98 @@
         </div>
       </div>
 
-      <div class="view-container" id="viewMobile">
+      <div class="view-container" id="viewAudio">
         <div class="view-header">
-          <div class="view-title" data-i18n="mobile_title">Мобільний пульт (Керування з телефона)</div>
-          <div class="view-desc" data-i18n="mobile_desc">Керуйте курсором миші, вводом тексту та переглядайте зображення екрана в реальному часі зі смартфона чи планшета без встановлення додатків.</div>
+          <div class="view-title" data-i18n="audio_title">Аудіоміст</div>
+          <div class="view-desc" data-i18n="audio_desc">Передавайте системний звук між цим ПК та іншим комп’ютером у локальній мережі.</div>
         </div>
-
+        <div class="section-title" data-i18n="sec_activation">Активація</div>
         <div class="setting-card">
           <div class="setting-left">
             <div class="setting-icon" style="color: #10b981;">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10v4h4l5 4V6l-5 4H4z"/><path d="M17 9a5 5 0 0 1 0 6"/><path d="M20 6a9 9 0 0 1 0 12"/></svg>
+            </div>
+            <div class="setting-text">
+              <div class="setting-name" data-i18n="audio_service_name">Служба аудіомосту</div>
+              <div class="setting-desc" data-i18n="audio_service_desc">Дозволити передавання та приймання системного звуку</div>
+            </div>
+          </div>
+          <div class="setting-right"><label class="switch"><input type="checkbox" id="audioMasterToggle" onchange="toggleAudioModule(this.checked)"><span class="slider"></span></label></div>
+        </div>
+        <div class="section-title" data-i18n="audio_controls">Аудіопотік</div>
+        <div class="setting-card">
+          <div class="setting-left"><div class="setting-text">
+            <div class="setting-name" data-i18n="audio_direction_name">Напрямок звуку</div>
+            <div class="setting-desc" data-i18n="audio_direction_desc">Виберіть, який комп’ютер відтворюватиме звук.</div>
+          </div></div>
+          <div class="setting-right">
+            <select id="audioDirectionSelect" class="select-input" onchange="onAudioDirectionChanged()">
+              <option value="send" data-i18n="audio_direction_send">Від мене до пристрою</option>
+              <option value="receive" data-i18n="audio_direction_receive">Від пристрою до мене</option>
+            </select>
+          </div>
+        </div>
+        <div class="setting-card">
+          <div class="setting-left"><div class="setting-text">
+            <div class="setting-name" data-i18n="audio_target_name">Інший комп’ютер</div>
+            <div class="setting-desc" data-i18n="audio_target_desc">Увімкніть аудіоміст на обох ПК і виберіть пристрій.</div>
+          </div></div>
+          <div class="setting-right">
+            <select id="audioTargetSelect" class="select-input" onchange="localStorage.setItem('audio_target_ip', this.value)"></select>
+            <button class="btn btn-secondary" onclick="refreshAudioTargets()" data-i18n="mirror_refresh">Оновити</button>
+          </div>
+        </div>
+        <div class="setting-card">
+          <div class="setting-left"><div class="setting-text">
+            <div class="setting-name" data-i18n="audio_stream_name">Системний звук</div>
+            <div class="setting-desc" id="audioStatusText" data-i18n="audio_status_idle">Очікування передавання</div>
+          </div></div>
+          <div class="setting-right"><button class="btn" id="audioStreamButton" onclick="toggleAudioStream()" data-i18n="audio_start">Почати передавання</button></div>
+        </div>
+      </div>
+
+      <div class="view-container" id="viewSync">
+        <div class="view-header">
+          <div class="view-title" data-i18n="sync_title">Синхронізація папок</div>
+          <div class="view-desc" data-i18n="sync_desc">Виберіть папку та інший ПК. Програма знайде або створить там папку за тим самим шляхом й синхронізуватиме файли в обидва боки.</div>
+        </div>
+        <div class="section-title" data-i18n="sec_activation">Активація</div>
+        <div class="setting-card">
+          <div class="setting-left">
+            <div class="setting-icon" style="color: #f97316;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h7l2 2h9v10H3z"/><path d="M7 3h7l2 2"/><path d="M8 14h8"/><path d="m13 11 3 3-3 3"/></svg>
+            </div>
+            <div class="setting-text">
+              <div class="setting-name" data-i18n="sync_service_name">Служба синхронізації</div>
+              <div class="setting-desc" data-i18n="sync_service_desc">Автоматично передавати нові файли між ПК</div>
+            </div>
+          </div>
+          <div class="setting-right"><label class="switch"><input type="checkbox" id="syncMasterToggle" onchange="toggleFolderSync(this.checked)"><span class="slider"></span></label></div>
+        </div>
+        <div class="section-title" data-i18n="sync_create_title">Підключення папки</div>
+        <div class="setting-card" style="display: block;">
+          <div class="setting-desc" data-i18n="sync_setup_hint" style="margin-bottom: 14px;">Виберіть папку та комп’ютер. Після підтвердження автоматично передаватимуться тільки нові файли.</div>
+          <div class="sync-form-grid">
+            <label><span data-i18n="sync_peer_label">Інший комп’ютер</span><select id="syncPeerSelect" class="select-input"></select></label>
+            <label><span data-i18n="sync_folder_label">Папка на цьому ПК</span><span class="sync-inline"><input id="syncFolderPath" class="code-input" type="text" readonly><button class="btn btn-secondary" onclick="pickSyncFolder()" data-i18n="sync_browse">Огляд</button></span></label>
+          </div>
+          <div class="sync-actions"><button class="btn btn-secondary" onclick="refreshSyncPeers()" data-i18n="mirror_refresh">Оновити</button><button class="btn" id="syncAddButton" onclick="addSyncPair()" data-i18n="sync_add">Підключити папку</button></div>
+          <div class="setting-desc sync-status-line" id="syncGlobalStatus"></div>
+          <div class="sync-connected-list" id="syncPairsList"></div>
+        </div>
+      </div>
+
+      <div class="view-container" id="viewMobile">
+        <div class="view-header">
+          <div class="view-title" data-i18n="mobile_title">Мобільний пульт</div>
+          <div class="view-desc" data-i18n="mobile_desc">Керуйте курсором миші, вводом тексту та переглядайте зображення екрана в реальному часі зі смартфона чи планшета без встановлення додатків.</div>
+        </div>
+
+        <div class="section-title" data-i18n="sec_activation">Активація</div>
+        <div class="setting-card">
+          <div class="setting-left">
+            <div class="setting-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="3"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
             </div>
             <div class="setting-text">
               <div class="setting-name" data-i18n="mobile_service_name">Служба мобільного веб-доступу</div>
@@ -1173,7 +1351,7 @@
         <div class="setting-card" style="align-items: stretch; flex-direction: column; gap: 20px;">
           <div style="display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap;">
             <div id="mobileQrContainer" style="background: #ffffff; padding: 12px; border-radius: 12px; display: flex; align-items: center; justify-content: center; width: 204px; height: 204px; border: 1px solid var(--card-border); flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
-              <div style="color: #64748b; font-size: 12px;">Генерація QR...</div>
+              <div style="color: #64748b; font-size: 12px;" data-i18n="mobile_qr_loading">Генерація QR...</div>
             </div>
             <div style="display: flex; flex-direction: column; gap: 14px; flex: 1; min-width: 260px;">
               <div style="font-weight: 600; font-size: 15px; color: var(--text);" data-i18n="mobile_steps_title">Як підключити телефон:</div>
@@ -1299,19 +1477,34 @@
     <button class="btn btn-secondary" onclick="openReceivedFolder()" style="padding: 4px 10px; font-size: 11px; margin-left: 8px;" data-i18n="toast_open_btn">Відкрити</button>
   </div>
 
+  <div id="syncRequestBackdrop" class="sync-request-backdrop" role="dialog" aria-modal="true" aria-labelledby="syncRequestTitle">
+    <div class="sync-request-dialog">
+      <h2 id="syncRequestTitle" data-i18n="sync_request_title">Запит на синхронізацію папки</h2>
+      <div class="setting-desc" id="syncRequestDescription"></div>
+      <div class="sync-request-path" id="syncRequestPath"></div>
+      <div class="setting-desc" id="syncRequestError" style="color: var(--danger); margin-top: 10px;"></div>
+      <div class="sync-actions"><button class="btn btn-secondary" onclick="respondSyncRequest(false)" data-i18n="sync_request_decline">Відхилити</button><button class="btn" onclick="respondSyncRequest(true)" data-i18n="sync_request_accept">Підтвердити</button></div>
+    </div>
+  </div>
+
   <script>
     const translations = {
       uk: {
         app_title: "NerveDesk",
         nav_home: "Головна",
+        nav_devices: "Пристрої",
         nav_section_navigation: "Навігація",
         nav_kvm: "Безмежна миша",
         nav_cast: "Дублювання екрана",
+        nav_audio: "Аудіоміст",
+        nav_sync: "Синхронізація папок",
         nav_mobile: "Мобільний пульт",
         nav_settings: "Налаштування",
 
         home_title: "Головна",
         home_desc: "Центральна панель телеметрії, метрик та керування активними модулями NerveDesk.",
+        devices_title: "Пристрої",
+        devices_desc: "Підключення та розташування комп’ютерів для всіх модулів.",
         sec_system_metrics: "Метрики трансляції",
         metric_framerate: "Частота кадрів стріму",
         metric_bandwidth: "Швидкість вихідного відео",
@@ -1325,6 +1518,76 @@
         mod_transfer_desc: "Перетягуйте файли через межу екрана або копіюйте через буфер обміну",
         mod_mobile_name: "Мобільний пульт та екран",
         mod_mobile_desc: "Керуйте мишею по зображенню та використовуйте тачпад зі смартфона",
+        mod_audio_name: "Аудіоміст",
+        mod_audio_desc: "Передавання системного звуку на інший ПК",
+        mod_sync_name: "Синхронізація папок",
+        mod_sync_desc: "Автоматично передавати нові файли між двома ПК",
+        sync_title: "Синхронізація папок",
+        sync_desc: "Підключіть папку до іншого ПК. Після підтвердження нові файли автоматично з’являтимуться на обох пристроях.",
+        sync_service_name: "Служба синхронізації",
+        sync_service_desc: "Автоматично передавати нові файли між ПК",
+        sync_create_title: "Підключення папки",
+        sync_setup_hint: "Виберіть папку та комп’ютер. Після підтвердження автоматично передаватимуться тільки нові файли.",
+        sync_peer_label: "Інший комп’ютер",
+        sync_folder_label: "Папка на цьому ПК",
+        sync_code_label: "Спільний код пари",
+        sync_browse: "Огляд",
+        sync_generate: "Новий код",
+        sync_add: "Підключити папку",
+        sync_pairs_title: "Пари та історія",
+        sync_no_pairs: "Папку ще не підключено",
+        sync_peer_select: "Виберіть комп’ютер",
+        sync_preview: "Переглянути зміни",
+        sync_approve: "Підтвердити пару",
+        sync_request_title: "Запит на синхронізацію папки",
+        sync_request_description: "Комп’ютер {name} пропонує підключити папку. Після підтвердження її буде створено тут, якщо вона ще не існує. Наявні файли не передаватимуться.",
+        sync_request_accept: "Підтвердити",
+        sync_request_decline: "Відхилити",
+        sync_now: "Синхронізувати",
+        sync_remove: "Від’єднати",
+        sync_restore: "Відновити",
+        sync_approved: "Підключено · нові файли передаються автоматично",
+        sync_waiting: "Очікує підключення",
+        sync_unavailable: "Немає з’єднання з пристроєм",
+        sync_disabled: "Службу вимкнено",
+        sync_last: "Остання синхронізація",
+        sync_never: "Ще не синхронізовано",
+        sync_busy: "Синхронізація триває",
+        sync_idle: "Очікування змін",
+        sync_changes: "Змін до застосування",
+        sync_more: "Показано перші 200 змін",
+        sync_peer_waiting: "Пара ще не підтверджена на іншому ПК",
+        sync_preview_empty: "Папки вже однакові",
+        sync_action_upload: "На інший ПК",
+        sync_action_download: "На цей ПК",
+        sync_action_delete_local: "Видалити тут (версія збережеться)",
+        sync_action_delete_remote: "Видалити там (версія збережеться)",
+        sync_action_conflict: "Конфлікт: зберегти обидві версії",
+        sync_invalid_form: "Виберіть комп’ютер і папку.",
+        sync_event_received: "Отримано",
+        sync_event_deleted: "Видалено",
+        sync_event_restored: "Відновлено",
+        sync_event_conflict: "Конфлікт",
+        audio_title: "Аудіоміст",
+        audio_desc: "Передавайте системний звук між цим ПК та іншим комп’ютером у локальній мережі.",
+        audio_service_name: "Служба аудіомосту",
+        audio_service_desc: "Дозволити передавання та приймання системного звуку",
+        audio_controls: "Аудіопотік",
+        audio_direction_name: "Напрямок звуку",
+        audio_direction_desc: "Виберіть, який комп’ютер відтворюватиме звук.",
+        audio_direction_send: "Від мене до пристрою",
+        audio_direction_receive: "Від пристрою до мене",
+        audio_target_name: "Інший комп’ютер",
+        audio_target_desc: "Увімкніть аудіоміст на обох ПК і виберіть пристрій.",
+        audio_stream_name: "Системний звук",
+        audio_status_idle: "Очікування аудіопотоку",
+        audio_status_sending: "Звук передається",
+        audio_status_receiving: "Звук приймається",
+        audio_start: "Почати передавання",
+        audio_stop: "Зупинити передавання",
+        audio_start_receive: "Отримувати звук",
+        audio_stop_receive: "Зупинити отримання",
+        audio_no_target: "Виберіть пристрій",
         open_mobile_qr: "Відкрити QR-код та налаштування",
         open_folder_btn: "Відкрити отримані файли",
 
@@ -1377,6 +1640,9 @@
 
         cast_title: "Дублювання екрана",
         cast_desc: "Покажіть поточний екран ПК на ноутбуці або іншому ПК через локальну мережу. Зображення автоматично впишеться в екран приймача зі збереженням пропорцій.",
+        cast_activation_name: "Служба дублювання екрана",
+        cast_activation_desc: "Увімкнути трансляцію екрана на інший пристрій у локальній мережі",
+        sec_mirror_controls: "Налаштування трансляції",
         mirror_target_name: "Пристрій приймача",
         mirror_target_desc: "Відкрийте NerveDesk на ноутбуці та виберіть його зі списку.",
         mirror_source_name: "Що показувати",
@@ -1389,11 +1655,13 @@
         btn_project_start: "Почати трансляцію",
         btn_project_stop: "Зупинити трансляцію",
 
-        mobile_title: "Мобільний пульт (Керування з телефона)",
+        mobile_title: "Мобільний пульт",
         mobile_desc: "Керуйте курсором миші, вводом тексту та переглядайте зображення екрана в реальному часі зі смартфона чи планшета без встановлення додатків.",
         mobile_service_name: "Служба мобільного веб-доступу",
         mobile_service_desc: "Локальний веб-сервер активний. Доступний для пристроїв у домашній Wi-Fi мережі.",
+        mobile_service_disabled: "Службу вимкнено. Увімкніть її для доступу зі смартфона.",
         sec_mobile_connect: "Швидке підключення через QR-код",
+        mobile_qr_loading: "Генерація QR...",
         mobile_steps_title: "Як підключити телефон:",
         mobile_step_1: "Підключіть телефон до тієї ж Wi-Fi мережі, що й ПК.",
         mobile_step_2: "Відскануйте QR-код камерою або введіть адресу в браузері.",
@@ -1432,14 +1700,19 @@
       en: {
         app_title: "NerveDesk",
         nav_home: "Home",
+        nav_devices: "Devices",
         nav_section_navigation: "Navigation",
         nav_kvm: "Mouse Without Borders",
         nav_cast: "Screen Mirror",
+        nav_audio: "Audio Bridge",
+        nav_sync: "Folder Sync",
         nav_mobile: "Mobile Remote",
         nav_settings: "Settings",
 
         home_title: "Home",
         home_desc: "Central dashboard for telemetry, metrics, and managing active NerveDesk modules.",
+        devices_title: "Devices",
+        devices_desc: "Connect and arrange computers for all modules.",
         sec_system_metrics: "Stream Metrics",
         metric_framerate: "Display Stream Framerate",
         metric_bandwidth: "Outgoing Video Rate",
@@ -1453,6 +1726,76 @@
         mod_transfer_desc: "Drag files across screen borders with mouse or copy to clipboard",
         mod_mobile_name: "Mobile Remote & Screen",
         mod_mobile_desc: "Control PC cursor over live image and use phone as trackpad",
+        mod_audio_name: "Audio Bridge",
+        mod_audio_desc: "Send system audio to another PC",
+        mod_sync_name: "Folder Sync",
+        mod_sync_desc: "Automatically share new files between two PCs",
+        sync_title: "Folder Sync",
+        sync_desc: "Connect a folder to another PC. After approval, new files appear on both devices automatically.",
+        sync_service_name: "Folder Sync Service",
+        sync_service_desc: "Automatically share new files between PCs",
+        sync_create_title: "Folder connection",
+        sync_setup_hint: "Choose a folder and a computer. After approval, only newly created files are shared automatically.",
+        sync_peer_label: "Other computer",
+        sync_folder_label: "Folder on this PC",
+        sync_code_label: "Shared pair code",
+        sync_browse: "Browse",
+        sync_generate: "New code",
+        sync_add: "Connect folder",
+        sync_pairs_title: "Pairs and history",
+        sync_no_pairs: "No folder connected yet",
+        sync_peer_select: "Select a computer",
+        sync_preview: "Review changes",
+        sync_approve: "Approve pair",
+        sync_request_title: "Folder sync request",
+        sync_request_description: "{name} wants to connect this folder. It will be created here after approval if needed. Existing files will not be transferred.",
+        sync_request_accept: "Approve",
+        sync_request_decline: "Decline",
+        sync_now: "Sync now",
+        sync_remove: "Disconnect",
+        sync_restore: "Restore",
+        sync_approved: "Connected · new files share automatically",
+        sync_waiting: "Waiting to connect",
+        sync_unavailable: "Device connection unavailable",
+        sync_disabled: "Service is off",
+        sync_last: "Last sync",
+        sync_never: "Not synced yet",
+        sync_busy: "Sync in progress",
+        sync_idle: "Waiting for changes",
+        sync_changes: "Changes to apply",
+        sync_more: "Showing the first 200 changes",
+        sync_peer_waiting: "Pair is not approved on the other PC yet",
+        sync_preview_empty: "Folders already match",
+        sync_action_upload: "To other PC",
+        sync_action_download: "To this PC",
+        sync_action_delete_local: "Delete here (version saved)",
+        sync_action_delete_remote: "Delete there (version saved)",
+        sync_action_conflict: "Conflict: keep both versions",
+        sync_invalid_form: "Select a computer and folder.",
+        sync_event_received: "Received",
+        sync_event_deleted: "Deleted",
+        sync_event_restored: "Restored",
+        sync_event_conflict: "Conflict",
+        audio_title: "Audio Bridge",
+        audio_desc: "Stream system audio between this PC and another computer on your local network.",
+        audio_service_name: "Audio Bridge Service",
+        audio_service_desc: "Allow sending and receiving system audio",
+        audio_controls: "Audio Stream",
+        audio_direction_name: "Audio direction",
+        audio_direction_desc: "Choose which computer plays the audio.",
+        audio_direction_send: "From me to device",
+        audio_direction_receive: "From device to me",
+        audio_target_name: "Other computer",
+        audio_target_desc: "Enable Audio Bridge on both PCs and choose a device.",
+        audio_stream_name: "System audio",
+        audio_status_idle: "Waiting to stream",
+        audio_status_sending: "Sending audio",
+        audio_status_receiving: "Receiving audio",
+        audio_start: "Start streaming",
+        audio_stop: "Stop streaming",
+        audio_start_receive: "Receive audio",
+        audio_stop_receive: "Stop receiving",
+        audio_no_target: "Select a device",
         open_mobile_qr: "Open QR code & settings",
         open_folder_btn: "Open Received Files",
 
@@ -1505,6 +1848,9 @@
 
         cast_title: "Screen Mirror",
         cast_desc: "Show this PC's current screen on a laptop or PC over the local network. The picture fits the receiver screen while preserving its proportions.",
+        cast_activation_name: "Screen Mirror Service",
+        cast_activation_desc: "Enable screen streaming to another device on the local network",
+        sec_mirror_controls: "Streaming Settings",
         mirror_target_name: "Receiving device",
         mirror_target_desc: "Open NerveDesk on the laptop and select it from the list.",
         mirror_source_name: "What to show",
@@ -1517,11 +1863,13 @@
         btn_project_start: "Project Display",
         btn_project_stop: "Stop Projection",
 
-        mobile_title: "Mobile Remote (Smartphone Control)",
+        mobile_title: "Mobile Remote",
         mobile_desc: "Control mouse cursor, keyboard, and stream live PC screen to any phone or tablet without installing apps.",
         mobile_service_name: "Mobile Web Access Service",
         mobile_service_desc: "Local web server is active and accessible to devices in your local Wi-Fi network.",
+        mobile_service_disabled: "Service is off. Turn it on to access this PC from your phone.",
         sec_mobile_connect: "Quick Connect via QR Code",
+        mobile_qr_loading: "Generating QR...",
         mobile_steps_title: "How to connect your phone:",
         mobile_step_1: "Connect your phone to the same Wi-Fi network as this PC.",
         mobile_step_2: "Scan the QR code with your camera or enter the address below.",
@@ -1559,17 +1907,17 @@
       }
     };
 
-    let currentLang = localStorage.getItem('nervedesk_lang') || 'uk';
+    let currentLang = localStorage.getItem('nervedesk_lang') || 'en';
     let currentTheme = localStorage.getItem('nervedesk_theme') || 'dark';
 
     function t(key, fallback = "") {
-      const langDict = translations[currentLang] || translations.uk;
+      const langDict = translations[currentLang] || translations.en;
       return langDict[key] !== undefined ? langDict[key] : (fallback || key);
     }
 
-    function setLanguage(lang) {
+    function setLanguage(lang, persist = true) {
       currentLang = lang;
-      localStorage.setItem('nervedesk_lang', lang);
+      if (persist) localStorage.setItem('nervedesk_lang', lang);
       document.documentElement.lang = lang;
 
       const langSelect = document.getElementById('settingLangSelect');
@@ -1648,6 +1996,9 @@
       if (tabId === 'home') {
         document.getElementById('navHome').classList.add('active');
         document.getElementById('viewHome').classList.add('active');
+      } else if (tabId === 'devices') {
+        document.getElementById('navDevices').classList.add('active');
+        document.getElementById('viewDevices').classList.add('active');
       } else if (tabId === 'kvm') {
         document.getElementById('navKvm').classList.add('active');
         document.getElementById('viewKvm').classList.add('active');
@@ -1656,6 +2007,15 @@
         document.getElementById('viewCast').classList.add('active');
         refreshMirrorTargets();
         refreshCaptureWindows();
+      } else if (tabId === 'audio') {
+        document.getElementById('navAudio').classList.add('active');
+        document.getElementById('viewAudio').classList.add('active');
+        refreshAudioTargets();
+      } else if (tabId === 'sync') {
+        document.getElementById('navSync').classList.add('active');
+        document.getElementById('viewSync').classList.add('active');
+        refreshSyncPeers();
+        refreshSyncStatus();
       } else if (tabId === 'settings') {
         document.getElementById('navSettings').classList.add('active');
         document.getElementById('viewSettings').classList.add('active');
@@ -1691,9 +2051,7 @@
 
           const desc = document.getElementById('mobileStatusDesc');
           if (desc) {
-            desc.innerText = info.is_active
-              ? t('mobile_service_desc')
-              : 'Служба вимкнена. Увімкніть тумблер для доступу зі смартфона.';
+            desc.innerText = t(info.is_active ? 'mobile_service_desc' : 'mobile_service_disabled');
           }
         }
       } catch (e) {}
@@ -1738,6 +2096,10 @@
     let isProjecting = false;
     let isReconnecting = false;
     let lastMetrics = null;
+    let lastAudioStatus = null;
+    let lastSyncStatus = null;
+    let addingSyncPair = false;
+    let pendingSyncRequestId = null;
 
     function setStatus(element, state, label) {
       if (!element) return;
@@ -1757,7 +2119,7 @@
         return;
       }
       document.getElementById('peerBoxLabel').textContent = savedPeer.toUpperCase();
-      const state = isPeerDisabled ? 'disabled' : isReconnecting ? 'connecting' : metrics?.kvm_active && metrics?.peer_online ? 'connected' : 'offline';
+      const state = isPeerDisabled ? 'disabled' : isReconnecting ? 'connecting' : metrics?.peer_online ? 'connected' : 'offline';
       const label = state === 'connected' ? t('status_connected') : state === 'connecting' ? t('status_connecting') : state === 'disabled' ? t('status_disabled') : t('status_offline');
       setStatus(document.getElementById('peerBoxSub'), state, label);
       box.style.opacity = isPeerDisabled ? '0.65' : '1';
@@ -1785,6 +2147,16 @@
         castBtn.innerText = isProjecting ? t('btn_project_stop') : t('btn_project_start');
       }
 
+      updateAudioControls();
+      const audioStatusText = document.getElementById('audioStatusText');
+      if (audioStatusText && lastAudioStatus) {
+        audioStatusText.innerText = lastAudioStatus.error || t(lastAudioStatus.sending ? 'audio_status_sending' : lastAudioStatus.receiving ? 'audio_status_receiving' : 'audio_status_idle');
+      }
+      if (lastSyncStatus) renderSyncStatus(lastSyncStatus);
+
+      const mobileActive = lastMetrics?.mobile_active ?? document.getElementById('mobileServerMasterToggle').checked;
+      document.getElementById('mobileStatusDesc').innerText = t(mobileActive ? 'mobile_service_desc' : 'mobile_service_disabled');
+
       renderPeerStatus(lastMetrics);
     }
 
@@ -1792,6 +2164,9 @@
       try {
         await callTauri('set_module_enabled', { module: 'kvm', enabled: checked });
         localStorage.setItem('kvm_module_enabled', String(checked));
+        if (checked && localStorage.getItem('paired_device_name') && !isPeerDisabled) {
+          await callTauri('start_host', { targetIp: localStorage.getItem('paired_device_name'), streamVideo: false });
+        }
       } catch (err) {
         console.error('Failed to change KVM module:', err);
       }
@@ -1807,6 +2182,240 @@
       }
       await refreshMetrics();
     }
+
+    async function toggleAudioModule(checked) {
+      try {
+        await callTauri('set_audio_enabled', { enabled: checked });
+        localStorage.setItem('audio_module_enabled', String(checked));
+      } catch (err) {
+        alert(String(err));
+      }
+      await refreshMetrics();
+    }
+
+    async function refreshAudioTargets() {
+      const select = document.getElementById('audioTargetSelect');
+      const previous = select.value || localStorage.getItem('audio_target_ip') || '';
+      let devices = [];
+      try { devices = await callTauri('discover_devices'); } catch (_) {}
+      select.replaceChildren();
+      const empty = document.createElement('option');
+      empty.value = '';
+      empty.textContent = t('audio_no_target');
+      select.appendChild(empty);
+      devices.sort((a, b) => a.name.localeCompare(b.name));
+      for (const device of devices) {
+        const option = document.createElement('option');
+        option.value = device.ip;
+        option.textContent = device.name;
+        select.appendChild(option);
+      }
+      const paired = localStorage.getItem('paired_device_name');
+      if (devices.some(device => device.ip === previous)) select.value = previous;
+      else if (paired && devices.some(device => device.name.toLowerCase() === paired.toLowerCase())) {
+        select.value = devices.find(device => device.name.toLowerCase() === paired.toLowerCase()).ip;
+      } else if (devices.length === 1) select.value = devices[0].ip;
+      if (select.value) localStorage.setItem('audio_target_ip', select.value);
+    }
+
+    async function toggleAudioStream() {
+      const status = await callTauri('get_audio_status');
+      const direction = document.getElementById('audioDirectionSelect').value;
+      if (direction === 'send' && status.sending) {
+        await callTauri('stop_audio_stream');
+      } else if (direction === 'receive' && status.requested_from) {
+        await callTauri('stop_requested_audio_stream');
+      } else {
+        let target = document.getElementById('audioTargetSelect').value;
+        if (!target) {
+          await refreshAudioTargets();
+          target = document.getElementById('audioTargetSelect').value;
+        }
+        if (!target) {
+          alert(t('audio_no_target'));
+          return;
+        }
+        try {
+          await callTauri(direction === 'receive' ? 'request_audio_stream' : 'start_audio_stream', { targetIp: target });
+        } catch (err) {
+          alert(String(err));
+        }
+      }
+      await refreshMetrics();
+    }
+
+    function onAudioDirectionChanged() {
+      localStorage.setItem('audio_direction', document.getElementById('audioDirectionSelect').value);
+      updateAudioControls();
+    }
+
+    function updateAudioControls() {
+      const direction = document.getElementById('audioDirectionSelect').value;
+      const active = direction === 'receive' ? !!lastAudioStatus?.requested_from : !!lastAudioStatus?.sending;
+      const button = document.getElementById('audioStreamButton');
+      button.textContent = t(direction === 'receive'
+        ? active ? 'audio_stop_receive' : 'audio_start_receive'
+        : active ? 'audio_stop' : 'audio_start');
+      button.disabled = !lastAudioStatus?.enabled;
+      button.style.background = active ? 'var(--danger)' : '';
+      document.getElementById('audioDirectionSelect').disabled = !!lastAudioStatus?.sending || !!lastAudioStatus?.requested_from;
+    }
+
+    async function toggleFolderSync(checked) {
+      try {
+        await callTauri('set_folder_sync_enabled', { enabled: checked });
+      } catch (err) {
+        alert(String(err));
+      }
+      await refreshSyncStatus();
+      await refreshMetrics();
+    }
+
+    async function refreshSyncPeers() {
+      const select = document.getElementById('syncPeerSelect');
+      const previous = select.value;
+      let devices = [];
+      try { devices = await callTauri('discover_devices'); } catch (_) {}
+      select.replaceChildren();
+      const empty = document.createElement('option');
+      empty.value = '';
+      empty.textContent = t('sync_peer_select');
+      select.appendChild(empty);
+      devices.sort((a, b) => a.name.localeCompare(b.name));
+      for (const device of devices) {
+        const option = document.createElement('option');
+        option.value = device.ip;
+        option.dataset.name = device.name;
+        option.textContent = device.name;
+        select.appendChild(option);
+      }
+      const paired = localStorage.getItem('paired_device_name');
+      let pairedIp = '';
+      try { pairedIp = await callTauri('get_paired_peer_ip') || ''; } catch (_) {}
+      if (paired && pairedIp && !devices.some(device => device.ip === pairedIp)) {
+        const option = document.createElement('option');
+        option.value = pairedIp;
+        option.dataset.name = paired;
+        option.textContent = paired;
+        select.appendChild(option);
+      }
+      if (devices.some(device => device.ip === previous)) select.value = previous;
+      else if (paired && devices.some(device => device.name.toLowerCase() === paired.toLowerCase())) {
+        select.value = devices.find(device => device.name.toLowerCase() === paired.toLowerCase()).ip;
+      } else if (pairedIp) select.value = pairedIp;
+    }
+
+    async function pickSyncFolder() {
+      try {
+        const path = await callTauri('pick_folder_sync_directory');
+        if (path) document.getElementById('syncFolderPath').value = path;
+      } catch (err) { alert(String(err)); }
+    }
+
+    async function addSyncPair() {
+      if (addingSyncPair) return;
+      const select = document.getElementById('syncPeerSelect');
+      const peerIp = select.value;
+      const peerName = select.selectedOptions[0]?.dataset.name || '';
+      const localDir = document.getElementById('syncFolderPath').value;
+      if (!peerIp || !peerName || !localDir) {
+        alert(t('sync_invalid_form'));
+        return;
+      }
+      addingSyncPair = true;
+      document.getElementById('syncAddButton').disabled = true;
+      try {
+        await callTauri('add_folder_sync_pair', { peerIp, peerName, localDir });
+        await refreshSyncStatus();
+      } catch (err) { document.getElementById('syncGlobalStatus').textContent = String(err); }
+      finally {
+        addingSyncPair = false;
+        document.getElementById('syncAddButton').disabled = false;
+      }
+    }
+
+    async function refreshSyncStatus() {
+      try {
+        lastSyncStatus = await callTauri('get_folder_sync_status');
+        renderSyncStatus(lastSyncStatus);
+      } catch (_) {}
+    }
+
+    function syncActionButton(label, action, secondary = true) {
+      const button = document.createElement('button');
+      button.className = secondary ? 'btn btn-secondary' : 'btn';
+      button.textContent = label;
+      button.onclick = action;
+      return button;
+    }
+
+    function renderSyncStatus(status) {
+      const incoming = status.pairs.find(pair => pair.incoming && !pair.approved);
+      const backdrop = document.getElementById('syncRequestBackdrop');
+      if (pendingSyncRequestId !== (incoming?.id || null)) {
+        document.getElementById('syncRequestError').textContent = '';
+        if (incoming) {
+          const appWindow = window.__TAURI__?.window?.getCurrentWindow?.();
+          Promise.resolve(appWindow?.unminimize?.()).catch(() => {});
+          Promise.resolve(appWindow?.show?.()).catch(() => {});
+          Promise.resolve(appWindow?.setFocus?.()).catch(() => {});
+        }
+      }
+      pendingSyncRequestId = incoming?.id || null;
+      backdrop.classList.toggle('visible', !!incoming);
+      if (incoming) {
+        document.getElementById('syncRequestDescription').textContent = t('sync_request_description').replace('{name}', incoming.peer_name);
+        document.getElementById('syncRequestPath').textContent = incoming.local_dir;
+      }
+      document.getElementById('homeSyncToggle').checked = status.enabled;
+      document.getElementById('syncMasterToggle').checked = status.enabled;
+      document.getElementById('syncGlobalStatus').textContent = status.pairs.length ? (status.error || t(status.syncing ? 'sync_busy' : 'sync_idle')) : '';
+      const list = document.getElementById('syncPairsList');
+      list.replaceChildren();
+      for (const pair of status.pairs) {
+        const card = document.createElement('div');
+        card.className = 'sync-pair';
+        const info = document.createElement('div');
+        info.className = 'sync-pair-info';
+        const name = document.createElement('div');
+        name.className = 'setting-name';
+        name.textContent = pair.peer_name;
+        const folder = document.createElement('div');
+        folder.className = 'setting-desc';
+        folder.textContent = pair.local_dir;
+        const detail = document.createElement('div');
+        detail.className = 'setting-desc';
+        const peerError = status.error?.startsWith(`${pair.peer_name}:`);
+        detail.textContent = !status.enabled ? t('sync_disabled') : peerError ? t('sync_unavailable') : !pair.approved || !pair.last_sync_ms ? t('sync_waiting') : t('sync_approved');
+        info.append(name, folder, detail);
+        const actions = document.createElement('div');
+        actions.className = 'sync-actions';
+        actions.appendChild(syncActionButton(t('sync_remove'), () => removeSyncPair(pair.id)));
+        card.append(info, actions);
+        list.appendChild(card);
+      }
+    }
+
+    async function respondSyncRequest(approved) {
+      if (!pendingSyncRequestId) return;
+      const id = pendingSyncRequestId;
+      try {
+        await callTauri(approved ? 'approve_folder_sync_pair' : 'remove_folder_sync_pair', { id });
+        document.getElementById('syncRequestError').textContent = '';
+        await refreshSyncStatus();
+      } catch (err) {
+        document.getElementById('syncRequestError').textContent = String(err);
+      }
+    }
+
+    async function removeSyncPair(id) {
+      try {
+        await callTauri('remove_folder_sync_pair', { id });
+        await refreshSyncStatus();
+      } catch (err) { alert(String(err)); }
+    }
+
+    setInterval(refreshSyncStatus, 2000);
 
     function generateNewKey() {
       const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%^&*";
@@ -1854,9 +2463,11 @@
         isReconnecting = true;
         renderPeerStatus(lastMetrics);
         await callTauri('pair_device', { targetName: name, securityKey: key });
-        localStorage.setItem('kvm_module_enabled', 'true');
         localStorage.setItem('paired_device_name', name);
         localStorage.setItem('paired_security_key', key);
+        if (localStorage.getItem('kvm_module_enabled') === 'true') {
+          await callTauri('start_host', { targetIp: name, streamVideo: false });
+        }
         document.getElementById('peerAvailableSlot').style.display = 'none';
         document.getElementById('monitorBoxPeer').style.display = 'flex';
         document.getElementById('peerBoxLabel').innerText = name.toUpperCase();
@@ -1908,7 +2519,9 @@
 
       try {
         await callTauri('pair_device', { targetName: target, securityKey: key });
-        localStorage.setItem('kvm_module_enabled', 'true');
+        if (localStorage.getItem('kvm_module_enabled') === 'true') {
+          await callTauri('start_host', { targetIp: target, streamVideo: false });
+        }
         isPeerDisabled = false;
         localStorage.setItem('peer_device_disabled', 'false');
       } catch (err) {
@@ -2037,7 +2650,7 @@
       for (const device of devices) {
         const option = document.createElement('option');
         option.value = device.ip;
-        option.textContent = `${device.name} (${device.ip})`;
+        option.textContent = device.name;
         select.appendChild(option);
       }
       const paired = localStorage.getItem('paired_device_name');
@@ -2142,11 +2755,14 @@
 
     async function initSystemInfo() {
       setTheme(currentTheme);
-      setLanguage(currentLang);
+      document.getElementById('audioDirectionSelect').value = localStorage.getItem('audio_direction') === 'receive' ? 'receive' : 'send';
       const kvmEnabled = localStorage.getItem('kvm_module_enabled') === 'true';
       const mirrorEnabled = localStorage.getItem('mirror_module_enabled') === 'true';
       await callTauri('set_module_enabled', { module: 'kvm', enabled: kvmEnabled }).catch(() => {});
       await callTauri('set_module_enabled', { module: 'mirror', enabled: mirrorEnabled }).catch(() => {});
+      if (localStorage.getItem('audio_module_enabled') === 'true') {
+        await callTauri('set_audio_enabled', { enabled: true }).catch(() => {});
+      }
 
       try {
         const name = await callTauri('get_device_name');
@@ -2175,7 +2791,7 @@
         document.getElementById('peerBoxLabel').innerText = savedPeer.toUpperCase();
         if (isDisabled) {
           isPeerDisabled = true;
-        } else if (kvmEnabled) {
+        } else {
           isPeerDisabled = false;
           reconnectCurrentPeer();
         }
@@ -2195,8 +2811,10 @@
       const fileTransfer = localStorage.getItem('file_transfer_enabled') !== 'false';
       const kvmKb = document.getElementById('kvmKbToggle');
       const kvmClip = document.getElementById('kvmClipToggle');
+      const kvmTransfer = document.getElementById('kvmTransferToggle');
       if (kvmKb) kvmKb.checked = kbSharing;
       if (kvmClip) kvmClip.checked = clipSharing;
+      if (kvmTransfer) kvmTransfer.checked = fileTransfer;
       callTauri('set_keyboard_sharing_enabled', { enabled: kbSharing }).catch(() => {});
       callTauri('set_clipboard_sharing_enabled', { enabled: clipSharing }).catch(() => {});
       callTauri('set_file_transfer_enabled', { enabled: fileTransfer }).catch(() => {});
@@ -2210,6 +2828,7 @@
       updateMobileRemoteInfo();
     }
 
+    setLanguage(currentLang, false);
     setTimeout(initSystemInfo, 100);
 
     async function refreshMetrics() {
@@ -2230,9 +2849,18 @@
         document.getElementById('kvmMasterToggle').checked = m.kvm_enabled;
         document.getElementById('homeCastToggle').checked = m.mirror_enabled;
         document.getElementById('mirrorMasterToggle').checked = m.mirror_enabled;
-        document.getElementById('homeTransferToggle').checked = m.file_transfer_enabled;
+        document.getElementById('kvmTransferToggle').checked = m.file_transfer_enabled;
         document.getElementById('homeMobileToggle').checked = m.mobile_active;
         document.getElementById('mobileServerMasterToggle').checked = m.mobile_active;
+        document.getElementById('mobileStatusDesc').innerText = t(m.mobile_active ? 'mobile_service_desc' : 'mobile_service_disabled');
+        document.getElementById('homeAudioToggle').checked = m.audio_enabled;
+        document.getElementById('audioMasterToggle').checked = m.audio_enabled;
+        document.getElementById('homeSyncToggle').checked = m.folder_sync_enabled;
+        document.getElementById('syncMasterToggle').checked = m.folder_sync_enabled;
+        const audioStatus = await callTauri('get_audio_status');
+        lastAudioStatus = audioStatus;
+        updateAudioControls();
+        document.getElementById('audioStatusText').innerText = audioStatus.error || t(audioStatus.sending ? 'audio_status_sending' : audioStatus.receiving ? 'audio_status_receiving' : 'audio_status_idle');
         renderPeerStatus(m);
       } catch (e) {}
     }
