@@ -13,7 +13,9 @@ use windows::Win32::System::DataExchange::{
     AddClipboardFormatListener, CloseClipboard, EmptyClipboard, GetClipboardData, OpenClipboard,
     RemoveClipboardFormatListener, SetClipboardData,
 };
-use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
+use windows::Win32::System::Memory::{
+    GlobalAlloc, GlobalLock, GlobalSize, GlobalUnlock, GMEM_MOVEABLE,
+};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExA, DefWindowProcA, DestroyWindow, DispatchMessageA, GetMessageA, PostMessageA,
     RegisterClassA, UnregisterClassA, MSG, WM_CLIPBOARDUPDATE, WM_USER, WNDCLASSA, WS_OVERLAPPED,
@@ -21,6 +23,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 const CF_UNICODETEXT: u32 = 13;
 const CF_HDROP: u32 = 15;
+pub const CF_DIB: u32 = 8;
+pub const CF_DIBV5: u32 = 17;
+const MAX_IMAGE_BYTES: usize = 64 * 1024 * 1024;
 const WM_STOP_CLIPBOARD: u32 = WM_USER + 101;
 
 #[repr(C)]
@@ -173,6 +178,22 @@ fn read_clipboard_content() -> Option<ClipboardPayload> {
             return None;
         }
 
+        for format in [CF_DIBV5, CF_DIB] {
+            if let Ok(handle) = GetClipboardData(format) {
+                let global = HGLOBAL(handle.0);
+                let size = GlobalSize(global);
+                if size > 0 && size <= MAX_IMAGE_BYTES {
+                    let ptr = GlobalLock(global);
+                    if !ptr.is_null() {
+                        let bytes = std::slice::from_raw_parts(ptr as *const u8, size).to_vec();
+                        let _ = GlobalUnlock(global);
+                        let _ = CloseClipboard();
+                        return Some(ClipboardPayload::Image { format, bytes });
+                    }
+                }
+            }
+        }
+
         let handle = match GetClipboardData(CF_UNICODETEXT) {
             Ok(h) => h,
             Err(_) => {
@@ -206,6 +227,47 @@ fn read_clipboard_content() -> Option<ClipboardPayload> {
 pub struct ClipboardWriter;
 
 impl ClipboardWriter {
+    pub fn write_image(format: u32, bytes: &[u8]) -> Result<()> {
+        if !matches!(format, CF_DIB | CF_DIBV5) || bytes.is_empty() || bytes.len() > MAX_IMAGE_BYTES
+        {
+            return Err(NerveError::Protocol("Invalid clipboard image".into()));
+        }
+        unsafe {
+            let mut opened = false;
+            for _ in 0..10 {
+                if OpenClipboard(HWND::default()).is_ok() {
+                    opened = true;
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(15));
+            }
+            if !opened {
+                return Err(NerveError::Platform(
+                    "Failed to open clipboard for writing".into(),
+                ));
+            }
+            let global = match GlobalAlloc(GMEM_MOVEABLE, bytes.len()) {
+                Ok(global) => global,
+                Err(e) => {
+                    let _ = CloseClipboard();
+                    return Err(NerveError::Platform(format!("GlobalAlloc failed: {e}")));
+                }
+            };
+            let ptr = GlobalLock(global);
+            if ptr.is_null() {
+                let _ = CloseClipboard();
+                return Err(NerveError::Platform("GlobalLock failed".into()));
+            }
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr as *mut u8, bytes.len());
+            let _ = GlobalUnlock(global);
+            let _ = EmptyClipboard();
+            let result = SetClipboardData(format, HANDLE(global.0));
+            let _ = CloseClipboard();
+            result.map_err(|e| NerveError::Platform(format!("SetClipboardData failed: {e}")))?;
+            Ok(())
+        }
+    }
+
     pub fn write_text(text: &str) -> Result<()> {
         let wide: Vec<u16> = text.encode_utf16().chain(std::iter::once(0)).collect();
         let bytes_len = wide.len() * std::mem::size_of::<u16>();

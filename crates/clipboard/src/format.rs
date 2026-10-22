@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ClipboardPayload {
     Text(String),
-    Image(Vec<u8>),
+    Image { format: u32, bytes: Vec<u8> },
     Files(Vec<String>),
 }
 
@@ -18,8 +18,9 @@ impl ClipboardPayload {
                 0u8.hash(&mut hasher);
                 text.hash(&mut hasher);
             }
-            Self::Image(bytes) => {
+            Self::Image { format, bytes } => {
                 1u8.hash(&mut hasher);
+                format.hash(&mut hasher);
                 bytes.hash(&mut hasher);
             }
             Self::Files(files) => {
