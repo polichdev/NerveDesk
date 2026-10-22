@@ -2,9 +2,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 use tracing::trace;
 
-use common::{
-    NerveError, Result, VideoChunkHeader, MAX_VIDEO_PAYLOAD_SIZE,
-};
+use common::{NerveError, Result, VideoChunkHeader, MAX_VIDEO_PAYLOAD_SIZE};
 
 pub struct VideoFrameChunker;
 
@@ -20,8 +18,8 @@ impl VideoFrameChunker {
             return Vec::new();
         }
 
-        let total_chunks = ((total_size + MAX_VIDEO_PAYLOAD_SIZE - 1)
-            / MAX_VIDEO_PAYLOAD_SIZE) as u16;
+        let total_chunks =
+            ((total_size + MAX_VIDEO_PAYLOAD_SIZE - 1) / MAX_VIDEO_PAYLOAD_SIZE) as u16;
         let mut packets = Vec::with_capacity(total_chunks as usize);
 
         let header_size = std::mem::size_of::<VideoChunkHeader>();
@@ -83,7 +81,9 @@ impl VideoFrameReassembler {
     ) -> Result<Option<(u64, bool, u64, Vec<u8>)>> {
         let header_size = std::mem::size_of::<VideoChunkHeader>();
         if packet_bytes.len() < header_size {
-            return Err(NerveError::Protocol("Video packet smaller than header".into()));
+            return Err(NerveError::Protocol(
+                "Video packet smaller than header".into(),
+            ));
         }
 
         let header: VideoChunkHeader = *bytemuck::from_bytes(&packet_bytes[..header_size]);
@@ -96,7 +96,9 @@ impl VideoFrameReassembler {
 
         let payload = &packet_bytes[header_size..];
         if payload.len() != header.payload_size as usize {
-            return Err(NerveError::Protocol("Video chunk payload size mismatch".into()));
+            return Err(NerveError::Protocol(
+                "Video chunk payload size mismatch".into(),
+            ));
         }
 
         self.cleanup_stale_frames();
@@ -108,16 +110,17 @@ impl VideoFrameReassembler {
         }
 
         let total_chunks = header.total_chunks as usize;
-        let entry = self.frames.entry(header.frame_id).or_insert_with(|| {
-            IncompleteFrame {
+        let entry = self
+            .frames
+            .entry(header.frame_id)
+            .or_insert_with(|| IncompleteFrame {
                 chunks: vec![None; total_chunks],
                 received_count: 0,
                 total_chunks: header.total_chunks,
                 is_keyframe: header.is_keyframe(),
                 timestamp_us: header.timestamp_us,
                 created_at: Instant::now(),
-            }
-        });
+            });
 
         let chunk_idx = header.chunk_index as usize;
         if chunk_idx < entry.chunks.len() && entry.chunks[chunk_idx].is_none() {
@@ -132,7 +135,9 @@ impl VideoFrameReassembler {
                 if let Some(c) = chunk {
                     full_frame.extend_from_slice(&c);
                 } else {
-                    return Err(NerveError::Protocol("Missing chunk in completed frame".into()));
+                    return Err(NerveError::Protocol(
+                        "Missing chunk in completed frame".into(),
+                    ));
                 }
             }
 
@@ -151,9 +156,8 @@ impl VideoFrameReassembler {
     fn cleanup_stale_frames(&mut self) {
         let now = Instant::now();
         let max_age = self.max_frame_age_ms;
-        self.frames.retain(|_, frame| {
-            now.duration_since(frame.created_at).as_millis() <= max_age
-        });
+        self.frames
+            .retain(|_, frame| now.duration_since(frame.created_at).as_millis() <= max_age);
     }
 }
 
@@ -178,12 +182,8 @@ mod tests {
         let is_keyframe = true;
         let timestamp_us = 12345678;
 
-        let packets = VideoFrameChunker::chunk_frame(
-            frame_id,
-            is_keyframe,
-            timestamp_us,
-            &original_data,
-        );
+        let packets =
+            VideoFrameChunker::chunk_frame(frame_id, is_keyframe, timestamp_us, &original_data);
 
         assert_eq!(packets.len(), 4);
 

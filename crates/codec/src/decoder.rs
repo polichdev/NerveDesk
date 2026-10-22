@@ -60,7 +60,10 @@ impl HardwareVideoDecoder {
             let height = u16::from_le_bytes([payload[2], payload[3]]) as u32;
             if width > 0 && width <= 7680 && height > 0 && height <= 4320 {
                 let expected_len = (width as usize) * (height as usize) * 4;
-                if let Ok(bgra) = miniz_oxide::inflate::decompress_to_vec_zlib_with_limit(&payload[4..], expected_len) {
+                if let Ok(bgra) = miniz_oxide::inflate::decompress_to_vec_zlib_with_limit(
+                    &payload[4..],
+                    expected_len,
+                ) {
                     if bgra.len() != expected_len {
                         return Err(NerveError::Protocol("Incomplete BGRA frame".into()));
                     }

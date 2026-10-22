@@ -105,7 +105,8 @@ impl HardwareVideoEncoder {
             .checked_mul(height as usize)
             .and_then(|pixels| pixels.checked_mul(4))
             .ok_or_else(|| NerveError::Protocol("Invalid video dimensions".into()))?;
-        if width == 0 || height == 0 || width > 7680 || height > 4320 || bgra.len() != expected_len {
+        if width == 0 || height == 0 || width > 7680 || height > 4320 || bgra.len() != expected_len
+        {
             return Err(NerveError::Protocol("Invalid BGRA frame size".into()));
         }
         let frame_id = self.frame_counter.fetch_add(1, Ordering::Relaxed);
@@ -158,7 +159,10 @@ mod tests {
         let encoder = HardwareVideoEncoder::new(VideoEncoderConfig::default()).unwrap();
         let pixels = vec![42u8; 2562 * 2 * 4];
         let frame = encoder.encode_bgra(2562, 2, &pixels, 0, true).unwrap();
-        assert_eq!(u16::from_le_bytes(frame.data[0..2].try_into().unwrap()), 2562);
+        assert_eq!(
+            u16::from_le_bytes(frame.data[0..2].try_into().unwrap()),
+            2562
+        );
         assert_eq!(u16::from_le_bytes(frame.data[2..4].try_into().unwrap()), 2);
         assert!(encoder.encode_bgra(2562, 2, &pixels[..8], 0, true).is_err());
     }
