@@ -18,6 +18,7 @@ tauri-build = { version = "2.0", features = [] }
 
 [dependencies]
 tauri = { version = "2.0", features = ["tray-icon"] }
+engine = { path = "../crates/engine" }
 common = { path = "../crates/common" }
 input = { path = "../crates/input" }
 net = { path = "../crates/net" }
@@ -33,6 +34,3 @@ tracing-subscriber = { workspace = true }
 anyhow = { workspace = true }
 windows = { workspace = true }
 crossbeam-channel = { workspace = true }
-jpeg-encoder = "0.7.1"
-qrcodegen = "1.8.0"
-jpeg-decoder = { version = "0.3", default-features = false }

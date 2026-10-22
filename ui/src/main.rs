@@ -4,7 +4,8 @@
 fn terminate_other_instances() {
     use windows::Win32::Foundation::CloseHandle;
     use windows::Win32::System::Diagnostics::ToolHelp::{
-        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
+        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+        TH32CS_SNAPPROCESS,
     };
     use windows::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
 
@@ -31,10 +32,13 @@ fn terminate_other_instances() {
                     .trim_matches('\0')
                     .to_lowercase();
 
-                let is_match = name == my_exe_name || name == "nervedesk.exe" || name == "nerve-desk.exe";
+                let is_match =
+                    name == my_exe_name || name == "nervedesk.exe" || name == "nerve-desk.exe";
 
                 if is_match && entry.th32ProcessID != my_pid {
-                    if let Ok(process_handle) = OpenProcess(PROCESS_TERMINATE, false, entry.th32ProcessID) {
+                    if let Ok(process_handle) =
+                        OpenProcess(PROCESS_TERMINATE, false, entry.th32ProcessID)
+                    {
                         let _ = TerminateProcess(process_handle, 0);
                         let _ = CloseHandle(process_handle);
                         killed_any = true;
