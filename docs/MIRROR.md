@@ -21,10 +21,12 @@ require restarting the stream. The source pixels remain at native resolution
 up to 3840×2160; the receiver scales them to its display. Screen mirroring
 shows the same desktop on both devices, not a separate Windows workspace.
 
-Mirroring uses TCP port 48104 on the receiving laptop. Both machines must run
-the updated NerveDesk build. If the device appears but video does not, check
-that the laptop's firewall allows inbound TCP 48104 on the private network.
-The older driver-backed stream still uses UDP 48101.
+Mirroring uses Media Foundation H.264 over TCP 48105 when both devices support
+it. The sender falls back to JPEG over TCP 48104 if H.264 is unavailable.
+Both machines should run the updated NerveDesk build. If the device appears
+but video does not, check that the laptop's firewall allows inbound TCP 48105
+and 48104 on the private network. File transfer uses TCP 48106. The older
+driver-backed stream still uses UDP 48101.
 
 The portable application does not include the IddCx driver. An independent
 second monitor needs a Microsoft signed driver package while Secure Boot

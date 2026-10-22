@@ -16,7 +16,7 @@
 
 **NerveDesk** is a Windows KVM (Keyboard, Video, Mouse) and display streaming project built primarily in Rust. It supports mouse and keyboard sharing and has a display transport for mirroring and virtual secondary monitor projection. The display pipeline currently uses CPU-side BGRA compression and needs performance validation.
 
-NerveDesk sends input over UDP. Mirror mode captures the primary display through DXGI Desktop Duplication or a selected window through Windows Graphics Capture, then sends JPEG frames over TCP. Extend mode uses the NerveDesk IddCx driver to add a Windows display and stream it over the local network.
+NerveDesk sends input over UDP. Mirror mode captures the primary display through DXGI Desktop Duplication or a selected window through Windows Graphics Capture, then sends H.264 frames over TCP with JPEG fallback. Extend mode uses the NerveDesk IddCx driver to add a Windows display and stream it over the local network. Audio Bridge can send system audio to another discovered NerveDesk computer.
 
 ---
 
@@ -31,7 +31,10 @@ NerveDesk sends input over UDP. Mirror mode captures the primary display through
 
 ### Display & Media Pipeline
 - **DirectX 11 (DXGI Desktop Duplication)**: Captures an existing Windows display for mirror mode
-- **Mirror video transport**: JPEG frames over TCP 48104; the driver-backed stream retains zlib/UDP 48101
+- **Mirror video transport**: Media Foundation H.264 over TCP 48105 with JPEG fallback on TCP 48104; the driver-backed stream retains zlib/UDP 48101
+- **Audio Bridge**: WASAPI loopback capture and shared-mode playback over TCP 48107. Enable it on both computers, choose a device and a direction: send this PC's audio or request the device's audio. Reverse requests use TCP 48109. Audio is uncompressed and unencrypted, so use it on a trusted local network. Playback requires the receiver to support the sender's audio mix format.
+- **Devices**: The shared device menu below Home holds the peer connection, security key, host name, and computer layout. Mirror, Audio Bridge, and Folder Sync use the same discovered computer list; each module can be enabled separately.
+- **Folder Sync**: Select a folder and the other computer on either PC. The receiver approves the request and creates the same absolute path if needed. Files already present when the connection is approved stay on their original computer. Files created after connection are shared automatically in both directions; a scan runs every 600 ms. Disconnect is available in the same connection card. Folder Sync uses TCP 48108 and a generated pair secret for transfers. File contents are not encrypted in transit, so use a trusted local network. Both computers need the current NerveDesk version and network access to TCP 48108.
 - **NerveDesk IddCx UMDF Driver**: C++ indirect display driver source for a virtual Windows display; release requires WDK build and Microsoft-approved signing
 
 ### Desktop GUI & Presentation — `ui/`
