@@ -4,22 +4,21 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use tracing::{info, warn};
 
-use common::{
-    ButtonState, InputEvent, KeyState, MouseButton, NerveError, Result,
-};
+use common::{ButtonState, InputEvent, KeyState, MouseButton, NerveError, Result};
 
+use crate::edge::{ActiveLocation, EdgeConfig, EdgeDetector, ScreenEdge, TransitionResult};
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::System::Threading::{
     GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_TIME_CRITICAL,
 };
-use crate::edge::{ActiveLocation, EdgeConfig, EdgeDetector, ScreenEdge, TransitionResult};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, DispatchMessageW, GetDesktopWindow, GetMessageW, GetSystemMetrics, PeekMessageW, PostThreadMessageW,
-    SetCursorPos, SetForegroundWindow, SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx, HHOOK, KBDLLHOOKSTRUCT,
-    MSLLHOOKSTRUCT, MSG, PM_NOREMOVE, SM_CXSCREEN, SM_CYSCREEN, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_APP,
-    WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP,
-    WM_MOUSEHWHEEL, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_RBUTTONDOWN, WM_RBUTTONUP,
-    WM_SYSKEYDOWN, WM_SYSKEYUP, WM_XBUTTONDOWN, WM_XBUTTONUP,
+    CallNextHookEx, DispatchMessageW, GetDesktopWindow, GetMessageW, GetSystemMetrics,
+    PeekMessageW, PostThreadMessageW, SetCursorPos, SetForegroundWindow, SetWindowsHookExW,
+    TranslateMessage, UnhookWindowsHookEx, HHOOK, KBDLLHOOKSTRUCT, MSG, MSLLHOOKSTRUCT,
+    PM_NOREMOVE, SM_CXSCREEN, SM_CYSCREEN, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_APP, WM_KEYDOWN,
+    WM_KEYUP, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEHWHEEL,
+    WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SYSKEYDOWN, WM_SYSKEYUP,
+    WM_XBUTTONDOWN, WM_XBUTTONUP,
 };
 
 const XBUTTON1: u32 = 0x0001;
@@ -27,6 +26,7 @@ const XBUTTON2: u32 = 0x0002;
 
 static HOOK_SENDER: Mutex<Option<Sender<InputEvent>>> = Mutex::new(None);
 static CAPTURE_ACTIVE: AtomicBool = AtomicBool::new(false);
+static PEER_AVAILABLE: AtomicBool = AtomicBool::new(true);
 static KEYBOARD_SHARING_ENABLED: AtomicBool = AtomicBool::new(true);
 static LBUTTON_DOWN: AtomicBool = AtomicBool::new(false);
 static LAST_CURSOR_POS: Mutex<Option<POINT>> = Mutex::new(None);
@@ -46,6 +46,28 @@ pub fn is_lbutton_down() -> bool {
     LBUTTON_DOWN.load(Ordering::SeqCst)
 }
 
+pub fn set_peer_available(available: bool) {
+    PEER_AVAILABLE.store(available, Ordering::SeqCst);
+    if !available {
+        let was_capturing = if let Ok(mut guard) = EDGE_DETECTOR.lock() {
+            if let Some(detector) = guard.as_mut() {
+                detector.set_location(ActiveLocation::Host);
+            }
+            CAPTURE_ACTIVE.swap(false, Ordering::SeqCst)
+        } else {
+            CAPTURE_ACTIVE.swap(false, Ordering::SeqCst)
+        };
+        if was_capturing {
+            let return_pos = LAST_CURSOR_POS.lock().ok().and_then(|last| *last);
+            if let Some(pt) = return_pos {
+                unsafe {
+                    let _ = SetCursorPos(pt.x, pt.y);
+                }
+            }
+        }
+    }
+}
+
 pub fn set_active_edge(edge: ScreenEdge) {
     set_active_edge_and_resolution(edge, 0, 0);
 }
@@ -63,7 +85,9 @@ pub fn disable_edge_detection() {
 
 pub fn set_active_edge_and_resolution(edge: ScreenEdge, client_w: i32, client_h: i32) {
     let (w, h) = unsafe {
-        use windows::Win32::Graphics::Gdi::{GetDC, ReleaseDC, GetDeviceCaps, DESKTOPHORZRES, DESKTOPVERTRES};
+        use windows::Win32::Graphics::Gdi::{
+            GetDC, GetDeviceCaps, ReleaseDC, DESKTOPHORZRES, DESKTOPVERTRES,
+        };
         let hdc = GetDC(HWND::default());
         let mut dw = 0;
         let mut dh = 0;
@@ -113,7 +137,10 @@ pub fn restore_edge_detection() {
     };
     if let Some(cfg) = config {
         if let Ok(mut center) = CENTER_PT.lock() {
-            *center = POINT { x: cfg.host_width / 2, y: cfg.host_height / 2 };
+            *center = POINT {
+                x: cfg.host_width / 2,
+                y: cfg.host_height / 2,
+            };
         }
         if let Ok(mut guard) = EDGE_DETECTOR.lock() {
             *guard = Some(EdgeDetector::new(cfg));
@@ -168,7 +195,10 @@ unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: LPAR
                     CAPTURE_ACTIVE.store(false, Ordering::SeqCst);
                     let _ = SetCursorPos(return_x, return_y);
                     if let Ok(mut guard) = LAST_CURSOR_POS.lock() {
-                        *guard = Some(POINT { x: return_x, y: return_y });
+                        *guard = Some(POINT {
+                            x: return_x,
+                            y: return_y,
+                        });
                     }
                     if let Ok(sender_guard) = HOOK_SENDER.lock() {
                         if let Some(ref sender) = *sender_guard {
@@ -206,20 +236,32 @@ unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: LPAR
 
                 let mut transition = None;
                 if let Ok(mut edge_guard) = EDGE_DETECTOR.lock() {
-                    if let Some(detector) = edge_guard.as_mut() {
-                        transition = detector.evaluate_motion(current_pt.x, current_pt.y, dx, dy);
+                    if PEER_AVAILABLE.load(Ordering::SeqCst) {
+                        if let Some(detector) = edge_guard.as_mut() {
+                            transition =
+                                detector.evaluate_motion(current_pt.x, current_pt.y, dx, dy);
+                            if matches!(transition, Some(TransitionResult::CrossedToClient { .. }))
+                            {
+                                CAPTURE_ACTIVE.store(true, Ordering::SeqCst);
+                            }
+                        }
                     }
                 }
 
                 if let Some(TransitionResult::CrossedToClient { client_x, client_y }) = transition {
+                    if !CAPTURE_ACTIVE.load(Ordering::SeqCst) {
+                        return CallNextHookEx(HHOOK::default(), n_code, w_param, l_param);
+                    }
                     let was_dragging = LBUTTON_DOWN.load(Ordering::SeqCst);
-                    CAPTURE_ACTIVE.store(true, Ordering::SeqCst);
                     let _ = SetCursorPos(center.x, center.y);
                     let _ = SetForegroundWindow(GetDesktopWindow());
                     if was_dragging {
                         if let Ok(sender_guard) = HOOK_SENDER.lock() {
                             if let Some(ref sender) = *sender_guard {
-                                let _ = sender.try_send(InputEvent::CursorPosition { x: client_x, y: client_y });
+                                let _ = sender.try_send(InputEvent::CursorPosition {
+                                    x: client_x,
+                                    y: client_y,
+                                });
                                 let _ = sender.try_send(InputEvent::MouseButton {
                                     button: MouseButton::Left,
                                     state: ButtonState::Pressed,
@@ -231,7 +273,10 @@ unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: LPAR
                             }
                         }
                     } else {
-                        event_to_send = Some(InputEvent::CursorPosition { x: client_x, y: client_y });
+                        event_to_send = Some(InputEvent::CursorPosition {
+                            x: client_x,
+                            y: client_y,
+                        });
                     }
                     block_event = true;
                 }
@@ -355,12 +400,18 @@ unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: LPAR
 }
 
 unsafe extern "system" fn keyboard_proc(n_code: i32, w_param: WPARAM, l_param: LPARAM) -> LRESULT {
-    if n_code >= 0 && CAPTURE_ACTIVE.load(Ordering::Relaxed) && KEYBOARD_SHARING_ENABLED.load(Ordering::Relaxed) {
+    if n_code >= 0
+        && CAPTURE_ACTIVE.load(Ordering::Relaxed)
+        && KEYBOARD_SHARING_ENABLED.load(Ordering::Relaxed)
+    {
         let msg = w_param.0 as u32;
         let hook_struct = *(l_param.0 as *const KBDLLHOOKSTRUCT);
 
         if hook_struct.vkCode == 0x1B {
-            let shift_down = (windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(0x10) as u16 & 0x8000) != 0;
+            let shift_down = (windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(0x10)
+                as u16
+                & 0x8000)
+                != 0;
             if shift_down {
                 CAPTURE_ACTIVE.store(false, Ordering::SeqCst);
                 if let Ok(mut guard) = EDGE_DETECTOR.lock() {
@@ -436,20 +487,17 @@ impl InputHookManager {
                 }
                 CAPTURE_ACTIVE.store(false, Ordering::SeqCst);
 
-                let mouse_hook = match SetWindowsHookExW(
-                    WH_MOUSE_LL,
-                    Some(mouse_proc),
-                    HINSTANCE::default(),
-                    0,
-                ) {
-                    Ok(hook) => hook,
-                    Err(e) => {
-                        let _ = init_tx.send(Err(NerveError::Platform(format!(
-                            "Failed to install mouse hook: {e}"
-                        ))));
-                        return;
-                    }
-                };
+                let mouse_hook =
+                    match SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_proc), HINSTANCE::default(), 0)
+                    {
+                        Ok(hook) => hook,
+                        Err(e) => {
+                            let _ = init_tx.send(Err(NerveError::Platform(format!(
+                                "Failed to install mouse hook: {e}"
+                            ))));
+                            return;
+                        }
+                    };
 
                 let kbd_hook = match SetWindowsHookExW(
                     WH_KEYBOARD_LL,
@@ -512,7 +560,11 @@ impl InputHookManager {
         self.is_capturing.store(active, Ordering::SeqCst);
         if let Ok(mut guard) = EDGE_DETECTOR.lock() {
             if let Some(detector) = guard.as_mut() {
-                detector.set_location(if active { ActiveLocation::Client } else { ActiveLocation::Host });
+                detector.set_location(if active {
+                    ActiveLocation::Client
+                } else {
+                    ActiveLocation::Host
+                });
             }
         }
         if active {

@@ -4,10 +4,9 @@ use tracing::warn;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     keybd_event, SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT,
     KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, KEYEVENTF_SCANCODE, MOUSEEVENTF_HWHEEL,
-    MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_MIDDLEDOWN,
-    MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_MOVE, MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP,
-    MOUSEEVENTF_WHEEL, MOUSEEVENTF_XDOWN, MOUSEEVENTF_XUP, MOUSEINPUT,
-    VIRTUAL_KEY,
+    MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP,
+    MOUSEEVENTF_MOVE, MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_WHEEL,
+    MOUSEEVENTF_XDOWN, MOUSEEVENTF_XUP, MOUSEINPUT, VIRTUAL_KEY,
 };
 
 const XBUTTON1: u32 = 0x0001;
@@ -24,9 +23,7 @@ impl InputEmulator {
         match event {
             InputEvent::MouseMove { dx, dy } => self.inject_mouse_move(*dx, *dy),
             InputEvent::CursorPosition { x, y } => self.inject_cursor_position(*x, *y),
-            InputEvent::MouseButton { button, state } => {
-                self.inject_mouse_button(*button, *state)
-            }
+            InputEvent::MouseButton { button, state } => self.inject_mouse_button(*button, *state),
             InputEvent::MouseWheel { delta, horizontal } => {
                 self.inject_mouse_wheel(*delta, *horizontal)
             }
@@ -178,7 +175,8 @@ impl InputEmulator {
             if sent == 0 {
                 let b_vk = (vk_code & 0xFF) as u8;
                 let b_scan = (scan & 0xFF) as u8;
-                let mut dw_flags = windows::Win32::UI::Input::KeyboardAndMouse::KEYBD_EVENT_FLAGS(0);
+                let mut dw_flags =
+                    windows::Win32::UI::Input::KeyboardAndMouse::KEYBD_EVENT_FLAGS(0);
                 if state == KeyState::KeyUp {
                     dw_flags |= KEYEVENTF_KEYUP;
                 }
