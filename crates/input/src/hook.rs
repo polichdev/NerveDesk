@@ -1,5 +1,5 @@
 use crossbeam_channel::Sender;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use tracing::{info, warn};
@@ -29,6 +29,7 @@ static CAPTURE_ACTIVE: AtomicBool = AtomicBool::new(false);
 static PEER_AVAILABLE: AtomicBool = AtomicBool::new(true);
 static KEYBOARD_SHARING_ENABLED: AtomicBool = AtomicBool::new(true);
 static LBUTTON_DOWN: AtomicBool = AtomicBool::new(false);
+static DRAG_SOURCE_WINDOW: AtomicIsize = AtomicIsize::new(0);
 static LAST_CURSOR_POS: Mutex<Option<POINT>> = Mutex::new(None);
 static EDGE_DETECTOR: Mutex<Option<EdgeDetector>> = Mutex::new(None);
 static CENTER_PT: Mutex<POINT> = Mutex::new(POINT { x: 960, y: 540 });
@@ -44,6 +45,10 @@ pub fn is_keyboard_sharing_enabled() -> bool {
 
 pub fn is_lbutton_down() -> bool {
     LBUTTON_DOWN.load(Ordering::SeqCst)
+}
+
+pub fn take_drag_source_window() -> isize {
+    DRAG_SOURCE_WINDOW.swap(0, Ordering::SeqCst)
 }
 
 pub fn set_peer_available(available: bool) {
@@ -84,6 +89,28 @@ pub fn disable_edge_detection() {
 }
 
 pub fn set_active_edge_and_resolution(edge: ScreenEdge, client_w: i32, client_h: i32) {
+    set_active_edges_and_resolution(edge, opposite_edge(edge), client_w, client_h);
+}
+
+pub fn set_remote_edge(edge: ScreenEdge) {
+    if let Ok(mut saved) = SAVED_EDGE_CONFIG.lock() {
+        if let Some(config) = saved.as_mut() {
+            config.peer_edge = edge;
+        }
+    }
+    if let Ok(mut detector) = EDGE_DETECTOR.lock() {
+        if let Some(detector) = detector.as_mut() {
+            detector.set_peer_edge(edge);
+        }
+    }
+}
+
+pub fn set_active_edges_and_resolution(
+    edge: ScreenEdge,
+    peer_edge: ScreenEdge,
+    client_w: i32,
+    client_h: i32,
+) {
     let (w, h) = unsafe {
         use windows::Win32::Graphics::Gdi::{
             GetDC, GetDeviceCaps, ReleaseDC, DESKTOPHORZRES, DESKTOPVERTRES,
@@ -119,6 +146,7 @@ pub fn set_active_edge_and_resolution(edge: ScreenEdge, client_w: i32, client_h:
         client_width: cw,
         client_height: ch,
         client_edge: edge,
+        peer_edge,
         trigger_threshold: 4,
     };
     if let Ok(mut saved) = SAVED_EDGE_CONFIG.lock() {
@@ -126,6 +154,15 @@ pub fn set_active_edge_and_resolution(edge: ScreenEdge, client_w: i32, client_h:
     }
     if let Ok(mut guard) = EDGE_DETECTOR.lock() {
         *guard = Some(EdgeDetector::new(config));
+    }
+}
+
+pub fn opposite_edge(edge: ScreenEdge) -> ScreenEdge {
+    match edge {
+        ScreenEdge::Left => ScreenEdge::Right,
+        ScreenEdge::Right => ScreenEdge::Left,
+        ScreenEdge::Top => ScreenEdge::Bottom,
+        ScreenEdge::Bottom => ScreenEdge::Top,
     }
 }
 
@@ -155,8 +192,18 @@ unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: LPAR
         let msg = w_param.0 as u32;
         let hook_struct = *(l_param.0 as *const MSLLHOOKSTRUCT);
 
+        // SendInput events from the peer must never become a new local drag or edge crossing.
+        if (hook_struct.flags & 1) != 0 {
+            return CallNextHookEx(HHOOK::default(), n_code, w_param, l_param);
+        }
+
         if msg == WM_LBUTTONDOWN {
             LBUTTON_DOWN.store(true, Ordering::SeqCst);
+            let source = windows::Win32::UI::WindowsAndMessaging::GetAncestor(
+                windows::Win32::UI::WindowsAndMessaging::WindowFromPoint(hook_struct.pt),
+                windows::Win32::UI::WindowsAndMessaging::GA_ROOT,
+            );
+            DRAG_SOURCE_WINDOW.store(source.0 as isize, Ordering::SeqCst);
         } else if msg == WM_LBUTTONUP {
             LBUTTON_DOWN.store(false, Ordering::SeqCst);
         }
@@ -171,11 +218,10 @@ unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: LPAR
         };
 
         if msg == WM_MOUSEMOVE {
-            let is_injected = (hook_struct.flags & 1) != 0;
             let is_at_center = hook_struct.pt.x == center.x && hook_struct.pt.y == center.y;
 
             if CAPTURE_ACTIVE.load(Ordering::SeqCst) {
-                if is_injected || is_at_center {
+                if is_at_center {
                     return LRESULT(1);
                 }
 
@@ -204,7 +250,7 @@ unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: LPAR
                         if let Some(ref sender) = *sender_guard {
                             let _ = sender.try_send(InputEvent::FileDrag {
                                 active: false,
-                                file_name: String::new(),
+                                file_name: "cancel".into(),
                             });
                         }
                     }
@@ -254,7 +300,6 @@ unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: LPAR
                     }
                     let was_dragging = LBUTTON_DOWN.load(Ordering::SeqCst);
                     let _ = SetCursorPos(center.x, center.y);
-                    let _ = SetForegroundWindow(GetDesktopWindow());
                     if was_dragging {
                         if let Ok(sender_guard) = HOOK_SENDER.lock() {
                             if let Some(ref sender) = *sender_guard {
@@ -273,6 +318,7 @@ unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: LPAR
                             }
                         }
                     } else {
+                        let _ = SetForegroundWindow(GetDesktopWindow());
                         event_to_send = Some(InputEvent::CursorPosition {
                             x: client_x,
                             y: client_y,
@@ -468,7 +514,6 @@ pub struct InputHookManager {
 
 impl InputHookManager {
     pub fn start(event_sender: Sender<InputEvent>) -> Result<Self> {
-        set_active_edge(ScreenEdge::Right);
         let (init_tx, init_rx) = crossbeam_channel::bounded::<Result<u32>>(1);
         let is_capturing = Arc::new(AtomicBool::new(false));
         let is_capturing_clone = is_capturing.clone();

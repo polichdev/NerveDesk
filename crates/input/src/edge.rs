@@ -27,6 +27,7 @@ pub struct EdgeConfig {
     pub client_width: i32,
     pub client_height: i32,
     pub client_edge: ScreenEdge,
+    pub peer_edge: ScreenEdge,
     pub trigger_threshold: i32,
 }
 
@@ -38,6 +39,7 @@ impl Default for EdgeConfig {
             client_width: 1920,
             client_height: 1080,
             client_edge: ScreenEdge::Right,
+            peer_edge: ScreenEdge::Left,
             trigger_threshold: 4,
         }
     }
@@ -75,6 +77,10 @@ impl EdgeDetector {
         }
     }
 
+    pub fn set_peer_edge(&mut self, edge: ScreenEdge) {
+        self.config.peer_edge = edge;
+    }
+
     pub fn evaluate_motion(
         &mut self,
         current_x: i32,
@@ -104,34 +110,34 @@ impl EdgeDetector {
                     );
                     self.active_location = ActiveLocation::Client;
 
-                    let (cx, cy) = match self.config.client_edge {
-                        ScreenEdge::Right => {
-                            let cx = 25;
-                            let cy = (current_y * self.config.client_height
-                                / self.config.host_height)
-                                .clamp(0, self.config.client_height - 1);
-                            (cx, cy)
+                    let (source_along, source_span) = match self.config.client_edge {
+                        ScreenEdge::Left | ScreenEdge::Right => {
+                            (current_y, self.config.host_height)
                         }
+                        ScreenEdge::Top | ScreenEdge::Bottom => (current_x, self.config.host_width),
+                    };
+                    let target_span = match self.config.peer_edge {
+                        ScreenEdge::Left | ScreenEdge::Right => self.config.client_height,
+                        ScreenEdge::Top | ScreenEdge::Bottom => self.config.client_width,
+                    };
+                    let along =
+                        (source_along * target_span / source_span).clamp(0, target_span - 1);
+                    let (cx, cy) = match self.config.peer_edge {
                         ScreenEdge::Left => {
-                            let cx = (self.config.client_width - 25).max(0);
-                            let cy = (current_y * self.config.client_height
-                                / self.config.host_height)
-                                .clamp(0, self.config.client_height - 1);
-                            (cx, cy)
+                            let cx = 25;
+                            (cx, along)
                         }
-                        ScreenEdge::Top => {
-                            let cx = (current_x * self.config.client_width
-                                / self.config.host_width)
-                                .clamp(0, self.config.client_width - 1);
-                            let cy = (self.config.client_height - 25).max(0);
-                            (cx, cy)
+                        ScreenEdge::Right => {
+                            let cx = (self.config.client_width - 25).max(0);
+                            (cx, along)
                         }
                         ScreenEdge::Bottom => {
-                            let cx = (current_x * self.config.client_width
-                                / self.config.host_width)
-                                .clamp(0, self.config.client_width - 1);
+                            let cy = (self.config.client_height - 25).max(0);
+                            (along, cy)
+                        }
+                        ScreenEdge::Top => {
                             let cy = 25;
-                            (cx, cy)
+                            (along, cy)
                         }
                     };
 
@@ -147,78 +153,48 @@ impl EdgeDetector {
             ActiveLocation::Client => {
                 self.virtual_client_x += dx;
                 self.virtual_client_y += dy;
-
-                match self.config.client_edge {
+                let crossed = match self.config.peer_edge {
+                    ScreenEdge::Left => self.virtual_client_x <= 0 && dx < 0,
                     ScreenEdge::Right => {
-                        self.virtual_client_y = self
-                            .virtual_client_y
-                            .clamp(0, self.config.client_height - 1);
-                        if self.virtual_client_x > self.config.client_width - 1 {
-                            self.virtual_client_x = self.config.client_width - 1;
-                        }
-                        if self.virtual_client_x <= 0 && dx < 0 {
-                            info!("Cursor returned back from Client to Host screen via Left edge");
-                            self.active_location = ActiveLocation::Host;
-                            let return_x =
-                                self.config.host_width - self.config.trigger_threshold - 25;
-                            let return_y = (self.virtual_client_y * self.config.host_height
-                                / self.config.client_height)
-                                .clamp(0, self.config.host_height - 1);
-                            return Some(TransitionResult::ReturnedToHost { return_x, return_y });
-                        }
+                        self.virtual_client_x >= self.config.client_width - 1 && dx > 0
                     }
-                    ScreenEdge::Left => {
-                        self.virtual_client_y = self
-                            .virtual_client_y
-                            .clamp(0, self.config.client_height - 1);
-                        if self.virtual_client_x < 0 {
-                            self.virtual_client_x = 0;
-                        }
-                        if self.virtual_client_x >= self.config.client_width - 1 && dx > 0 {
-                            info!("Cursor returned back from Client to Host screen via Right edge");
-                            self.active_location = ActiveLocation::Host;
-                            let return_x = self.config.trigger_threshold + 25;
-                            let return_y = (self.virtual_client_y * self.config.host_height
-                                / self.config.client_height)
-                                .clamp(0, self.config.host_height - 1);
-                            return Some(TransitionResult::ReturnedToHost { return_x, return_y });
-                        }
-                    }
-                    ScreenEdge::Top => {
-                        self.virtual_client_x =
-                            self.virtual_client_x.clamp(0, self.config.client_width - 1);
-                        if self.virtual_client_y < 0 {
-                            self.virtual_client_y = 0;
-                        }
-                        if self.virtual_client_y >= self.config.client_height - 1 && dy > 0 {
-                            info!(
-                                "Cursor returned back from Client to Host screen via Bottom edge"
-                            );
-                            self.active_location = ActiveLocation::Host;
-                            let return_x = (self.virtual_client_x * self.config.host_width
-                                / self.config.client_width)
-                                .clamp(0, self.config.host_width - 1);
-                            let return_y = self.config.trigger_threshold + 25;
-                            return Some(TransitionResult::ReturnedToHost { return_x, return_y });
-                        }
-                    }
+                    ScreenEdge::Top => self.virtual_client_y <= 0 && dy < 0,
                     ScreenEdge::Bottom => {
-                        self.virtual_client_x =
-                            self.virtual_client_x.clamp(0, self.config.client_width - 1);
-                        if self.virtual_client_y > self.config.client_height - 1 {
-                            self.virtual_client_y = self.config.client_height - 1;
-                        }
-                        if self.virtual_client_y <= 0 && dy < 0 {
-                            info!("Cursor returned back from Client to Host screen via Top edge");
-                            self.active_location = ActiveLocation::Host;
-                            let return_x = (self.virtual_client_x * self.config.host_width
-                                / self.config.client_width)
-                                .clamp(0, self.config.host_width - 1);
-                            let return_y =
-                                self.config.host_height - self.config.trigger_threshold - 25;
-                            return Some(TransitionResult::ReturnedToHost { return_x, return_y });
-                        }
+                        self.virtual_client_y >= self.config.client_height - 1 && dy > 0
                     }
+                };
+                self.virtual_client_x =
+                    self.virtual_client_x.clamp(0, self.config.client_width - 1);
+                self.virtual_client_y = self
+                    .virtual_client_y
+                    .clamp(0, self.config.client_height - 1);
+                if crossed {
+                    info!(
+                        "Cursor returned from Client via {:?} edge",
+                        self.config.peer_edge
+                    );
+                    self.active_location = ActiveLocation::Host;
+                    let inset = self.config.trigger_threshold + 25;
+                    let (peer_along, peer_span) = match self.config.peer_edge {
+                        ScreenEdge::Left | ScreenEdge::Right => {
+                            (self.virtual_client_y, self.config.client_height)
+                        }
+                        ScreenEdge::Top | ScreenEdge::Bottom => {
+                            (self.virtual_client_x, self.config.client_width)
+                        }
+                    };
+                    let host_span = match self.config.client_edge {
+                        ScreenEdge::Left | ScreenEdge::Right => self.config.host_height,
+                        ScreenEdge::Top | ScreenEdge::Bottom => self.config.host_width,
+                    };
+                    let along = (peer_along * host_span / peer_span).clamp(0, host_span - 1);
+                    let (return_x, return_y) = match self.config.client_edge {
+                        ScreenEdge::Left => (inset, along),
+                        ScreenEdge::Right => (self.config.host_width - inset, along),
+                        ScreenEdge::Top => (along, inset),
+                        ScreenEdge::Bottom => (along, self.config.host_height - inset),
+                    };
+                    return Some(TransitionResult::ReturnedToHost { return_x, return_y });
                 }
             }
         }
@@ -255,6 +231,7 @@ mod tests {
             client_width: 1920,
             client_height: 1080,
             client_edge: ScreenEdge::Right,
+            peer_edge: ScreenEdge::Left,
             trigger_threshold: 4,
         };
         let mut detector = EdgeDetector::new(config);
@@ -279,5 +256,33 @@ mod tests {
             Some(TransitionResult::ReturnedToHost { .. })
         ));
         assert_eq!(detector.active_location(), ActiveLocation::Host);
+    }
+
+    #[test]
+    fn uses_independent_exit_edges_on_each_device() {
+        let mut detector = EdgeDetector::new(EdgeConfig {
+            host_width: 1920,
+            host_height: 1080,
+            client_width: 1600,
+            client_height: 900,
+            client_edge: ScreenEdge::Left,
+            peer_edge: ScreenEdge::Top,
+            trigger_threshold: 4,
+        });
+        assert_eq!(
+            detector.evaluate_motion(2, 540, -5, 0),
+            Some(TransitionResult::CrossedToClient {
+                client_x: 800,
+                client_y: 25,
+            })
+        );
+        assert_eq!(detector.evaluate_motion(2, 540, 100, 0), None);
+        assert_eq!(
+            detector.evaluate_motion(2, 540, 0, -30),
+            Some(TransitionResult::ReturnedToHost {
+                return_x: 29,
+                return_y: 607,
+            })
+        );
     }
 }
