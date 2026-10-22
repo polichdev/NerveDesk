@@ -4,7 +4,8 @@
   "version": "1.0.0",
   "identifier": "com.nervedesk.app",
   "build": {
-    "frontendDist": "./"
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "./dist"
   },
   "app": {
     "withGlobalTauri": true,
@@ -28,7 +29,17 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis"],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "installerHooks": "windows/autostart-hooks.nsh",
+        "installerIcon": "icons/icon.ico",
+        "headerImage": "windows/installer-header.bmp",
+        "sidebarImage": "windows/installer-sidebar.bmp",
+        "languages": ["Ukrainian", "English"]
+      }
+    },
     "copyright": "Copyright (C) 2026 NerveDesk",
     "shortDescription": "NerveDesk Virtual Display & KVM",
     "longDescription": "Ultra-low latency hybrid KVM and virtual display streaming application",

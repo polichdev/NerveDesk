@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NerveDesk</title>
+  <style>
+    :root { color-scheme: dark; --bg:#121214; --card:#1c1c20; --line:#2b2b31; --text:#f4f4f5; --muted:#a1a1aa; --accent:#0078d4; --green:#10b981; --red:#ef4444; font-family:"Segoe UI Variable Text","Segoe UI",sans-serif; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font-size:11.5px; user-select:none; }
+    body.light { color-scheme:light; --bg:#f5f6f9; --card:#fff; --line:#e2e6ea; --text:#111827; --muted:#6b7280; --accent:#0284c7; --green:#16a34a; --red:#dc2626; }
+    .shell { position:relative; height:100vh; padding:11px; display:flex; flex-direction:column; gap:7px; border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+    .peer { display:flex; align-items:center; gap:8px; height:37px; background:var(--card); border:1px solid var(--line); border-radius:7px; padding:5px 9px; flex:none; }
+    .dot { width:7px; height:7px; flex:none; border-radius:50%; background:var(--muted); box-shadow:0 0 0 3px #8882; }
+    .dot.online { background:var(--green); box-shadow:0 0 0 3px #10b98122; }
+    .peer-copy { min-width:0; flex:1; }
+    .peer-name { font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .peer-state { color:var(--muted); margin-top:1px; font-size:10px; }
+    .actions { flex:none; overflow:hidden; background:var(--card); border:1px solid var(--line); border-radius:8px; }
+    .row { display:flex; align-items:center; gap:8px; width:100%; height:40px; padding:5px 10px; background:transparent; border:0; border-bottom:1px solid var(--line); color:var(--text); text-align:left; font:inherit; cursor:pointer; }
+    .row:last-child { border:0; }
+    .row:hover { background:#8881; }
+    .label { flex:1; font-weight:600; }
+    .switch { width:29px; height:16px; border-radius:12px; background:#4b4b52; padding:2px; transition:background .15s; }
+    .switch::after { content:""; display:block; width:12px; height:12px; border-radius:50%; background:#fff; transition:transform .15s; }
+    .row.active .switch { background:var(--accent); }
+    .row.active .switch::after { transform:translateX(13px); }
+    .status { position:absolute; left:10px; right:10px; bottom:39px; max-height:44px; padding:7px; background:var(--card); border:1px solid var(--red); border-radius:6px; color:var(--red); overflow:hidden; font-size:10px; }
+    .status:empty { display:none; }
+    .footer { display:flex; align-items:center; justify-content:space-between; margin-top:auto; border-top:1px solid var(--line); padding:7px 2px 0; min-height:28px; }
+    .footer a { color:var(--muted); font:inherit; cursor:pointer; text-decoration:none; }
+    .footer a:hover { color:var(--text); text-decoration:underline; }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="peer"><span class="dot" id="peerDot"></span><div class="peer-copy"><div class="peer-name" id="peerName">—</div><div class="peer-state" id="peerState">—</div></div></div>
+    <div class="actions">
+      <button class="row" data-action="kvm"><span class="label" id="kvmLabel"></span><span class="switch"></span></button>
+      <button class="row" data-action="mirror"><span class="label" id="mirrorLabel"></span><span class="switch"></span></button>
+      <button class="row" data-action="mobile"><span class="label" id="mobileLabel"></span><span class="switch"></span></button>
+      <button class="row" data-action="audio"><span class="label" id="audioLabel"></span><span class="switch"></span></button>
+      <button class="row" data-action="sync"><span class="label" id="syncLabel"></span><span class="switch"></span></button>
+    </div>
+    <div class="status" id="status"></div>
+    <div class="footer"><a id="openButton" role="button" tabindex="0"></a><a id="quitButton" role="button" tabindex="0"></a></div>
+  </div>
+  <script>
+    const invoke = window.__TAURI__.core.invoke;
+    const langAtLoad = localStorage.getItem('nervedesk_lang') || 'en';
+    const uk = langAtLoad === 'uk';
+    function applyTheme() {
+      const theme = localStorage.getItem('nervedesk_theme') || 'dark';
+      document.body.classList.toggle('light', theme === 'light' || (theme === 'system' && matchMedia('(prefers-color-scheme: light)').matches));
+    }
+    applyTheme();
+    const labels = uk ? {
+      online:'Підключено', offline:'Немає підключення', noPeer:'Комп’ютер не обрано',
+      kvm:'Безмежна миша', mirror:'Дублювання екрана', audio:'Аудіоміст', sync:'Синхронізація папок',
+      mobile:'Мобільний пульт', open:'Відкрити', quit:'Вихід'
+    } : {
+      online:'Connected', offline:'Disconnected', noPeer:'No computer selected',
+      kvm:'Mouse Without Borders', mirror:'Screen mirroring', audio:'Audio Bridge', sync:'Folder sync',
+      mobile:'Mobile remote', open:'Open', quit:'Exit'
+    };
+    for (const key of ['kvm','mirror','mobile','audio','sync']) document.getElementById(key+'Label').textContent = labels[key];
+    document.getElementById('openButton').textContent = labels.open;
+    document.getElementById('quitButton').textContent = labels.quit;
+    let busy = false;
+    let metrics = null;
+    async function refresh() {
+      try {
+        if ((localStorage.getItem('nervedesk_lang') || 'en') !== langAtLoad) { location.reload(); return; }
+        applyTheme();
+        metrics = await invoke('get_metrics');
+        document.getElementById('peerName').textContent = metrics.peer_device || labels.noPeer;
+        document.getElementById('peerState').textContent = metrics.peer_online ? labels.online : labels.offline;
+        document.getElementById('peerDot').classList.toggle('online', !!metrics.peer_online);
+        const states = {
+          kvm: metrics.kvm_enabled, mirror: metrics.mirror_enabled, audio: metrics.audio_enabled,
+          sync: metrics.folder_sync_enabled, mobile: metrics.mobile_active
+        };
+        for (const [key, active] of Object.entries(states)) document.querySelector(`[data-action="${key}"]`).classList.toggle('active', !!active);
+      } catch (e) { document.getElementById('status').textContent = String(e); }
+    }
+    async function toggle(action) {
+      if (busy) return;
+      busy = true;
+      document.getElementById('status').textContent = '';
+      try {
+        if (action === 'kvm') {
+          const enabled = !metrics.kvm_enabled;
+          await invoke('set_module_enabled', {module:'kvm', enabled});
+          localStorage.setItem('kvm_module_enabled', String(enabled));
+          if (enabled && localStorage.getItem('peer_device_disabled') !== 'true') {
+            const ip = await invoke('get_paired_peer_ip');
+            if (ip) await invoke('start_host', {targetIp:ip, streamVideo:false});
+          }
+        } else if (action === 'mirror') {
+          const enabled = !metrics.mirror_enabled;
+          await invoke('set_module_enabled', {module:'mirror', enabled});
+          localStorage.setItem('mirror_module_enabled', String(enabled));
+        } else if (action === 'audio') {
+          const enabled = !metrics.audio_enabled;
+          await invoke('set_audio_enabled', {enabled});
+          localStorage.setItem('audio_module_enabled', String(enabled));
+        } else if (action === 'sync') {
+          await invoke('set_folder_sync_enabled', {enabled:!metrics.folder_sync_enabled});
+        } else if (action === 'mobile') {
+          const enabled = !metrics.mobile_active;
+          await invoke('toggle_mobile_remote', {enable:enabled});
+          localStorage.setItem('mobile_module_enabled', String(enabled));
+        }
+        await refresh();
+      } catch (e) { document.getElementById('status').textContent = String(e); }
+      busy = false;
+    }
+    document.querySelectorAll('[data-action]').forEach(button => button.addEventListener('click', () => toggle(button.dataset.action)));
+    document.getElementById('openButton').addEventListener('click', () => invoke('show_main_window'));
+    document.getElementById('openButton').addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.currentTarget.click(); } });
+    document.getElementById('quitButton').addEventListener('click', () => invoke('quit_app'));
+    document.getElementById('quitButton').addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.currentTarget.click(); } });
+    refresh();
+    setInterval(refresh, 1200);
+  </script>
+</body>
+</html>

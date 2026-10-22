@@ -7,8 +7,11 @@ pub use engine::AppState;
 use net::{FileTransferServer, FILE_TRANSFER_PORT};
 
 mod commands;
+mod firewall;
 mod tray;
 mod window;
+
+pub use firewall::handle_cli as handle_firewall_cli;
 
 pub fn run() {
     let state = AppState::new();
@@ -18,10 +21,10 @@ pub fn run() {
 
     engine::start_background_services(
         &state,
-        Some(Arc::new(move |names: Vec<String>| {
+        Some(Arc::new(move |paths: Vec<String>| {
             if let Ok(guard) = app_handle_for_cb.lock() {
                 if let Some(ref handle) = *guard {
-                    let _ = handle.emit("file-received", names);
+                    let _ = handle.emit("file-received", paths);
                 }
             }
         })),
@@ -39,15 +42,11 @@ pub fn run() {
             let file_app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let cb = move |files: Vec<std::path::PathBuf>| {
-                    let names: Vec<String> = files
+                    let paths: Vec<String> = files
                         .iter()
-                        .filter_map(|p| {
-                            p.file_name()
-                                .and_then(|n| n.to_str())
-                                .map(|s| s.to_string())
-                        })
+                        .map(|p| p.to_string_lossy().into_owned())
                         .collect();
-                    let _ = file_app_handle.emit("file-received", names);
+                    let _ = file_app_handle.emit("file-received", paths);
                 };
                 let _ =
                     FileTransferServer::start(FILE_TRANSFER_PORT, file_key_ref, file_enabled, cb)
@@ -60,6 +59,10 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            if window.label() == "tray-panel" && matches!(event, tauri::WindowEvent::Focused(false))
+            {
+                let _ = window.hide();
+            }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
                 let _ = window.hide();
@@ -67,6 +70,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_device_name,
+            commands::quit_app,
+            commands::show_main_window,
+            commands::configure_private_network,
             commands::get_my_ip,
             commands::get_metrics,
             commands::discover_devices,

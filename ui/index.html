@@ -197,9 +197,7 @@
       color: var(--text-muted);
     }
 
-    .nav-item.active .nav-icon {
-      color: var(--accent);
-    }
+    .nav-item.active .nav-icon { color: var(--text-muted); }
 
     .sidebar-footer {
       margin-top: auto;
@@ -348,17 +346,20 @@
       flex-wrap: wrap;
     }
 
-    .sync-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .sync-form-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
     .sync-form-grid label { display: flex; flex-direction: column; gap: 7px; min-width: 0; color: var(--text-muted); font-size: 12px; }
-    .sync-form-grid label:last-child { grid-column: 1 / -1; }
     .sync-form-grid .select-input, .sync-form-grid .code-input { width: 100%; min-width: 0; }
+    .sync-form-grid label:first-child { max-width: 420px; }
     .sync-inline { display: flex; gap: 8px; min-width: 0; }
     .sync-inline .code-input { flex: 1; }
-    .sync-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+    .sync-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+    .sync-connection-card { display: block; padding: 20px; }
+    .sync-connection-card .sync-actions { padding-top: 16px; border-top: 1px solid var(--card-border-subtle); }
     .sync-pair { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-top: 1px solid var(--card-border-subtle); }
     .sync-pair-info { min-width: 0; overflow-wrap: anywhere; }
     .sync-pair .sync-actions { margin-top: 0; flex-shrink: 0; }
     .sync-connected-list { margin-top: 20px; }
+    .sync-pair .sync-actions { flex-wrap: nowrap; }
     .sync-status-line { margin-top: 14px; }
     .sync-pair-events { display: flex; flex-direction: column; gap: 6px; max-height: 230px; overflow: auto; }
     .sync-event { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 7px 0; border-top: 1px solid var(--card-border-subtle); font-size: 12px; color: var(--text-muted); overflow-wrap: anywhere; }
@@ -506,6 +507,19 @@
       border-color: var(--accent);
     }
 
+    .mirror-source-card .setting-left { min-width: 180px; }
+    .mirror-source-card .setting-right { flex: 0 1 440px; min-width: 0; flex-wrap: nowrap; }
+    #mirrorSourceSelect {
+      flex: 1 1 auto;
+      width: 0;
+      min-width: 0;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .mirror-source-card .setting-right .btn { flex-shrink: 0; }
+
 
     .diag-card {
       background: var(--card-bg);
@@ -598,6 +612,13 @@
       background: transparent;
       border: 1px dashed var(--btn-secondary-border);
       cursor: default;
+      flex-grow: 1;
+    }
+
+    .monitor-box.nearby {
+      border-style: solid;
+      border-color: var(--accent);
+      cursor: pointer;
     }
 
     .monitor-icon-svg {
@@ -606,9 +627,7 @@
       color: var(--text-muted);
     }
 
-    .monitor-box.selected .monitor-icon-svg {
-      color: var(--accent);
-    }
+    .monitor-box.selected .monitor-icon-svg { color: var(--text-muted); }
 
     .monitor-label {
       font-size: 11px;
@@ -728,6 +747,8 @@
         width: 100%;
         justify-content: flex-start;
       }
+      .mirror-source-card .setting-left { min-width: 0; }
+      .mirror-source-card .setting-right { flex-basis: auto; }
       .setting-right .code-input {
         width: 100%;
       }
@@ -881,7 +902,7 @@
 
             <div class="setting-card">
               <div class="setting-left">
-                <div class="setting-icon" style="color: #38bdf8;">
+                <div class="setting-icon">
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 0-4 4v12a4 4 0 0 0 8 0V6a4 4 0 0 0-4-4z"/><path d="M12 2v6"/></svg>
                 </div>
                 <div class="setting-text">
@@ -902,7 +923,7 @@
 
             <div class="setting-card">
               <div class="setting-left">
-                <div class="setting-icon" style="color: #a855f7;">
+                <div class="setting-icon">
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
                 </div>
                 <div class="setting-text">
@@ -923,7 +944,7 @@
 
             <div class="setting-card">
               <div class="setting-left">
-                <div class="setting-icon" style="color: #f59e0b;">
+                <div class="setting-icon">
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="3"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
                 </div>
                 <div class="setting-text">
@@ -933,7 +954,7 @@
               </div>
               <div class="setting-right">
                 <label class="switch">
-                  <input type="checkbox" id="homeMobileToggle" checked onchange="toggleMobileServer(this.checked)">
+                  <input type="checkbox" id="homeMobileToggle" onchange="toggleMobileServer(this.checked)">
                   <span class="slider"></span>
                 </label>
                 <button class="btn btn-secondary" onclick="switchTab('mobile')" title="Відкрити QR-код та налаштування" data-i18n-title="open_mobile_qr">
@@ -944,7 +965,7 @@
 
             <div class="setting-card">
               <div class="setting-left">
-                <div class="setting-icon" style="color: #10b981;">
+                <div class="setting-icon">
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10v4h4l5 4V6l-5 4H4z"/><path d="M17 9a5 5 0 0 1 0 6"/><path d="M20 6a9 9 0 0 1 0 12"/></svg>
                 </div>
                 <div class="setting-text">
@@ -962,7 +983,7 @@
 
             <div class="setting-card">
               <div class="setting-left">
-                <div class="setting-icon" style="color: #f97316;">
+                <div class="setting-icon">
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h7l2 2h9v10H3z"/><path d="M7 3h7l2 2"/><path d="M8 14h8"/><path d="m13 11 3 3-3 3"/></svg>
                 </div>
                 <div class="setting-text">
@@ -1000,7 +1021,7 @@
               </div>
             </div>
             <div class="setting-right">
-              <input type="text" id="securityKeyInput" class="code-input" value="gS7;hJ1(eR3<hG4?" readonly>
+              <input type="text" id="securityKeyInput" class="code-input" value="" readonly>
               <button class="btn btn-secondary" onclick="generateNewKey()" data-i18n="btn_new_key">Новий ключ</button>
               <button class="btn btn-primary" onclick="togglePairDrawer()" data-i18n="btn_connect">З'єднати</button>
               <button class="btn-icon" id="togglePairDrawerBtn" onclick="togglePairDrawer()" title="Розгорнути з'єднання" data-i18n-title="btn_expand">
@@ -1046,8 +1067,9 @@
               <div class="monitor-sub" data-i18n="primary_device">Головний пристрій</div>
             </div>
 
-            <div class="monitor-box empty" id="peerAvailableSlot">
-              <div style="font-size: 11px; color: var(--text-dark);" data-i18n="slot_available">Доступно</div>
+            <div class="monitor-box empty" id="peerAvailableSlot" onclick="selectNearbyDevice()">
+              <div class="monitor-label" id="nearbyDeviceName" data-i18n="slot_available">Доступно</div>
+              <div class="monitor-sub" id="nearbyDeviceStatus" style="display: none;"></div>
             </div>
 
             <div class="monitor-box" id="monitorBoxPeer" style="display: none; position: relative;" onclick="togglePeerDisconnectMenu(event)" oncontextmenu="togglePeerDisconnectMenu(event)">
@@ -1068,11 +1090,19 @@
             <div class="monitor-box empty">
               <div style="font-size: 11px; color: var(--text-dark);" data-i18n="slot_available">Доступно</div>
             </div>
+
+            <div class="monitor-box empty">
+              <div style="font-size: 11px; color: var(--text-dark);" data-i18n="slot_available">Доступно</div>
+            </div>
+
+            <div class="monitor-box empty">
+              <div style="font-size: 11px; color: var(--text-dark);" data-i18n="slot_available">Доступно</div>
+            </div>
           </div>
 
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
             <div style="display: flex; gap: 8px; align-items: center;">
-              <span style="font-size: 12px; color: var(--text-dark);" data-i18n="transition_edge">Межа переходу:</span>
+              <span style="font-size: 12px; color: var(--text-dark);" data-i18n="transition_edge">Межа виходу з цього ПК:</span>
               <button class="btn btn-secondary" id="edgeToggleBtn" onclick="cycleEdge()">Права межа</button>
             </div>
             <div style="display: flex; gap: 8px; align-items: center;">
@@ -1080,6 +1110,7 @@
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
                 <span data-i18n="btn_reconnect_device">Перепідключити пристрій</span>
               </button>
+              <button class="btn btn-secondary" onclick="configurePrivateNetwork()" style="font-size: 12px;" data-i18n="btn_allow_lan">Дозволити доступ у локальній мережі</button>
             </div>
           </div>
         </div>
@@ -1138,7 +1169,7 @@
               </div>
               <div class="setting-text">
                 <div class="setting-name" data-i18n="clip_sharing_name">Спільний буфер обміну</div>
-                <div class="setting-desc" data-i18n="clip_sharing_desc">Скопійований текст стає автоматично доступним на іншому комп'ютері.</div>
+                <div class="setting-desc" data-i18n="clip_sharing_desc">Скопійовані текст і скріншоти стають доступними на іншому комп'ютері.</div>
               </div>
             </div>
             <div class="setting-right">
@@ -1156,7 +1187,7 @@
               </div>
               <div class="setting-text">
                 <div class="setting-name" data-i18n="mod_transfer_name">Перетягування файлів (Drag & Drop)</div>
-                <div class="setting-desc" data-i18n="mod_transfer_desc">Перетягуйте файли через межу екрана або копіюйте через буфер обміну</div>
+                <div class="setting-desc" data-i18n="mod_transfer_desc">Перетягуйте файли між пристроями через межу екрана</div>
               </div>
             </div>
             <div class="setting-right">
@@ -1164,9 +1195,6 @@
                 <input type="checkbox" id="kvmTransferToggle" checked onchange="toggleFileTransfer(this.checked)">
                 <span class="slider"></span>
               </label>
-              <button class="btn btn-secondary" onclick="openReceivedFolder()" title="Відкрити отримані файли" data-i18n-title="open_folder_btn">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h7l2 2h9v11H3z"/><path d="M3 7V5a2 2 0 0 1 2-2h5l2 2"/></svg>
-              </button>
             </div>
           </div>
 
@@ -1212,7 +1240,7 @@
           </div>
         </div>
 
-        <div class="setting-card">
+        <div class="setting-card mirror-source-card">
           <div class="setting-left">
             <div class="setting-text">
               <div class="setting-name" data-i18n="mirror_source_name">Що показувати</div>
@@ -1220,7 +1248,7 @@
             </div>
           </div>
           <div class="setting-right">
-            <select id="mirrorSourceSelect" class="select-input"></select>
+            <select id="mirrorSourceSelect" class="select-input" onchange="updateMirrorSourceTitle(this)"></select>
             <button class="btn btn-secondary" onclick="refreshCaptureWindows()" data-i18n="mirror_refresh">Оновити</button>
           </div>
         </div>
@@ -1249,7 +1277,7 @@
         <div class="section-title" data-i18n="sec_activation">Активація</div>
         <div class="setting-card">
           <div class="setting-left">
-            <div class="setting-icon" style="color: #10b981;">
+            <div class="setting-icon">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10v4h4l5 4V6l-5 4H4z"/><path d="M17 9a5 5 0 0 1 0 6"/><path d="M20 6a9 9 0 0 1 0 12"/></svg>
             </div>
             <div class="setting-text">
@@ -1299,7 +1327,7 @@
         <div class="section-title" data-i18n="sec_activation">Активація</div>
         <div class="setting-card">
           <div class="setting-left">
-            <div class="setting-icon" style="color: #f97316;">
+            <div class="setting-icon">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h7l2 2h9v10H3z"/><path d="M7 3h7l2 2"/><path d="M8 14h8"/><path d="m13 11 3 3-3 3"/></svg>
             </div>
             <div class="setting-text">
@@ -1310,8 +1338,8 @@
           <div class="setting-right"><label class="switch"><input type="checkbox" id="syncMasterToggle" onchange="toggleFolderSync(this.checked)"><span class="slider"></span></label></div>
         </div>
         <div class="section-title" data-i18n="sync_create_title">Підключення папки</div>
-        <div class="setting-card" style="display: block;">
-          <div class="setting-desc" data-i18n="sync_setup_hint" style="margin-bottom: 14px;">Виберіть папку та комп’ютер. Після підтвердження автоматично передаватимуться тільки нові файли.</div>
+        <div class="setting-card sync-connection-card">
+          <div class="setting-desc" data-i18n="sync_setup_hint" style="margin-bottom: 14px;">Після підключення нові файли передаватимуться автоматично. Для синхронізації наявних файлів натисніть «Синхронізувати».</div>
           <div class="sync-form-grid">
             <label><span data-i18n="sync_peer_label">Інший комп’ютер</span><select id="syncPeerSelect" class="select-input"></select></label>
             <label><span data-i18n="sync_folder_label">Папка на цьому ПК</span><span class="sync-inline"><input id="syncFolderPath" class="code-input" type="text" readonly><button class="btn btn-secondary" onclick="pickSyncFolder()" data-i18n="sync_browse">Огляд</button></span></label>
@@ -1336,12 +1364,12 @@
             </div>
             <div class="setting-text">
               <div class="setting-name" data-i18n="mobile_service_name">Служба мобільного веб-доступу</div>
-              <div class="setting-desc" id="mobileStatusDesc" data-i18n="mobile_service_desc">Локальний веб-сервер активний. Доступний для пристроїв у домашній Wi-Fi мережі.</div>
+              <div class="setting-desc" id="mobileStatusDesc" data-i18n="mobile_service_disabled">Службу вимкнено. Увімкніть її для доступу зі смартфона.</div>
             </div>
           </div>
           <div class="setting-right">
             <label class="switch">
-              <input type="checkbox" id="mobileServerMasterToggle" checked onchange="toggleMobileServer(this.checked)">
+              <input type="checkbox" id="mobileServerMasterToggle" onchange="toggleMobileServer(this.checked)">
               <span class="slider"></span>
             </label>
           </div>
@@ -1392,7 +1420,7 @@
 
         <div class="setting-card">
           <div class="setting-left">
-            <div class="setting-icon" style="color: #f59e0b;">
+            <div class="setting-icon">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
             </div>
             <div class="setting-text">
@@ -1411,7 +1439,7 @@
 
         <div class="setting-card">
           <div class="setting-left">
-            <div class="setting-icon" style="color: #38bdf8;">
+            <div class="setting-icon">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
             </div>
             <div class="setting-text">
@@ -1472,7 +1500,7 @@
     </div>
     <div style="min-width: 0;">
       <div style="font-size: 13px; font-weight: 600; color: var(--text);" id="toastTitle" data-i18n="toast_file_received">Отримано файл</div>
-      <div style="font-size: 11px; color: var(--text-muted);" id="toastDesc" data-i18n="toast_file_desc">Збережено у Завантаження\NerveDesk та готово до вставки</div>
+      <div style="font-size: 11px; color: var(--text-muted);" id="toastDesc" data-i18n="toast_file_desc">Збережено у папку призначення</div>
     </div>
     <button class="btn btn-secondary" onclick="openReceivedFolder()" style="padding: 4px 10px; font-size: 11px; margin-left: 8px;" data-i18n="toast_open_btn">Відкрити</button>
   </div>
@@ -1515,7 +1543,7 @@
         mod_cast_name: "Дублювання екрана",
         mod_cast_desc: "Показувати екран ПК на ноутбуці через мережу",
         mod_transfer_name: "Перетягування файлів (Drag & Drop)",
-        mod_transfer_desc: "Перетягуйте файли через межу екрана або копіюйте через буфер обміну",
+        mod_transfer_desc: "Перетягуйте файли між пристроями через межу екрана",
         mod_mobile_name: "Мобільний пульт та екран",
         mod_mobile_desc: "Керуйте мишею по зображенню та використовуйте тачпад зі смартфона",
         mod_audio_name: "Аудіоміст",
@@ -1527,7 +1555,7 @@
         sync_service_name: "Служба синхронізації",
         sync_service_desc: "Автоматично передавати нові файли між ПК",
         sync_create_title: "Підключення папки",
-        sync_setup_hint: "Виберіть папку та комп’ютер. Після підтвердження автоматично передаватимуться тільки нові файли.",
+        sync_setup_hint: "Після підключення нові файли передаватимуться автоматично. Для синхронізації наявних файлів натисніть «Синхронізувати».",
         sync_peer_label: "Інший комп’ютер",
         sync_folder_label: "Папка на цьому ПК",
         sync_code_label: "Спільний код пари",
@@ -1536,11 +1564,11 @@
         sync_add: "Підключити папку",
         sync_pairs_title: "Пари та історія",
         sync_no_pairs: "Папку ще не підключено",
-        sync_peer_select: "Виберіть комп’ютер",
+        sync_peer_select: "Обрати комп’ютер",
         sync_preview: "Переглянути зміни",
         sync_approve: "Підтвердити пару",
         sync_request_title: "Запит на синхронізацію папки",
-        sync_request_description: "Комп’ютер {name} пропонує підключити папку. Після підтвердження її буде створено тут, якщо вона ще не існує. Наявні файли не передаватимуться.",
+        sync_request_description: "Комп’ютер {name} пропонує підключити папку. Після підтвердження її буде створено тут, якщо вона ще не існує. Наявні файли передаватимуться лише після ручної синхронізації.",
         sync_request_accept: "Підтвердити",
         sync_request_decline: "Відхилити",
         sync_now: "Синхронізувати",
@@ -1587,7 +1615,7 @@
         audio_stop: "Зупинити передавання",
         audio_start_receive: "Отримувати звук",
         audio_stop_receive: "Зупинити отримання",
-        audio_no_target: "Виберіть пристрій",
+        audio_no_target: "Обрати комп’ютер",
         open_mobile_qr: "Відкрити QR-код та налаштування",
         open_folder_btn: "Відкрити отримані файли",
 
@@ -1613,6 +1641,8 @@
         this_pc: "Цей ПК",
         primary_device: "Головний пристрій",
         slot_available: "Доступно",
+        device_nearby: "Знайдено · натисніть, щоб підключити",
+        btn_allow_lan: "Дозволити доступ у локальній мережі",
         status_connected: "Підключено",
         status_connecting: "З'єднання...",
         status_disabled: "Вимкнено",
@@ -1623,7 +1653,7 @@
         btn_disable: "Вимкнути пристрій",
         btn_enable: "Увімкнути пристрій",
         btn_forget: "Забути пристрій",
-        transition_edge: "Межа переходу:",
+        transition_edge: "Межа виходу з цього ПК:",
         edge_right: "Права межа",
         edge_top: "Верхня межа",
         edge_left: "Ліва межа",
@@ -1634,7 +1664,7 @@
         kb_sharing_name: "Спільний доступ до клавіатури",
         kb_sharing_desc: "Передавати натискання клавіш на віддалений ПК, коли курсор переходить межу екрана.",
         clip_sharing_name: "Спільний буфер обміну",
-        clip_sharing_desc: "Скопійований текст стає автоматично доступним на іншому комп'ютері.",
+        clip_sharing_desc: "Скопійовані текст і скріншоти стають доступними на іншому комп'ютері.",
         hotkey_name: "Аварійне повернення керування",
         hotkey_desc: "Натисніть цю комбінацію для миттєвого повернення фокусу на головний комп'ютер.",
 
@@ -1649,7 +1679,7 @@
         mirror_source_desc: "Вікно Word може бути за Meet на ПК, але не згортайте його.",
         mirror_entire_screen: "Увесь головний екран",
         mirror_refresh: "Оновити",
-        mirror_no_target: "Пристроїв не знайдено",
+        mirror_no_target: "Обрати комп’ютер",
         stream_name: "Трансляція екрана",
         stream_desc: "Виберіть ноутбук і вміст, який потрібно показати, а потім почніть трансляцію.",
         btn_project_start: "Почати трансляцію",
@@ -1694,7 +1724,7 @@
         alert_proj_error: "Помилка трансляції: ",
         alert_folder_err: "Не вдалося відкрити теку файлів: ",
         toast_file_received: "Отримано файл: ",
-        toast_file_desc: "Збережено у Завантаження\\NerveDesk та готово до вставки",
+        toast_file_desc: "Збережено у папку призначення",
         toast_open_btn: "Відкрити"
       },
       en: {
@@ -1723,7 +1753,7 @@
         mod_cast_name: "Screen Mirror",
         mod_cast_desc: "Show this PC's screen on a laptop over the network",
         mod_transfer_name: "File Drag & Drop",
-        mod_transfer_desc: "Drag files across screen borders with mouse or copy to clipboard",
+        mod_transfer_desc: "Drag files between devices across screen borders",
         mod_mobile_name: "Mobile Remote & Screen",
         mod_mobile_desc: "Control PC cursor over live image and use phone as trackpad",
         mod_audio_name: "Audio Bridge",
@@ -1735,7 +1765,7 @@
         sync_service_name: "Folder Sync Service",
         sync_service_desc: "Automatically share new files between PCs",
         sync_create_title: "Folder connection",
-        sync_setup_hint: "Choose a folder and a computer. After approval, only newly created files are shared automatically.",
+        sync_setup_hint: "New files share automatically after connection. Press Sync now to include files already in the folders.",
         sync_peer_label: "Other computer",
         sync_folder_label: "Folder on this PC",
         sync_code_label: "Shared pair code",
@@ -1744,11 +1774,11 @@
         sync_add: "Connect folder",
         sync_pairs_title: "Pairs and history",
         sync_no_pairs: "No folder connected yet",
-        sync_peer_select: "Select a computer",
+        sync_peer_select: "Choose a computer",
         sync_preview: "Review changes",
         sync_approve: "Approve pair",
         sync_request_title: "Folder sync request",
-        sync_request_description: "{name} wants to connect this folder. It will be created here after approval if needed. Existing files will not be transferred.",
+        sync_request_description: "{name} wants to connect this folder. It will be created here after approval if needed. Existing files transfer only after manual sync.",
         sync_request_accept: "Approve",
         sync_request_decline: "Decline",
         sync_now: "Sync now",
@@ -1795,7 +1825,7 @@
         audio_stop: "Stop streaming",
         audio_start_receive: "Receive audio",
         audio_stop_receive: "Stop receiving",
-        audio_no_target: "Select a device",
+        audio_no_target: "Choose a computer",
         open_mobile_qr: "Open QR code & settings",
         open_folder_btn: "Open Received Files",
 
@@ -1821,6 +1851,8 @@
         this_pc: "This PC",
         primary_device: "Primary Device",
         slot_available: "Available",
+        device_nearby: "Nearby · click to connect",
+        btn_allow_lan: "Allow local network access",
         status_connected: "Connected",
         status_connecting: "Connecting...",
         status_disabled: "Disabled",
@@ -1831,7 +1863,7 @@
         btn_disable: "Disable Device",
         btn_enable: "Enable Device",
         btn_forget: "Forget Device",
-        transition_edge: "Transition Edge:",
+        transition_edge: "Exit Edge on This PC:",
         edge_right: "Right Edge",
         edge_top: "Top Edge",
         edge_left: "Left Edge",
@@ -1842,7 +1874,7 @@
         kb_sharing_name: "Share Keyboard across computers",
         kb_sharing_desc: "Forward keystrokes seamlessly to the remote computer when cursor crosses screen edges.",
         clip_sharing_name: "Share Clipboard across computers",
-        clip_sharing_desc: "Text copied to the clipboard will be seamlessly available on the other device.",
+        clip_sharing_desc: "Copied text and screenshots become available on the other device.",
         hotkey_name: "Emergency Escape Hotkey",
         hotkey_desc: "Press this combination to immediately release input focus back to the primary computer.",
 
@@ -1857,7 +1889,7 @@
         mirror_source_desc: "Word can stay behind Meet on this PC; keep its window open and not minimized.",
         mirror_entire_screen: "Entire primary screen",
         mirror_refresh: "Refresh",
-        mirror_no_target: "No devices found",
+        mirror_no_target: "Choose a computer",
         stream_name: "Screen stream",
         stream_desc: "Choose the laptop and what to show, then start streaming.",
         btn_project_start: "Project Display",
@@ -1902,7 +1934,7 @@
         alert_proj_error: "Projection error: ",
         alert_folder_err: "Failed to open received folder: ",
         toast_file_received: "File Received: ",
-        toast_file_desc: "Saved to Downloads\\NerveDesk and ready to paste",
+        toast_file_desc: "Saved to the destination folder",
         toast_open_btn: "Open"
       }
     };
@@ -1937,6 +1969,11 @@
         const key = el.getAttribute('data-i18n-title');
         el.title = t(key);
       });
+
+      for (const [id, key] of [['mirrorTargetSelect', 'mirror_no_target'], ['audioTargetSelect', 'audio_no_target'], ['syncPeerSelect', 'sync_peer_select']]) {
+        const placeholder = document.getElementById(id)?.querySelector('option[value=""]');
+        if (placeholder) placeholder.textContent = t(key);
+      }
 
       updateDynamicTexts();
     }
@@ -2072,6 +2109,7 @@
     async function toggleMobileServer(checked) {
       try {
         await callTauri('toggle_mobile_remote', { enable: checked });
+        localStorage.setItem('mobile_module_enabled', String(checked));
         await updateMobileRemoteInfo();
       } catch (e) {}
       refreshMetrics();
@@ -2095,11 +2133,51 @@
     let isPeerDisabled = false;
     let isProjecting = false;
     let isReconnecting = false;
+    let reverseKvmStarting = false;
+    let reverseKvmRetryAt = 0;
     let lastMetrics = null;
     let lastAudioStatus = null;
     let lastSyncStatus = null;
     let addingSyncPair = false;
+    const syncingPairs = new Set();
+    let manualSyncError = '';
     let pendingSyncRequestId = null;
+    let nearbyDevice = null;
+
+    async function refreshNearbyDevice() {
+      if (localStorage.getItem('paired_device_name')) return;
+      try {
+        const devices = await callTauri('discover_devices');
+        nearbyDevice = devices[0] || null;
+      } catch (_) {
+        nearbyDevice = null;
+      }
+      const slot = document.getElementById('peerAvailableSlot');
+      const name = document.getElementById('nearbyDeviceName');
+      const status = document.getElementById('nearbyDeviceStatus');
+      slot.classList.toggle('nearby', !!nearbyDevice);
+      name.textContent = nearbyDevice ? nearbyDevice.name.toUpperCase() : t('slot_available');
+      status.textContent = nearbyDevice ? t('device_nearby') : '';
+      status.style.display = nearbyDevice ? '' : 'none';
+    }
+
+    function selectNearbyDevice() {
+      if (!nearbyDevice) return;
+      document.getElementById('peerDeviceNameInput').value = nearbyDevice.name;
+      const drawer = document.getElementById('pairDrawer');
+      if (drawer.style.display !== 'block') togglePairDrawer();
+      drawer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      document.getElementById('peerKeyInput').focus();
+    }
+
+    async function configurePrivateNetwork() {
+      try {
+        await callTauri('configure_private_network');
+        setTimeout(refreshNearbyDevice, 2500);
+      } catch (error) {
+        alert(String(error));
+      }
+    }
 
     function setStatus(element, state, label) {
       if (!element) return;
@@ -2195,7 +2273,7 @@
 
     async function refreshAudioTargets() {
       const select = document.getElementById('audioTargetSelect');
-      const previous = select.value || localStorage.getItem('audio_target_ip') || '';
+      const previous = select.value;
       let devices = [];
       try { devices = await callTauri('discover_devices'); } catch (_) {}
       select.replaceChildren();
@@ -2210,11 +2288,8 @@
         option.textContent = device.name;
         select.appendChild(option);
       }
-      const paired = localStorage.getItem('paired_device_name');
       if (devices.some(device => device.ip === previous)) select.value = previous;
-      else if (paired && devices.some(device => device.name.toLowerCase() === paired.toLowerCase())) {
-        select.value = devices.find(device => device.name.toLowerCase() === paired.toLowerCase()).ip;
-      } else if (devices.length === 1) select.value = devices[0].ip;
+      else select.value = '';
       if (select.value) localStorage.setItem('audio_target_ip', select.value);
     }
 
@@ -2299,10 +2374,8 @@
         option.textContent = paired;
         select.appendChild(option);
       }
-      if (devices.some(device => device.ip === previous)) select.value = previous;
-      else if (paired && devices.some(device => device.name.toLowerCase() === paired.toLowerCase())) {
-        select.value = devices.find(device => device.name.toLowerCase() === paired.toLowerCase()).ip;
-      } else if (pairedIp) select.value = pairedIp;
+      if (Array.from(select.options).some(option => option.value === previous)) select.value = previous;
+      else select.value = '';
     }
 
     async function pickSyncFolder() {
@@ -2331,6 +2404,21 @@
       finally {
         addingSyncPair = false;
         document.getElementById('syncAddButton').disabled = false;
+      }
+    }
+
+    async function syncFolderNow(id) {
+      if (syncingPairs.has(id)) return;
+      syncingPairs.add(id);
+      manualSyncError = '';
+      if (lastSyncStatus) renderSyncStatus(lastSyncStatus);
+      try {
+        await callTauri('sync_folder_now', { id });
+      } catch (err) {
+        manualSyncError = String(err);
+      } finally {
+        syncingPairs.delete(id);
+        await refreshSyncStatus();
       }
     }
 
@@ -2369,7 +2457,7 @@
       }
       document.getElementById('homeSyncToggle').checked = status.enabled;
       document.getElementById('syncMasterToggle').checked = status.enabled;
-      document.getElementById('syncGlobalStatus').textContent = status.pairs.length ? (status.error || t(status.syncing ? 'sync_busy' : 'sync_idle')) : '';
+      document.getElementById('syncGlobalStatus').textContent = manualSyncError || (status.pairs.length ? (status.error || t(status.syncing ? 'sync_busy' : 'sync_idle')) : '');
       const list = document.getElementById('syncPairsList');
       list.replaceChildren();
       for (const pair of status.pairs) {
@@ -2390,6 +2478,9 @@
         info.append(name, folder, detail);
         const actions = document.createElement('div');
         actions.className = 'sync-actions';
+        const syncButton = syncActionButton(t('sync_now'), () => syncFolderNow(pair.id), false);
+        syncButton.disabled = !status.enabled || !pair.approved || status.syncing || syncingPairs.has(pair.id);
+        actions.appendChild(syncButton);
         actions.appendChild(syncActionButton(t('sync_remove'), () => removeSyncPair(pair.id)));
         card.append(info, actions);
         list.appendChild(card);
@@ -2465,6 +2556,7 @@
         await callTauri('pair_device', { targetName: name, securityKey: key });
         localStorage.setItem('paired_device_name', name);
         localStorage.setItem('paired_security_key', key);
+        localStorage.setItem('peer_device_disabled', 'false');
         if (localStorage.getItem('kvm_module_enabled') === 'true') {
           await callTauri('start_host', { targetIp: name, streamVideo: false });
         }
@@ -2576,7 +2668,7 @@
       } catch (err) {}
       localStorage.removeItem('paired_device_name');
       localStorage.removeItem('paired_security_key');
-      localStorage.removeItem('peer_device_disabled');
+      localStorage.setItem('peer_device_disabled', 'true');
       isPeerDisabled = false;
       const menu = document.getElementById('peerContextMenu');
       if (menu) menu.style.display = 'none';
@@ -2596,12 +2688,16 @@
       }
     }
 
-    function cycleEdge() {
+    async function cycleEdge() {
       const edges = ['Right', 'Top', 'Left', 'Bottom'];
       const idx = edges.indexOf(activeEdge);
-      activeEdge = edges[(idx + 1) % edges.length];
-      document.getElementById('edgeToggleBtn').innerText = getEdgeLabel(activeEdge);
-      callTauri('set_screen_edge', { edge: activeEdge }).catch(() => {});
+      const nextEdge = edges[(idx + 1) % edges.length];
+      try {
+        await callTauri('set_screen_edge', { edge: nextEdge });
+        activeEdge = nextEdge;
+        localStorage.setItem('screen_edge', activeEdge);
+        document.getElementById('edgeToggleBtn').innerText = getEdgeLabel(activeEdge);
+      } catch (err) { alert(String(err)); }
     }
 
     async function toggleKvmMaster(checked) {
@@ -2628,15 +2724,21 @@
       for (const window of windows) {
         const option = document.createElement('option');
         option.value = window.id;
-        option.textContent = window.title;
+        option.textContent = window.title.length > 64 ? `${window.title.slice(0, 61)}…` : window.title;
+        option.title = window.title;
         select.appendChild(option);
       }
       if (windows.some(window => window.id === previous)) select.value = previous;
+      updateMirrorSourceTitle(select);
+    }
+
+    function updateMirrorSourceTitle(select) {
+      select.title = select.selectedOptions[0]?.title || select.selectedOptions[0]?.textContent || '';
     }
 
     async function refreshMirrorTargets() {
       const select = document.getElementById('mirrorTargetSelect');
-      const previous = select.value || localStorage.getItem('mirror_target_ip') || '';
+      const previous = select.value;
       let devices = [];
       try {
         devices = await callTauri('discover_devices');
@@ -2660,15 +2762,8 @@
         option.textContent = paired;
         select.appendChild(option);
       }
-      if (devices.some(device => device.ip === previous)) {
-        select.value = previous;
-      } else if (paired && devices.some(device => device.name.toLowerCase() === paired.toLowerCase())) {
-        select.value = devices.find(device => device.name.toLowerCase() === paired.toLowerCase()).ip;
-      } else if (devices.length === 1) {
-        select.value = devices[0].ip;
-      } else if (paired) {
-        select.value = paired;
-      }
+      if (Array.from(select.options).some(option => option.value === previous)) select.value = previous;
+      else select.value = '';
       saveMirrorTarget();
     }
 
@@ -2713,21 +2808,23 @@
       refreshMetrics();
     }
 
+    let receivedFilePath = null;
     async function openReceivedFolder() {
       try {
-        await callTauri('open_received_folder');
+        await callTauri('open_received_folder', { path: receivedFilePath });
       } catch (e) {
         alert(t('alert_folder_err') + e);
       }
     }
 
-    function showFileToast(fileName) {
+    function showFileToast(paths) {
       const toast = document.getElementById('fileToast');
       const title = document.getElementById('toastTitle');
       const desc = document.getElementById('toastDesc');
       if (toast && title && desc) {
-        title.innerText = t('toast_file_received') + fileName;
-        desc.innerText = t('toast_file_desc');
+        receivedFilePath = paths[0] || null;
+        title.innerText = t('toast_file_received') + paths.map(path => path.split(/[\\/]/).pop()).join(', ');
+        desc.innerText = receivedFilePath ? receivedFilePath.slice(0, Math.max(receivedFilePath.lastIndexOf('\\'), receivedFilePath.lastIndexOf('/'))) : t('toast_file_desc');
         toast.style.display = 'flex';
         setTimeout(() => {
           toast.style.display = 'none';
@@ -2755,6 +2852,14 @@
 
     async function initSystemInfo() {
       setTheme(currentTheme);
+      const savedEdge = localStorage.getItem('screen_edge');
+      if (['Right', 'Top', 'Left', 'Bottom'].includes(savedEdge)) {
+        try {
+          await callTauri('set_screen_edge', { edge: savedEdge });
+          activeEdge = savedEdge;
+          document.getElementById('edgeToggleBtn').innerText = getEdgeLabel(activeEdge);
+        } catch (_) {}
+      }
       document.getElementById('audioDirectionSelect').value = localStorage.getItem('audio_direction') === 'receive' ? 'receive' : 'send';
       const kvmEnabled = localStorage.getItem('kvm_module_enabled') === 'true';
       const mirrorEnabled = localStorage.getItem('mirror_module_enabled') === 'true';
@@ -2762,6 +2867,9 @@
       await callTauri('set_module_enabled', { module: 'mirror', enabled: mirrorEnabled }).catch(() => {});
       if (localStorage.getItem('audio_module_enabled') === 'true') {
         await callTauri('set_audio_enabled', { enabled: true }).catch(() => {});
+      }
+      if (localStorage.getItem('mobile_module_enabled') === 'true') {
+        await callTauri('toggle_mobile_remote', { enable: true }).catch(() => {});
       }
 
       try {
@@ -2777,7 +2885,7 @@
         if (window.__TAURI__ && window.__TAURI__.event && window.__TAURI__.event.listen) {
           window.__TAURI__.event.listen('file-received', (e) => {
             if (e.payload && e.payload.length > 0) {
-              showFileToast(e.payload.join(', '));
+              showFileToast(e.payload);
             }
           });
         }
@@ -2804,6 +2912,8 @@
       const savedKey = localStorage.getItem('paired_security_key');
       if (savedKey) {
         document.getElementById('securityKeyInput').value = savedKey;
+      } else {
+        generateNewKey();
       }
 
       const kbSharing = localStorage.getItem('keyboard_sharing_enabled') !== 'false';
@@ -2835,6 +2945,21 @@
       try {
         const m = await callTauri('get_metrics');
         lastMetrics = m;
+        if (m.peer_online && m.peer_device && !m.kvm_active && !isReconnecting &&
+            localStorage.getItem('kvm_module_enabled') === 'true' &&
+            localStorage.getItem('peer_device_disabled') !== 'true' &&
+            Date.now() >= reverseKvmRetryAt && !reverseKvmStarting) {
+          reverseKvmStarting = true;
+          reverseKvmRetryAt = Date.now() + 5000;
+          try {
+            const peerIp = await callTauri('get_paired_peer_ip');
+            if (peerIp) await callTauri('start_host', { targetIp: peerIp, streamVideo: false });
+          } catch (err) {
+            console.error('Failed to activate reverse KVM:', err);
+          } finally {
+            reverseKvmStarting = false;
+          }
+        }
         isProjecting = m.projection_active;
         const castBtn = document.getElementById('btnCastToggle');
         castBtn.innerText = isProjecting ? t('btn_project_stop') : t('btn_project_start');
@@ -2866,6 +2991,8 @@
     }
     setInterval(refreshMetrics, 1000);
     refreshMetrics();
+    setInterval(refreshNearbyDevice, 4000);
+    refreshNearbyDevice();
   </script>
 </body>
 </html>

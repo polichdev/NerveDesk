@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use tauri::{command, State};
+use tauri::{command, Manager, State};
 use tokio::io::AsyncReadExt;
 use tracing::{error, info, warn};
 
@@ -26,6 +26,28 @@ use net::{
 #[command]
 pub fn get_device_name() -> String {
     std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Desktop-PC".into())
+}
+
+#[command]
+pub fn quit_app(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
+#[command]
+pub fn show_main_window(app: tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+    if let Some(panel) = app.get_webview_window("tray-panel") {
+        let _ = panel.hide();
+    }
+}
+
+#[command]
+pub fn configure_private_network() -> Result<(), String> {
+    crate::firewall::request_private_lan()
 }
 
 #[command]
@@ -114,7 +136,8 @@ pub fn get_metrics(state: State<AppState>) -> AppMetrics {
 pub async fn discover_devices(state: State<'_, AppState>) -> Result<Vec<DiscoveredDevice>, String> {
     let my_name = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Host-PC".into());
     let (sw, sh) = get_screen_dimensions();
-    let beacon = DiscoveryBeacon::new(my_name, DeviceRole::Host, 48100, 48101, sw, sh);
+    let beacon = DiscoveryBeacon::new(my_name, DeviceRole::Host, 48100, 48101, sw, sh)
+        .with_edge(state.screen_edge.lock().unwrap().clone());
 
     if let Ok(emitter) = DiscoveryBeaconEmitter::new(beacon).await {
         let _ = emitter.emit_beacon().await;
@@ -161,7 +184,8 @@ pub async fn pair_device(
 
     let my_name = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Desktop-PC".into());
     let (sw, sh) = get_screen_dimensions();
-    let beacon = DiscoveryBeacon::new(my_name, DeviceRole::Host, 48100, 48101, sw, sh);
+    let beacon = DiscoveryBeacon::new(my_name, DeviceRole::Host, 48100, 48101, sw, sh)
+        .with_edge(state.screen_edge.lock().unwrap().clone());
     if let Ok(emitter) = DiscoveryBeaconEmitter::new(beacon).await {
         let _ = emitter.emit_beacon().await;
     }
@@ -222,13 +246,15 @@ pub async fn start_host(
     };
 
     let (mut client_w, mut client_h) = (0, 0);
+    let mut peer_edge = input::opposite_edge(screen_edge);
     if let Ok(guard) = state.discovered_devices.lock() {
         if let Some(dev) = guard.get(&target_addr.ip().to_string()) {
             client_w = dev.screen_width as i32;
             client_h = dev.screen_height as i32;
+            peer_edge = parse_screen_edge(&dev.screen_edge).unwrap_or(peer_edge);
         }
     }
-    input::set_active_edge_and_resolution(screen_edge, client_w, client_h);
+    input::set_active_edges_and_resolution(screen_edge, peer_edge, client_w, client_h);
 
     let is_running_in = state.is_kvm_active.clone();
     is_running_in.store(true, Ordering::SeqCst);
@@ -269,9 +295,10 @@ pub async fn start_host(
         while is_running_in.load(Ordering::SeqCst) {
             match event_rx.try_recv() {
                 Ok(event) => {
-                    if let InputEvent::FileDrag { active, .. } = event {
+                    if let InputEvent::FileDrag { active, file_name } = event {
                         if active && is_file_transfer_enabled.load(Ordering::Relaxed) {
-                            let dragged_files = net::get_dragged_or_selected_files();
+                            let dragged_files =
+                                net::get_dragged_files(input::take_drag_source_window());
                             if let Some(first) = dragged_files.first() {
                                 let file_name = first
                                     .file_name()
@@ -291,19 +318,24 @@ pub async fn start_host(
                                 };
                                 let addr = target_file_addr.clone();
                                 tokio::spawn(async move {
-                                    let _ = net::FileTransferClient::send_files(
+                                    if let Err(e) = net::FileTransferClient::send_files(
                                         &addr,
                                         &token,
                                         &dragged_files,
                                     )
-                                    .await;
+                                    .await
+                                    {
+                                        warn!("Dragged file transfer failed: {e}");
+                                    }
                                 });
+                            } else {
+                                warn!("No files found for drag source window");
                             }
                         } else {
                             let _ = input_sender
                                 .send_event(&InputEvent::FileDrag {
                                     active: false,
-                                    file_name: String::new(),
+                                    file_name,
                                 })
                                 .await;
                         }
@@ -599,21 +631,31 @@ pub fn set_screen_edge(edge: String, state: State<'_, AppState>) -> Result<Strin
     };
 
     let (mut client_w, mut client_h) = (0, 0);
+    let mut peer_edge = input::opposite_edge(screen_edge);
     if let Ok(guard) = state.discovered_devices.lock() {
-        if let Ok(peer_guard) = state.peer_device.lock() {
-            if let Some(ref peer) = *peer_guard {
-                if let Some(dev) = guard.get(peer) {
-                    client_w = dev.screen_width as i32;
-                    client_h = dev.screen_height as i32;
-                }
+        if let Ok(peer_guard) = state.paired_peer_ip.lock() {
+            if let Some(dev) = peer_guard.as_ref().and_then(|ip| guard.get(ip)) {
+                client_w = dev.screen_width as i32;
+                client_h = dev.screen_height as i32;
+                peer_edge = parse_screen_edge(&dev.screen_edge).unwrap_or(peer_edge);
             }
         }
     }
 
-    input::set_active_edge_and_resolution(screen_edge, client_w, client_h);
+    input::set_active_edges_and_resolution(screen_edge, peer_edge, client_w, client_h);
     *state.screen_edge.lock().unwrap() = edge.clone();
     info!("Active crossing boundary adjusted to: {}", edge);
     Ok(format!("Screen edge set to {}", edge))
+}
+
+fn parse_screen_edge(edge: &str) -> Option<input::ScreenEdge> {
+    match edge {
+        "Left" => Some(input::ScreenEdge::Left),
+        "Right" => Some(input::ScreenEdge::Right),
+        "Top" => Some(input::ScreenEdge::Top),
+        "Bottom" => Some(input::ScreenEdge::Bottom),
+        _ => None,
+    }
 }
 
 #[command]
@@ -669,8 +711,21 @@ pub fn get_display_driver_package_status() -> bool {
 }
 
 #[command]
-pub async fn open_received_folder() -> Result<(), String> {
-    let dir = net::get_default_transfer_dir();
+pub async fn open_received_folder(path: Option<String>) -> Result<(), String> {
+    let dir = path
+        .as_deref()
+        .map(std::path::Path::new)
+        .and_then(|p| {
+            if p.is_file() {
+                p.parent()
+            } else if p.is_dir() {
+                Some(p)
+            } else {
+                None
+            }
+        })
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_else(net::get_default_transfer_dir);
     let _ = std::process::Command::new("explorer").arg(&dir).spawn();
     Ok(())
 }

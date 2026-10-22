@@ -60,6 +60,9 @@ fn terminate_other_instances() {
 }
 
 fn main() {
+    if nervedesk_ui_lib::handle_firewall_cli() {
+        return;
+    }
     if nervedesk_ui_lib::handle_driver_cli() {
         return;
     }
