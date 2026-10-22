@@ -681,7 +681,7 @@ mod tests {
     fn test_heartbeat_roundtrip() {
         let mut buf = [0u8; MAX_PACKET_SIZE];
         let original_event = InputEvent::Heartbeat {
-            device_name: "DESKTOP-EH07EJM".to_string(),
+            device_name: "DEVICE-TEST".to_string(),
         };
 
         let len = encode_packet(&original_event, 5, 2000, &mut buf).expect("Encode failed");
