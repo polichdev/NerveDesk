@@ -20,20 +20,14 @@
 
 NerveDesk is a lightweight, low-latency hybrid KVM (Keyboard, Video, Mouse) and virtual display streaming application for Windows, built with Rust and Tauri v2. It connects multiple computers over a local network into a unified workspace, enabling seamless cursor transitions across monitor boundaries, virtual secondary screen projection, audio streaming, clipboard synchronization, and directory replication.
 
----
-
 ![NerveDesk Preview](docs/preview.jpg)
 
----
-
-## Performance Highlights
+### Performance Highlights
 
 - Binary Footprint: ~6–7 MB standalone executable (NSIS setup package is under 2 MB).
 - Memory Usage: 10–15 MB RAM in active background operation (compared to 300–800 MB for Electron-based solutions).
 - Input Latency: Sub-millisecond (< 1 ms) over local networks via raw UDP datagrams without TCP Head-of-Line Blocking.
 - Video Transport: ~16 ms glass-to-glass latency at 60 FPS using a direct DirectX 11 GPU capture pipeline with under 2% host CPU usage.
-
----
 
 ## Architectural Advantages
 
@@ -49,7 +43,6 @@ Clipboard listening and writing run in an isolated Tokio background task. Large 
 ### Lightweight Native Shell
 Built using Rust and Tauri v2 with the system WebView2 runtime, NerveDesk avoids bundling a dedicated Chromium browser. It links the MSVC CRT statically, requiring no external .NET or runtime installations.
 
----
 
 ## Core Features
 
@@ -61,7 +54,6 @@ Built using Rust and Tauri v2 with the system WebView2 runtime, NerveDesk avoids
 - Mobile Web Remote: View live screen output and control input from any smartphone or tablet browser via an embedded HTTP server secured by a 6-digit PIN.
 - Zero-Config LAN Discovery: Automatic device pairing on the local subnet via UDP broadcast beacons on port 48103 with alphanumeric security key verification.
 
----
 
 ## Technical Scope & Trade-Offs
 
@@ -69,7 +61,6 @@ Built using Rust and Tauri v2 with the system WebView2 runtime, NerveDesk avoids
 - Driver Installation: Virtual display extension requires installing the bundled IddCx driver with administrative privileges. Mirroring and KVM modes operate without driver installation.
 - Network Target: Optimized for high-throughput, low-latency performance within trusted local networks (Ethernet or 5 GHz Wi-Fi) rather than public WAN relays.
 
----
 
 ## Tech Stack
 
@@ -78,7 +69,6 @@ Built using Rust and Tauri v2 with the system WebView2 runtime, NerveDesk avoids
 - Display Driver: C++ UMDF v2 Indirect Display Driver (IddCx).
 - Desktop GUI: Tauri v2, system WebView2, Windows DWM Immersive Dark Mode.
 
----
 
 ## Building from Source
 
@@ -114,16 +104,12 @@ Client receiver:
 cargo run -p client -- --bind 0.0.0.0:48100 --recv-video
 ```
 
----
-
 ## Testing
 
 Run workspace automated tests:
 ```powershell
 cargo test --workspace
 ```
-
----
 
 ## License
 
