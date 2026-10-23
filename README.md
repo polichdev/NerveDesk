@@ -79,13 +79,6 @@ Built using Rust and Tauri v2 with the system WebView2 runtime, NerveDesk avoids
 | [codec](docs/crates/CODEC.md) | H.264 hardware encoding/decoding, JPEG fallback |
 | [clipboard](docs/crates/CLIPBOARD.md) | Async clipboard synchronization |
 | [engine](docs/crates/ENGINE.md) | Tokio service orchestration, AppState |
-| **Architecture Decision Records** | |
-| [ADR-001](docs/adr/ADR-001-udp-for-input.md) | Why UDP for keyboard/mouse transport |
-| [ADR-002](docs/adr/ADR-002-chacha20-aead.md) | Why ChaCha20-Poly1305 over AES-GCM |
-| [ADR-003](docs/adr/ADR-003-dpapi-key-storage.md) | Why Windows DPAPI for pairing key storage |
-| [ADR-004](docs/adr/ADR-004-hmac-discovery-beacons.md) | Why HMAC-signed unicast discovery beacons |
-| [ADR-005](docs/adr/ADR-005-tls13-mobile-server.md) | Why TLS 1.3 + PIN for the mobile remote server |
-
 
 ## Technical Scope & Trade-Offs
 
