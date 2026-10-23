@@ -29,6 +29,14 @@ NerveDesk is a lightweight, low-latency hybrid KVM (Keyboard, Video, Mouse) and 
 - Input Latency: Sub-millisecond (< 1 ms) over local networks via raw UDP datagrams without TCP Head-of-Line Blocking.
 - Video Transport: ~16 ms glass-to-glass latency at 60 FPS using a direct DirectX 11 GPU capture pipeline with under 2% host CPU usage.
 
+## Tech Stack
+
+- Systems Core: Rust 1.80+, Tokio asynchronous runtime, windows-rs / winapi, crossbeam channels.
+- Graphics & Media: DirectX 11 (DXGI Desktop Duplication), Windows Graphics Capture, Media Foundation H.264, WASAPI Audio Loopback.
+- Display Driver: C++ UMDF v2 Indirect Display Driver (IddCx).
+- Desktop GUI: Tauri v2, system WebView2, Windows DWM Immersive Dark Mode.
+
+
 ## Architectural Advantages
 
 ### Non-Blocking Input Transport
@@ -55,19 +63,35 @@ Built using Rust and Tauri v2 with the system WebView2 runtime, NerveDesk avoids
 - Zero-Config LAN Discovery: Automatic device pairing on the local subnet via UDP broadcast beacons on port 48103 with alphanumeric security key verification.
 
 
+## Documentation
+
+| Document | Description |
+|---|---|
+| [Architecture](docs/ARCHITECTURE.md) | System overview, data flow, network ports, security model |
+| [Screen Mirror](docs/MIRROR.md) | Mirror and extend display modes, codec selection, troubleshooting |
+| [Virtual Display Driver](docs/DRIVER.md) | IddCx driver architecture, build steps, signing requirements |
+| [Repository Structure](docs/STRUCTURE.md) | Workspace layout, crate map, dependency graph |
+| **Crate References** | |
+| [common](docs/crates/COMMON.md) | Packet protocol, `InputEvent`, error types |
+| [input](docs/crates/INPUT.md) | KVM hooks, edge detection, `SendInput` emulator |
+| [net](docs/crates/NET.md) | All network transports, security primitives, mobile server |
+| [capture](docs/crates/CAPTURE.md) | DXGI/WGC screen capture, IddCx loopback receiver |
+| [codec](docs/crates/CODEC.md) | H.264 hardware encoding/decoding, JPEG fallback |
+| [clipboard](docs/crates/CLIPBOARD.md) | Async clipboard synchronization |
+| [engine](docs/crates/ENGINE.md) | Tokio service orchestration, AppState |
+| **Architecture Decision Records** | |
+| [ADR-001](docs/adr/ADR-001-udp-for-input.md) | Why UDP for keyboard/mouse transport |
+| [ADR-002](docs/adr/ADR-002-chacha20-aead.md) | Why ChaCha20-Poly1305 over AES-GCM |
+| [ADR-003](docs/adr/ADR-003-dpapi-key-storage.md) | Why Windows DPAPI for pairing key storage |
+| [ADR-004](docs/adr/ADR-004-hmac-discovery-beacons.md) | Why HMAC-signed unicast discovery beacons |
+| [ADR-005](docs/adr/ADR-005-tls13-mobile-server.md) | Why TLS 1.3 + PIN for the mobile remote server |
+
+
 ## Technical Scope & Trade-Offs
 
 - Platform Specialization: NerveDesk is engineered specifically for Windows 10 and 11 to maximize performance through native Win32 hooks, DXGI, WASAPI, and IddCx driver integration.
 - Driver Installation: Virtual display extension requires installing the bundled IddCx driver with administrative privileges. Mirroring and KVM modes operate without driver installation.
 - Network Target: Optimized for high-throughput, low-latency performance within trusted local networks (Ethernet or 5 GHz Wi-Fi) rather than public WAN relays.
-
-
-## Tech Stack
-
-- Systems Core: Rust 1.80+, Tokio asynchronous runtime, windows-rs / winapi, crossbeam channels.
-- Graphics & Media: DirectX 11 (DXGI Desktop Duplication), Windows Graphics Capture, Media Foundation H.264, WASAPI Audio Loopback.
-- Display Driver: C++ UMDF v2 Indirect Display Driver (IddCx).
-- Desktop GUI: Tauri v2, system WebView2, Windows DWM Immersive Dark Mode.
 
 
 ## Building from Source
