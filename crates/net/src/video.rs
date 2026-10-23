@@ -1,5 +1,6 @@
 use socket2::{Domain, Protocol, Socket, Type};
 use std::net::SocketAddr;
+use std::sync::{Arc, Mutex};
 use tokio::net::UdpSocket;
 use tracing::trace;
 
@@ -9,10 +10,16 @@ use common::{NerveError, Result, VideoChunkHeader, MAX_VIDEO_PAYLOAD_SIZE};
 pub struct VideoSender {
     socket: UdpSocket,
     target_addr: SocketAddr,
+    security_key: String,
 }
 
 impl VideoSender {
-    pub async fn new(target_addr: SocketAddr) -> Result<Self> {
+    pub async fn new(target_addr: SocketAddr, security_key: String) -> Result<Self> {
+        if !(16..=256).contains(&security_key.len()) {
+            return Err(NerveError::Protocol(
+                "Pairing key is required for video".into(),
+            ));
+        }
         let std_socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))
             .map_err(|e| NerveError::Io(e))?;
 
@@ -29,6 +36,7 @@ impl VideoSender {
         Ok(Self {
             socket,
             target_addr,
+            security_key,
         })
     }
 
@@ -42,9 +50,12 @@ impl VideoSender {
 
         let mut bytes_sent = 0;
         for chunk in chunks {
+            let encrypted =
+                crate::secure_input::seal_payload(&self.security_key, b"video", &chunk, 2048)
+                    .map_err(NerveError::Protocol)?;
             let sent = self
                 .socket
-                .send_to(&chunk, self.target_addr)
+                .send_to(&encrypted, self.target_addr)
                 .await
                 .map_err(|e| NerveError::Io(e))?;
             bytes_sent += sent;
@@ -67,10 +78,17 @@ impl VideoSender {
 pub struct VideoReceiver {
     socket: UdpSocket,
     reassembler: VideoFrameReassembler,
+    paired_peer_ip: Arc<Mutex<Option<String>>>,
+    security_key: Arc<Mutex<Option<String>>>,
+    replay: crate::secure_input::ReplayGuard,
 }
 
 impl VideoReceiver {
-    pub async fn bind(bind_addr: SocketAddr) -> Result<Self> {
+    pub async fn bind(
+        bind_addr: SocketAddr,
+        paired_peer_ip: Arc<Mutex<Option<String>>>,
+        security_key: Arc<Mutex<Option<String>>>,
+    ) -> Result<Self> {
         let std_socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))
             .map_err(|e| NerveError::Io(e))?;
 
@@ -86,6 +104,9 @@ impl VideoReceiver {
         Ok(Self {
             socket,
             reassembler: VideoFrameReassembler::new(),
+            paired_peer_ip,
+            security_key,
+            replay: crate::secure_input::ReplayGuard::new(),
         })
     }
 
@@ -94,13 +115,23 @@ impl VideoReceiver {
             vec![0u8; MAX_VIDEO_PAYLOAD_SIZE + std::mem::size_of::<VideoChunkHeader>() + 64];
 
         loop {
-            let (len, _peer) = self
+            let (len, peer) = self
                 .socket
                 .recv_from(&mut buf)
                 .await
                 .map_err(|e| NerveError::Io(e))?;
+            let paired = self.paired_peer_ip.lock().ok().and_then(|ip| ip.clone());
+            if paired.as_deref() != Some(peer.ip().to_string().as_str()) {
+                continue;
+            }
+            let key = self.security_key.lock().ok().and_then(|key| key.clone());
+            let Some(key) = key else { continue };
+            let plaintext = match self.replay.open_payload(&key, b"video", &buf[..len], 2048) {
+                Ok(plaintext) => plaintext,
+                Err(_) => continue,
+            };
 
-            match self.reassembler.feed_packet(&buf[..len]) {
+            match self.reassembler.feed_packet(&plaintext) {
                 Ok(Some(completed_frame)) => {
                     return Ok(completed_frame);
                 }

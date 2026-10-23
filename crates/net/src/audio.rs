@@ -1,10 +1,9 @@
-use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use serde::Serialize;
 use windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume;
@@ -22,6 +21,13 @@ const PORT: u16 = 48107;
 const CONTROL_PORT: u16 = 48109;
 const MAX_FORMAT_BYTES: usize = std::mem::size_of::<WAVEFORMATEXTENSIBLE>();
 const MAX_PACKET_BYTES: usize = 512 * 1024;
+
+fn audio_packet_context(sequence: u64) -> [u8; 20] {
+    let mut context = [0u8; 20];
+    context[..12].copy_from_slice(b"audio-packet");
+    context[12..].copy_from_slice(&sequence.to_be_bytes());
+    context
+}
 
 #[derive(Clone, Serialize)]
 pub struct AudioStatus {
@@ -41,14 +47,19 @@ pub struct AudioBridge {
     listener_started: AtomicBool,
     control_started: AtomicBool,
     sender_worker: Mutex<Option<thread::JoinHandle<()>>>,
-    known_peers: Arc<Mutex<HashMap<String, Instant>>>,
+    paired_peer_ip: Arc<Mutex<Option<String>>>,
+    security_key: Arc<Mutex<Option<String>>>,
+    control_replay: Mutex<crate::secure_input::ReplayGuard>,
     target: Arc<Mutex<Option<String>>>,
     requested_from: Mutex<Option<String>>,
     error: Arc<Mutex<Option<String>>>,
 }
 
 impl AudioBridge {
-    pub fn new(known_peers: Arc<Mutex<HashMap<String, Instant>>>) -> Self {
+    pub fn new(
+        paired_peer_ip: Arc<Mutex<Option<String>>>,
+        security_key: Arc<Mutex<Option<String>>>,
+    ) -> Self {
         Self {
             enabled: Arc::new(AtomicBool::new(false)),
             sending: Arc::new(AtomicBool::new(false)),
@@ -57,7 +68,9 @@ impl AudioBridge {
             listener_started: AtomicBool::new(false),
             control_started: AtomicBool::new(false),
             sender_worker: Mutex::new(None),
-            known_peers,
+            paired_peer_ip,
+            security_key,
+            control_replay: Mutex::new(crate::secure_input::ReplayGuard::new()),
             target: Arc::new(Mutex::new(None)),
             requested_from: Mutex::new(None),
             error: Arc::new(Mutex::new(None)),
@@ -84,17 +97,14 @@ impl AudioBridge {
             let active = self.enabled.clone();
             let receiving = self.receiving.clone();
             let error = self.error.clone();
-            let known_peers = self.known_peers.clone();
+            let paired_peer_ip = self.paired_peer_ip.clone();
+            let security_key = self.security_key.clone();
             let receiver_cancel = self.receiver_cancel.clone();
             thread::spawn(move || loop {
                 match listener.accept() {
                     Ok((mut stream, peer)) if active.load(Ordering::SeqCst) => {
-                        let known = known_peers
-                            .lock()
-                            .ok()
-                            .and_then(|peers| peers.get(&peer.ip().to_string()).copied())
-                            .is_some_and(|seen| seen.elapsed() < Duration::from_secs(10));
-                        if !known {
+                        let paired = paired_peer_ip.lock().ok().and_then(|ip| ip.clone());
+                        if paired.as_deref() != Some(peer.ip().to_string().as_str()) {
                             continue;
                         }
                         if receiving.swap(true, Ordering::SeqCst) {
@@ -109,8 +119,13 @@ impl AudioBridge {
                         }
                         let receiving = receiving.clone();
                         let error = error.clone();
+                        let key = security_key.lock().ok().and_then(|key| key.clone());
+                        let Some(key) = key else {
+                            receiving.store(false, Ordering::SeqCst);
+                            continue;
+                        };
                         thread::spawn(move || {
-                            if let Err(e) = receive(stream, &stream_active) {
+                            if let Err(e) = receive(stream, &stream_active, &key) {
                                 if e != "Audio connection closed" && e != "Audio stream stopped" {
                                     *error.lock().unwrap() = Some(e);
                                 }
@@ -138,24 +153,28 @@ impl AudioBridge {
             thread::spawn(move || loop {
                 match listener.accept() {
                     Ok((mut stream, peer)) => {
-                        let known = bridge
-                            .known_peers
-                            .lock()
-                            .ok()
-                            .and_then(|peers| peers.get(&peer.ip().to_string()).copied())
-                            .is_some_and(|seen| seen.elapsed() < Duration::from_secs(10));
-                        if !known || !bridge.enabled.load(Ordering::SeqCst) {
+                        let paired = bridge.paired_peer_ip.lock().ok().and_then(|ip| ip.clone());
+                        if !bridge.enabled.load(Ordering::SeqCst)
+                            || paired.as_deref() != Some(peer.ip().to_string().as_str())
+                        {
                             continue;
                         }
                         stream.set_read_timeout(Some(Duration::from_secs(5))).ok();
                         stream.set_write_timeout(Some(Duration::from_secs(5))).ok();
-                        let mut command = [0u8; 4];
-                        if stream.read_exact(&mut command).is_err() {
+                        let key = bridge.security_key.lock().ok().and_then(|key| key.clone());
+                        let Some(key) = key else { continue };
+                        let mut encrypted_command = [0u8; 32];
+                        if stream.read_exact(&mut encrypted_command).is_err() {
                             continue;
                         }
-                        let result = match &command {
-                            b"PULL" => bridge.start(peer.ip().to_string()).map(|_| ()),
-                            b"STOP" => {
+                        let command = bridge.control_replay.lock().ok().and_then(|mut replay| {
+                            replay
+                                .open_payload(&key, b"audio-control", &encrypted_command, 4)
+                                .ok()
+                        });
+                        let result = match command.as_deref() {
+                            Some(b"PULL") => bridge.start(peer.ip().to_string()).map(|_| ()),
+                            Some(b"STOP") => {
                                 bridge.stop();
                                 Ok(())
                             }
@@ -189,6 +208,16 @@ impl AudioBridge {
         if !self.enabled.load(Ordering::SeqCst) {
             return Err("Enable Audio Bridge first".into());
         }
+        if self
+            .paired_peer_ip
+            .lock()
+            .ok()
+            .and_then(|ip| ip.clone())
+            .as_deref()
+            != Some(target.as_str())
+        {
+            return Err("Audio target is not the paired device".into());
+        }
         if self.sending.swap(true, Ordering::SeqCst) {
             return Err("Audio stream is already running".into());
         }
@@ -221,8 +250,14 @@ impl AudioBridge {
         let sending = self.sending.clone();
         let enabled = self.enabled.clone();
         let error = self.error.clone();
+        let key = self
+            .security_key
+            .lock()
+            .ok()
+            .and_then(|key| key.clone())
+            .ok_or_else(|| "Pairing key is required for audio".to_string())?;
         let worker = thread::spawn(move || {
-            if let Err(e) = capture_and_send(socket, &enabled, &sending) {
+            if let Err(e) = capture_and_send(socket, &enabled, &sending, &key) {
                 if sending.load(Ordering::SeqCst) {
                     *error.lock().unwrap() = Some(e);
                 }
@@ -245,23 +280,41 @@ impl AudioBridge {
         if !self.enabled.load(Ordering::SeqCst) {
             return Err("Enable Audio Bridge first".into());
         }
+        if self
+            .paired_peer_ip
+            .lock()
+            .ok()
+            .and_then(|ip| ip.clone())
+            .as_deref()
+            != Some(target.as_str())
+        {
+            return Err("Audio target is not the paired device".into());
+        }
         if self.requested_from.lock().unwrap().is_some() {
             return Err("Audio request is already active".into());
         }
-        audio_control(&target, b"PULL")?;
+        let key = self
+            .security_key
+            .lock()
+            .ok()
+            .and_then(|key| key.clone())
+            .ok_or_else(|| "Pairing key is required for audio".to_string())?;
+        audio_control(&target, b"PULL", &key)?;
         *self.requested_from.lock().unwrap() = Some(target);
         Ok(self.status())
     }
 
     pub fn stop_requested(&self) -> AudioStatus {
         if let Some(target) = self.requested_from.lock().unwrap().take() {
-            let _ = audio_control(&target, b"STOP");
+            if let Some(key) = self.security_key.lock().ok().and_then(|key| key.clone()) {
+                let _ = audio_control(&target, b"STOP", &key);
+            }
         }
         self.status()
     }
 }
 
-fn audio_control(target: &str, command: &[u8; 4]) -> Result<(), String> {
+fn audio_control(target: &str, command: &[u8; 4], key: &str) -> Result<(), String> {
     let address = format!("{target}:{CONTROL_PORT}")
         .parse()
         .map_err(|e| format!("Invalid audio target: {e}"))?;
@@ -269,7 +322,8 @@ fn audio_control(target: &str, command: &[u8; 4]) -> Result<(), String> {
         .map_err(|e| format!("Audio target unavailable: {e}"))?;
     socket.set_read_timeout(Some(Duration::from_secs(8))).ok();
     socket.set_write_timeout(Some(Duration::from_secs(3))).ok();
-    socket.write_all(command).map_err(|e| e.to_string())?;
+    let encrypted = crate::secure_input::seal_payload(key, b"audio-control", command, 4)?;
+    socket.write_all(&encrypted).map_err(|e| e.to_string())?;
     let mut response = [0u8; 2];
     socket
         .read_exact(&mut response)
@@ -352,6 +406,7 @@ fn capture_and_send(
     mut socket: TcpStream,
     enabled: &AtomicBool,
     sending: &AtomicBool,
+    key: &str,
 ) -> Result<(), String> {
     let _com = ComApartment::init()?;
     let client = audio_client()?;
@@ -374,11 +429,19 @@ fn capture_and_send(
         );
         CoTaskMemFree(Some(format.cast()));
         result.map_err(|e| format!("WASAPI loopback: {e}"))?;
-        socket.write_all(b"NDA1").map_err(|e| e.to_string())?;
+        socket.write_all(b"NDA2").map_err(|e| e.to_string())?;
+        let encrypted_format = crate::secure_input::seal_payload(
+            key,
+            b"audio-format",
+            &format_bytes,
+            MAX_FORMAT_BYTES,
+        )?;
         socket
-            .write_all(&(length as u16).to_le_bytes())
+            .write_all(&(encrypted_format.len() as u16).to_le_bytes())
             .map_err(|e| e.to_string())?;
-        socket.write_all(&format_bytes).map_err(|e| e.to_string())?;
+        socket
+            .write_all(&encrypted_format)
+            .map_err(|e| e.to_string())?;
         let mut ready = [0; 1];
         socket
             .read_exact(&mut ready)
@@ -396,6 +459,7 @@ fn capture_and_send(
             }
         };
         let result = (|| {
+            let mut sequence = 0u64;
             while enabled.load(Ordering::SeqCst) && sending.load(Ordering::SeqCst) {
                 let count = capture.GetNextPacketSize().map_err(|e| e.to_string())?;
                 if count == 0 {
@@ -418,10 +482,17 @@ fn capture_and_send(
                 if packet.len() > MAX_PACKET_BYTES {
                     return Err("Audio packet is too large".into());
                 }
+                let encrypted = crate::secure_input::seal_payload(
+                    key,
+                    &audio_packet_context(sequence),
+                    &packet,
+                    MAX_PACKET_BYTES,
+                )?;
+                sequence = sequence.checked_add(1).ok_or("Audio sequence overflow")?;
                 socket
-                    .write_all(&(packet.len() as u32).to_le_bytes())
+                    .write_all(&(encrypted.len() as u32).to_le_bytes())
                     .map_err(|e| e.to_string())?;
-                socket.write_all(&packet).map_err(|e| e.to_string())?;
+                socket.write_all(&encrypted).map_err(|e| e.to_string())?;
             }
             Ok(())
         })();
@@ -431,23 +502,30 @@ fn capture_and_send(
     }
 }
 
-fn receive(mut socket: TcpStream, enabled: &AtomicBool) -> Result<(), String> {
+fn receive(mut socket: TcpStream, enabled: &AtomicBool, key: &str) -> Result<(), String> {
     socket
         .set_read_timeout(Some(Duration::from_millis(250)))
         .ok();
     let mut magic = [0; 4];
     read_exact_active(&mut socket, &mut magic, enabled)?;
-    if &magic != b"NDA1" {
+    if &magic != b"NDA2" {
         return Err("Unknown audio stream format".into());
     }
     let mut size = [0; 2];
     read_exact_active(&mut socket, &mut size, enabled)?;
     let length = u16::from_le_bytes(size) as usize;
+    if !(46..=MAX_FORMAT_BYTES + 28).contains(&length) {
+        return Err("Invalid audio format".into());
+    }
+    let mut encrypted_format = vec![0; length];
+    read_exact_active(&mut socket, &mut encrypted_format, enabled)?;
+    let mut replay = crate::secure_input::ReplayGuard::new();
+    let format_bytes =
+        replay.open_payload(key, b"audio-format", &encrypted_format, MAX_FORMAT_BYTES)?;
+    let length = format_bytes.len();
     if !(18..=MAX_FORMAT_BYTES).contains(&length) {
         return Err("Invalid audio format".into());
     }
-    let mut format_bytes = vec![0; length];
-    read_exact_active(&mut socket, &mut format_bytes, enabled)?;
     let _com = ComApartment::init()?;
     let client = audio_client()?;
     unsafe {
@@ -477,15 +555,27 @@ fn receive(mut socket: TcpStream, enabled: &AtomicBool) -> Result<(), String> {
         client.Start().map_err(|e| e.to_string())?;
         socket.write_all(b"Y").map_err(|e| e.to_string())?;
         let result = (|| {
+            let mut sequence = 0u64;
             while enabled.load(Ordering::SeqCst) {
                 let mut len_bytes = [0; 4];
                 read_exact_active(&mut socket, &mut len_bytes, enabled)?;
                 let len = u32::from_le_bytes(len_bytes) as usize;
-                if len == 0 || len > MAX_PACKET_BYTES || len % (*wave).nBlockAlign as usize != 0 {
+                if len <= 28 || len > MAX_PACKET_BYTES + 28 {
                     return Err("Invalid audio packet".into());
                 }
-                let mut packet = vec![0; len];
-                read_exact_active(&mut socket, &mut packet, enabled)?;
+                let mut encrypted = vec![0; len];
+                read_exact_active(&mut socket, &mut encrypted, enabled)?;
+                let packet = replay.open_payload(
+                    key,
+                    &audio_packet_context(sequence),
+                    &encrypted,
+                    MAX_PACKET_BYTES,
+                )?;
+                sequence = sequence.checked_add(1).ok_or("Audio sequence overflow")?;
+                let len = packet.len();
+                if len == 0 || len % (*wave).nBlockAlign as usize != 0 {
+                    return Err("Invalid audio packet".into());
+                }
                 let mut offset = 0;
                 while offset < len && enabled.load(Ordering::SeqCst) {
                     let padding = client.GetCurrentPadding().map_err(|e| e.to_string())?;

@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File};
 use std::io::{Read, Write};
-use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream};
+use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream as RawTcpStream};
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -17,6 +17,140 @@ const MAX_FRAME: usize = 16 * 1024 * 1024;
 const MAX_FILES: usize = 100_000;
 const MAX_FILE_SIZE: u64 = 16 * 1024 * 1024 * 1024;
 const MAX_EVENTS: usize = 500;
+const SECURE_CHUNK: usize = 64 * 1024;
+
+struct TcpStream {
+    socket: RawTcpStream,
+    security: Option<SyncSecurity>,
+}
+
+struct SyncSecurity {
+    key: String,
+    nonce: String,
+    send_direction: &'static str,
+    recv_direction: &'static str,
+    send_sequence: u64,
+    recv_sequence: u64,
+    replay: crate::secure_input::ReplayGuard,
+    pending: Vec<u8>,
+    pending_offset: usize,
+}
+
+impl TcpStream {
+    fn new(socket: RawTcpStream) -> Self {
+        Self {
+            socket,
+            security: None,
+        }
+    }
+
+    fn connect_timeout(address: &SocketAddr, timeout: Duration) -> std::io::Result<Self> {
+        RawTcpStream::connect_timeout(address, timeout).map(Self::new)
+    }
+
+    fn set_read_timeout(&self, timeout: Option<Duration>) -> std::io::Result<()> {
+        self.socket.set_read_timeout(timeout)
+    }
+
+    fn set_write_timeout(&self, timeout: Option<Duration>) -> std::io::Result<()> {
+        self.socket.set_write_timeout(timeout)
+    }
+
+    fn secure(&mut self, key: &str, nonce: &str, initiator: bool) {
+        self.security = Some(SyncSecurity {
+            key: key.into(),
+            nonce: nonce.into(),
+            send_direction: if initiator { "initiator" } else { "receiver" },
+            recv_direction: if initiator { "receiver" } else { "initiator" },
+            send_sequence: 0,
+            recv_sequence: 0,
+            replay: crate::secure_input::ReplayGuard::new(),
+            pending: Vec::new(),
+            pending_offset: 0,
+        });
+    }
+}
+
+fn sync_context(nonce: &str, direction: &str, sequence: u64) -> Vec<u8> {
+    format!("folder-sync:{nonce}:{direction}:{sequence}").into_bytes()
+}
+
+impl Read for TcpStream {
+    fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
+        if output.is_empty() {
+            return Ok(0);
+        }
+        let Some(security) = self.security.as_mut() else {
+            return self.socket.read(output);
+        };
+        if security.pending_offset == security.pending.len() {
+            let mut length = [0u8; 4];
+            self.socket.read_exact(&mut length)?;
+            let length = u32::from_le_bytes(length) as usize;
+            if !(29..=SECURE_CHUNK + 28).contains(&length) {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Invalid sync record",
+                ));
+            }
+            let mut encrypted = vec![0u8; length];
+            self.socket.read_exact(&mut encrypted)?;
+            let context = sync_context(
+                &security.nonce,
+                security.recv_direction,
+                security.recv_sequence,
+            );
+            security.pending = security
+                .replay
+                .open_payload(&security.key, &context, &encrypted, SECURE_CHUNK)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+            security.recv_sequence = security.recv_sequence.checked_add(1).ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::InvalidData, "Sync sequence overflow")
+            })?;
+            security.pending_offset = 0;
+        }
+        let available = &security.pending[security.pending_offset..];
+        let count = available.len().min(output.len());
+        output[..count].copy_from_slice(&available[..count]);
+        security.pending_offset += count;
+        Ok(count)
+    }
+}
+
+impl Write for TcpStream {
+    fn write(&mut self, input: &[u8]) -> std::io::Result<usize> {
+        if input.is_empty() {
+            return Ok(0);
+        }
+        let Some(security) = self.security.as_mut() else {
+            return self.socket.write(input);
+        };
+        let count = input.len().min(SECURE_CHUNK);
+        let context = sync_context(
+            &security.nonce,
+            security.send_direction,
+            security.send_sequence,
+        );
+        let encrypted = crate::secure_input::seal_payload(
+            &security.key,
+            &context,
+            &input[..count],
+            SECURE_CHUNK,
+        )
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        self.socket
+            .write_all(&(encrypted.len() as u32).to_le_bytes())?;
+        self.socket.write_all(&encrypted)?;
+        security.send_sequence = security.send_sequence.checked_add(1).ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, "Sync sequence overflow")
+        })?;
+        Ok(count)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.socket.flush()
+    }
+}
 
 type Manifest = BTreeMap<String, String>;
 
@@ -203,6 +337,7 @@ pub struct FolderSync {
     worker_started: AtomicBool,
     session: Mutex<()>,
     error: Mutex<Option<String>>,
+    setup_key: Mutex<Option<Arc<Mutex<Option<String>>>>>,
 }
 
 impl FolderSync {
@@ -231,7 +366,22 @@ impl FolderSync {
             worker_started: AtomicBool::new(false),
             session: Mutex::new(()),
             error: Mutex::new(None),
+            setup_key: Mutex::new(None),
         })
+    }
+
+    pub fn set_setup_key(&self, key: Arc<Mutex<Option<String>>>) {
+        *self.setup_key.lock().unwrap() = Some(key);
+    }
+
+    fn current_setup_key(&self) -> Result<String, String> {
+        self.setup_key
+            .lock()
+            .unwrap()
+            .as_ref()
+            .and_then(|key| key.lock().ok().and_then(|key| key.clone()))
+            .filter(|key| (16..=256).contains(&key.len()))
+            .ok_or_else(|| "Pair both computers before setting up folder sync".into())
     }
 
     pub fn status(&self) -> SyncStatus {
@@ -301,7 +451,14 @@ impl FolderSync {
         drop(config);
         self.ensure_listener()?;
         self.ensure_worker();
-        if let Err(error) = send_setup(&ip.to_string(), &root.to_string_lossy(), &id, &key_hash) {
+        let setup_key = self.current_setup_key()?;
+        if let Err(error) = send_setup(
+            &ip.to_string(),
+            &root.to_string_lossy(),
+            &id,
+            &key_hash,
+            &setup_key,
+        ) {
             *self.error.lock().unwrap() = Some(error.clone());
             return Err(error);
         }
@@ -431,7 +588,7 @@ impl FolderSync {
                     }
                     let manager = Arc::clone(&manager);
                     thread::spawn(move || {
-                        if let Err(e) = manager.serve(stream, addr) {
+                        if let Err(e) = manager.serve(TcpStream::new(stream), addr) {
                             *manager.error.lock().unwrap() = Some(e);
                         }
                     });
@@ -877,6 +1034,30 @@ fn read_frame(stream: &mut TcpStream) -> Result<Message, String> {
     serde_json::from_slice(&bytes).map_err(|e| e.to_string())
 }
 
+fn read_initial_message(
+    stream: &mut TcpStream,
+    setup_key: Option<&str>,
+) -> Result<Message, String> {
+    let mut length = [0u8; 4];
+    stream.read_exact(&mut length).map_err(|e| e.to_string())?;
+    let length = u32::from_le_bytes(length) as usize;
+    if length == 0 || length > 16 * 1024 {
+        return Err("Invalid sync greeting length".into());
+    }
+    let mut bytes = vec![0u8; length];
+    stream.read_exact(&mut bytes).map_err(|e| e.to_string())?;
+    if let Ok(Message::Hello { id }) = serde_json::from_slice::<Message>(&bytes) {
+        return Ok(Message::Hello { id });
+    }
+    let key = setup_key.ok_or("Pair both computers before setting up folder sync")?;
+    let mut replay = crate::secure_input::ReplayGuard::new();
+    let plaintext = replay.open_payload(key, b"folder-setup", &bytes, 16 * 1024)?;
+    match serde_json::from_slice::<Message>(&plaintext).map_err(|e| e.to_string())? {
+        message @ Message::SetupHello { .. } => Ok(message),
+        _ => Err("Invalid encrypted sync setup".into()),
+    }
+}
+
 fn io_stream(mut input: impl Read, mut output: impl Write, length: u64) -> Result<String, String> {
     let mut hash = Sha256::new();
     let mut left = length;
@@ -903,7 +1084,8 @@ impl FolderSync {
     fn serve(&self, mut socket: TcpStream, address: SocketAddr) -> Result<(), String> {
         socket.set_read_timeout(Some(Duration::from_secs(30))).ok();
         socket.set_write_timeout(Some(Duration::from_secs(30))).ok();
-        let id = match read_frame(&mut socket)? {
+        let setup_key = self.current_setup_key().ok();
+        let id = match read_initial_message(&mut socket, setup_key.as_deref())? {
             Message::Hello { id } => id,
             Message::SetupHello {
                 path,
@@ -986,6 +1168,7 @@ impl FolderSync {
             }
         };
         write_frame(&mut socket, &Message::Ok)?;
+        socket.secure(&pair.key_hash, &nonce, false);
         let root = Path::new(&pair.local_dir);
         let mut include_existing_for_session = false;
         loop {
@@ -1548,7 +1731,13 @@ fn validated_setup_path(path: &str, data_dir: &Path) -> Result<PathBuf, String> 
     Ok(requested)
 }
 
-fn send_setup(peer_ip: &str, root: &str, id: &str, key_hash: &str) -> Result<(), String> {
+fn send_setup(
+    peer_ip: &str,
+    root: &str,
+    id: &str,
+    key_hash: &str,
+    setup_key: &str,
+) -> Result<(), String> {
     let address: SocketAddr = format!("{peer_ip}:{PORT}")
         .parse()
         .map_err(|e| format!("Peer address: {e}"))?;
@@ -1557,15 +1746,19 @@ fn send_setup(peer_ip: &str, root: &str, id: &str, key_hash: &str) -> Result<(),
     socket.set_read_timeout(Some(Duration::from_secs(10))).ok();
     socket.set_write_timeout(Some(Duration::from_secs(10))).ok();
     let peer_name = device_name();
-    write_frame(
-        &mut socket,
-        &Message::SetupHello {
-            path: root.into(),
-            id: id.into(),
-            key_hash: key_hash.into(),
-            peer_name: peer_name.clone(),
-        },
-    )?;
+    let setup = Message::SetupHello {
+        path: root.into(),
+        id: id.into(),
+        key_hash: key_hash.into(),
+        peer_name: peer_name.clone(),
+    };
+    let plaintext = serde_json::to_vec(&setup).map_err(|e| e.to_string())?;
+    let encrypted =
+        crate::secure_input::seal_payload(setup_key, b"folder-setup", &plaintext, 16 * 1024)?;
+    socket
+        .write_all(&(encrypted.len() as u32).to_le_bytes())
+        .map_err(|e| e.to_string())?;
+    socket.write_all(&encrypted).map_err(|e| e.to_string())?;
     expect_ok(read_frame(&mut socket)?)
 }
 
@@ -1593,6 +1786,7 @@ fn connect_pair_at(pair: &SyncPair, port: u16) -> Result<TcpStream, String> {
     );
     write_frame(&mut socket, &Message::Auth { proof })?;
     expect_ok(read_frame(&mut socket)?)?;
+    socket.secure(&pair.key_hash, &nonce, true);
     Ok(socket)
 }
 
@@ -1840,7 +2034,7 @@ mod tests {
             thread::spawn(move || {
                 for _ in 0..6 {
                     let (socket, address) = listener.accept().unwrap();
-                    right.serve(socket, address).unwrap();
+                    right.serve(TcpStream::new(socket), address).unwrap();
                 }
             })
         };

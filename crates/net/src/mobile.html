@@ -688,22 +688,63 @@
       vibrate(10);
     }
 
-    function postAction(payload) {
+    let actionTail = Promise.resolve();
+    let queuedActions = 0;
+    let pendingMotion = null;
+    let motionTimer = null;
+
+    function enqueueAction(payload) {
       payload.token = authToken;
-      fetch('/api/input', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Auth-Token': authToken
-        },
-        body: JSON.stringify(payload)
-      }).then(res => {
-        if (res.status === 401) {
-          sessionStorage.removeItem('nervedesk_mobile_token');
-          authToken = '';
-          showPinModal(mt('session_expired'));
+      queuedActions++;
+      actionTail = actionTail.catch(() => {}).then(async () => {
+        try {
+          const res = await fetch('/api/input', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Auth-Token': authToken
+            },
+            body: JSON.stringify(payload)
+          });
+          if (res.status === 401) {
+            sessionStorage.removeItem('nervedesk_mobile_token');
+            authToken = '';
+            showPinModal(mt('session_expired'));
+          }
+        } finally {
+          queuedActions--;
+          if (pendingMotion && !motionTimer) motionTimer = setTimeout(flushMotion, 0);
         }
-      }).catch(() => {});
+      });
+    }
+
+    function flushMotion(force = false) {
+      if (motionTimer) clearTimeout(motionTimer);
+      motionTimer = null;
+      if (!force && queuedActions > 0) return;
+      if (pendingMotion) {
+        enqueueAction(pendingMotion);
+        pendingMotion = null;
+      }
+    }
+
+    function postAction(payload) {
+      if (payload.action === 'cursor_pos' || payload.action === 'move_by' || payload.action === 'scroll') {
+        if (pendingMotion && pendingMotion.action === payload.action && payload.action !== 'cursor_pos') {
+          pendingMotion.dx = (pendingMotion.dx || 0) + (payload.dx || 0);
+          pendingMotion.dy = (pendingMotion.dy || 0) + (payload.dy || 0);
+          pendingMotion.delta = (pendingMotion.delta || 0) + (payload.delta || 0);
+        } else if (pendingMotion && pendingMotion.action !== payload.action) {
+          flushMotion(true);
+          pendingMotion = payload;
+        } else {
+          pendingMotion = payload;
+        }
+        if (!motionTimer) motionTimer = setTimeout(flushMotion, 16);
+        return;
+      }
+      flushMotion(true);
+      enqueueAction(payload);
     }
 
     function sendClick(btn = 'left') {

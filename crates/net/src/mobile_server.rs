@@ -1,25 +1,28 @@
 use common::{ButtonState, MouseButton};
 use input::InputEmulator;
 use serde::Deserialize;
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use std::time::{Duration, Instant};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpListener;
+use tokio_rustls::TlsAcceptor;
 use tracing::{error, info};
 use windows::Win32::Graphics::Gdi::{
     BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetDC, GetDIBits,
     ReleaseDC, SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, SRCCOPY,
 };
+use windows::Win32::Security::Cryptography::{BCryptGenRandom, BCRYPT_USE_SYSTEM_PREFERRED_RNG};
 use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXSCREEN, SM_CYSCREEN};
 
 pub struct MobileServer {
     is_running: Arc<AtomicBool>,
     port: u16,
     pin: Arc<Mutex<String>>,
-    tokens: Arc<Mutex<HashSet<String>>>,
+    tokens: Arc<Mutex<HashMap<String, Instant>>>,
+    pin_attempts: Arc<Mutex<HashMap<std::net::IpAddr, (u8, Instant)>>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -42,21 +45,20 @@ pub struct VerifyPinPayload {
 }
 
 fn generate_random_pin() -> String {
-    let nanos = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap_or_default()
-        .subsec_nanos();
-    let pid = std::process::id();
-    let val = (nanos ^ (pid << 16)) % 900000 + 100000;
-    format!("{:06}", val)
+    let mut bytes = [0u8; 4];
+    unsafe { BCryptGenRandom(None, &mut bytes, BCRYPT_USE_SYSTEM_PREFERRED_RNG) }
+        .ok()
+        .expect("Windows random generator failed");
+    let val = u32::from_le_bytes(bytes) % 900000 + 100000;
+    format!("{val:06}")
 }
 
 fn generate_session_token() -> String {
-    let nanos = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    format!("{:016x}{:016x}", nanos, std::process::id())
+    let mut bytes = [0u8; 32];
+    unsafe { BCryptGenRandom(None, &mut bytes, BCRYPT_USE_SYSTEM_PREFERRED_RNG) }
+        .ok()
+        .expect("Windows random generator failed");
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 pub fn get_local_ip() -> String {
@@ -177,7 +179,8 @@ impl MobileServer {
             is_running: Arc::new(AtomicBool::new(false)),
             port,
             pin: Arc::new(Mutex::new(generate_random_pin())),
-            tokens: Arc::new(Mutex::new(HashSet::new())),
+            tokens: Arc::new(Mutex::new(HashMap::new())),
+            pin_attempts: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -189,6 +192,7 @@ impl MobileServer {
         let new_p = generate_random_pin();
         *self.pin.lock().unwrap() = new_p.clone();
         self.tokens.lock().unwrap().clear();
+        self.pin_attempts.lock().unwrap().clear();
         new_p
     }
 
@@ -201,9 +205,11 @@ impl MobileServer {
         let port = self.port;
         let pin = self.pin.clone();
         let tokens = self.tokens.clone();
+        let pin_attempts = self.pin_attempts.clone();
 
         std::thread::spawn(move || {
-            let rt = match tokio::runtime::Builder::new_current_thread()
+            let rt = match tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(2)
                 .enable_all()
                 .build()
             {
@@ -216,10 +222,26 @@ impl MobileServer {
             };
 
             rt.block_on(async move {
+                let local_ip = match get_local_ip().parse() {
+                    Ok(ip) => ip,
+                    Err(_) => {
+                        error!("Mobile Remote could not determine its local IP");
+                        is_running.store(false, Ordering::SeqCst);
+                        return;
+                    }
+                };
+                let tls = match crate::mobile_tls::server_config(local_ip) {
+                    Ok(config) => TlsAcceptor::from(config),
+                    Err(e) => {
+                        error!("Mobile Remote TLS setup failed: {e}");
+                        is_running.store(false, Ordering::SeqCst);
+                        return;
+                    }
+                };
                 let addr = SocketAddr::from(([0, 0, 0, 0], port));
                 let listener = match TcpListener::bind(addr).await {
                     Ok(l) => {
-                        info!("Mobile Remote HTTP server listening on http://{}", addr);
+                        info!("Mobile Remote HTTPS server listening on https://{}", addr);
                         l
                     }
                     Err(e) => {
@@ -232,26 +254,40 @@ impl MobileServer {
                 let emulator = Arc::new(InputEmulator::new());
 
                 while is_running.load(Ordering::SeqCst) {
-                    match listener.accept().await {
-                        Ok((socket, _)) => {
+                    match tokio::time::timeout(Duration::from_millis(250), listener.accept()).await
+                    {
+                        Ok(Ok((socket, peer))) => {
                             let emulator = emulator.clone();
                             let running_flag = is_running.clone();
                             let pin_ref = pin.clone();
                             let tokens_ref = tokens.clone();
+                            let attempts_ref = pin_attempts.clone();
+                            let tls = tls.clone();
                             tokio::spawn(async move {
+                                let Ok(Ok(tls_stream)) = tokio::time::timeout(
+                                    Duration::from_secs(5),
+                                    tls.accept(socket),
+                                )
+                                .await
+                                else {
+                                    return;
+                                };
                                 let _ = handle_http_client(
-                                    socket,
+                                    tls_stream,
+                                    peer.ip(),
                                     emulator,
                                     running_flag,
                                     pin_ref,
                                     tokens_ref,
+                                    attempts_ref,
                                 )
                                 .await;
                             });
                         }
-                        Err(_) => {
+                        Ok(Err(_)) => {
                             tokio::time::sleep(Duration::from_millis(50)).await;
                         }
+                        Err(_) => {}
                     }
                 }
             });
@@ -260,6 +296,7 @@ impl MobileServer {
 
     pub fn stop(&self) {
         self.is_running.store(false, Ordering::SeqCst);
+        self.tokens.lock().unwrap().clear();
     }
 
     pub fn is_active(&self) -> bool {
@@ -268,6 +305,13 @@ impl MobileServer {
 
     pub fn port(&self) -> u16 {
         self.port
+    }
+
+    pub fn certificate_fingerprint(&self) -> Result<String, String> {
+        let ip = get_local_ip()
+            .parse()
+            .map_err(|e| format!("Local IP: {e}"))?;
+        crate::mobile_tls::fingerprint(ip)
     }
 }
 
@@ -286,210 +330,276 @@ fn extract_query_param(path: &str, param: &str) -> Option<String> {
     None
 }
 
-async fn handle_http_client(
-    mut stream: tokio::net::TcpStream,
+async fn read_http_request<S: AsyncRead + Unpin>(
+    stream: &mut S,
+    pending: &mut Vec<u8>,
+) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
+    loop {
+        if let Some(header_end) = pending.windows(4).position(|bytes| bytes == b"\r\n\r\n") {
+            let header_end = header_end + 4;
+            let headers = String::from_utf8_lossy(&pending[..header_end]);
+            let content_length = headers
+                .lines()
+                .filter_map(|line| line.split_once(':'))
+                .find(|(name, _)| name.eq_ignore_ascii_case("content-length"))
+                .map(|(_, value)| value.trim().parse::<usize>())
+                .transpose()?
+                .unwrap_or(0);
+            let total = header_end + content_length;
+            if total > 8192 {
+                return Err("Mobile request is too large".into());
+            }
+            if pending.len() >= total {
+                let request = pending.drain(..total).collect::<Vec<_>>();
+                return Ok(Some(String::from_utf8_lossy(&request).into_owned()));
+            }
+        }
+        if pending.len() >= 8192 {
+            return Err("Mobile request is too large".into());
+        }
+        let mut chunk = [0u8; 2048];
+        let count =
+            tokio::time::timeout(Duration::from_secs(10), stream.read(&mut chunk)).await??;
+        if count == 0 {
+            return Ok(None);
+        }
+        pending.extend_from_slice(&chunk[..count]);
+    }
+}
+
+async fn handle_http_client<S: AsyncRead + AsyncWrite + Unpin>(
+    mut stream: S,
+    peer_ip: std::net::IpAddr,
     emulator: Arc<InputEmulator>,
     running: Arc<AtomicBool>,
     pin: Arc<Mutex<String>>,
-    tokens: Arc<Mutex<HashSet<String>>>,
+    tokens: Arc<Mutex<HashMap<String, Instant>>>,
+    pin_attempts: Arc<Mutex<HashMap<std::net::IpAddr, (u8, Instant)>>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let mut buf = vec![0u8; 8192];
-    let n = stream.read(&mut buf).await?;
-    if n == 0 {
-        return Ok(());
-    }
-
-    let req_str = String::from_utf8_lossy(&buf[..n]);
-    let mut lines = req_str.lines();
-    let first_line = lines.next().unwrap_or("");
-    let parts: Vec<&str> = first_line.split_whitespace().collect();
-
-    if parts.len() < 2 {
-        return Ok(());
-    }
-
-    let method = parts[0];
-    let full_path = parts[1];
-    let path = full_path.split('?').next().unwrap_or(full_path);
-
-    let token_query = extract_query_param(full_path, "token");
-    let mut header_token = None;
-    for l in req_str.lines() {
-        if l.to_lowercase().starts_with("x-auth-token:") {
-            header_token = l.splitn(2, ':').nth(1).map(|s| s.trim().to_string());
-            break;
+    let mut pending = Vec::with_capacity(2048);
+    loop {
+        if !running.load(Ordering::SeqCst) {
+            return Ok(());
         }
-    }
+        let Some(req_str) = read_http_request(&mut stream, &mut pending).await? else {
+            return Ok(());
+        };
+        let mut lines = req_str.lines();
+        let first_line = lines.next().unwrap_or("");
+        let parts: Vec<&str> = first_line.split_whitespace().collect();
 
-    let request_token = token_query.or(header_token);
-
-    let is_authorized = |tok: &Option<String>| -> bool {
-        if let Some(t) = tok {
-            let guard = tokens.lock().unwrap();
-            guard.contains(t)
-        } else {
-            false
+        if parts.len() < 2 {
+            return Ok(());
         }
-    };
 
-    if method == "GET" && (path == "/" || path == "/index.html") {
-        let html = include_str!("mobile.html");
-        let response = format!(
+        let method = parts[0];
+        let full_path = parts[1];
+        let path = full_path.split('?').next().unwrap_or(full_path);
+
+        let token_query = extract_query_param(full_path, "token");
+        let mut header_token = None;
+        for l in req_str.lines() {
+            if l.to_lowercase().starts_with("x-auth-token:") {
+                header_token = l.splitn(2, ':').nth(1).map(|s| s.trim().to_string());
+                break;
+            }
+        }
+
+        let request_token = token_query.or(header_token);
+
+        let is_authorized = |tok: &Option<String>| -> bool {
+            if let Some(t) = tok {
+                let guard = tokens.lock().unwrap();
+                guard
+                    .get(t)
+                    .is_some_and(|created| created.elapsed() < Duration::from_secs(3600))
+            } else {
+                false
+            }
+        };
+
+        if method == "GET" && (path == "/" || path == "/index.html") {
+            let html = include_str!("mobile.html");
+            let response = format!(
             "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
             html.as_bytes().len(),
             html
         );
-        let _ = stream.write_all(response.as_bytes()).await;
-        let _ = stream.flush().await;
-        let _ = stream.shutdown().await;
-        return Ok(());
-    }
+            let _ = stream.write_all(response.as_bytes()).await;
+            let _ = stream.flush().await;
+            let _ = stream.shutdown().await;
+            return Ok(());
+        }
 
-    if method == "GET" && path == "/api/status" {
-        let (w, h) = get_screen_resolution();
-        let ip = get_local_ip();
-        let auth = is_authorized(&request_token);
-        let json = format!(
-            r#"{{"width":{},"height":{},"ip":"{}","authorized":{}}}"#,
-            w, h, ip, auth
-        );
-        let response = format!(
+        if method == "GET" && path == "/api/status" {
+            let (w, h) = get_screen_resolution();
+            let auth = is_authorized(&request_token);
+
+            let json = if auth {
+                let ip = get_local_ip();
+                format!(
+                    r#"{{"width":{},"height":{},"ip":"{}","authorized":true}}"#,
+                    w, h, ip
+                )
+            } else {
+                format!(r#"{{"width":{},"height":{},"authorized":false}}"#, w, h)
+            };
+            let response = format!(
             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n{}",
             json.as_bytes().len(),
             json
         );
-        let _ = stream.write_all(response.as_bytes()).await;
-        let _ = stream.flush().await;
-        let _ = stream.shutdown().await;
-        return Ok(());
-    }
-
-    if method == "POST" && path == "/api/verify" {
-        let mut ok = false;
-        let mut token = String::new();
-        if let Some(body_start) = req_str.find("\r\n\r\n") {
-            let body = &req_str[body_start + 4..];
-            if let Ok(payload) = serde_json::from_str::<VerifyPinPayload>(body) {
-                let current_pin = pin.lock().unwrap().clone();
-                if payload.pin.trim() == current_pin {
-                    ok = true;
-                    token = generate_session_token();
-                    tokens.lock().unwrap().insert(token.clone());
-                }
-            }
+            let _ = stream.write_all(response.as_bytes()).await;
+            let _ = stream.flush().await;
+            let _ = stream.shutdown().await;
+            return Ok(());
         }
 
-        let resp_body = if ok {
-            format!(r#"{{"ok":true,"token":"{}"}}"#, token)
-        } else {
-            r#"{"ok":false,"error":"Invalid PIN"}"#.to_string()
-        };
+        if method == "POST" && path == "/api/verify" {
+            let mut ok = false;
+            let mut token = String::new();
+            let blocked =
+                pin_attempts
+                    .lock()
+                    .unwrap()
+                    .get(&peer_ip)
+                    .is_some_and(|(count, since)| {
+                        *count >= 5 && since.elapsed() < Duration::from_secs(300)
+                    });
+            if let Some(body_start) = req_str.find("\r\n\r\n") {
+                let body = &req_str[body_start + 4..];
+                if let Ok(payload) = serde_json::from_str::<VerifyPinPayload>(body) {
+                    let current_pin = pin.lock().unwrap().clone();
+                    if !blocked && payload.pin.trim() == current_pin {
+                        ok = true;
+                        token = generate_session_token();
+                        tokens.lock().unwrap().insert(token.clone(), Instant::now());
+                        pin_attempts.lock().unwrap().remove(&peer_ip);
+                    }
+                }
+            }
+            if !ok && !blocked {
+                let mut attempts = pin_attempts.lock().unwrap();
+                let entry = attempts.entry(peer_ip).or_insert((0, Instant::now()));
+                if entry.1.elapsed() >= Duration::from_secs(300) {
+                    *entry = (0, Instant::now());
+                }
+                entry.0 = entry.0.saturating_add(1);
+            }
 
-        let response = format!(
+            let resp_body = if ok {
+                format!(r#"{{"ok":true,"token":"{}"}}"#, token)
+            } else {
+                r#"{"ok":false,"error":"Invalid PIN"}"#.to_string()
+            };
+
+            let response = format!(
             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n{}",
             resp_body.as_bytes().len(),
             resp_body
         );
-        let _ = stream.write_all(response.as_bytes()).await;
-        let _ = stream.flush().await;
-        let _ = stream.shutdown().await;
-        return Ok(());
-    }
-
-    if method == "GET" && path == "/screen.jpg" {
-        if !is_authorized(&request_token) {
-            let _ = stream.write_all(b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 12\r\nConnection: close\r\n\r\nUnauthorized").await;
+            let _ = stream.write_all(response.as_bytes()).await;
             let _ = stream.flush().await;
             let _ = stream.shutdown().await;
             return Ok(());
         }
 
-        if let Some(jpeg) = capture_screen_jpeg(65) {
-            let response_header = format!(
+        if method == "GET" && path == "/screen.jpg" {
+            if !is_authorized(&request_token) {
+                let _ = stream.write_all(b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 12\r\nConnection: close\r\n\r\nUnauthorized").await;
+                let _ = stream.flush().await;
+                let _ = stream.shutdown().await;
+                return Ok(());
+            }
+
+            if let Ok(Some(jpeg)) = tokio::task::spawn_blocking(|| capture_screen_jpeg(65)).await {
+                let response_header = format!(
                 "HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\nCache-Control: no-cache, no-store\r\nConnection: close\r\n\r\n",
                 jpeg.len()
             );
-            let _ = stream.write_all(response_header.as_bytes()).await;
-            let _ = stream.write_all(&jpeg).await;
-            let _ = stream.flush().await;
-            let _ = stream.shutdown().await;
-        } else {
-            let _ = stream
-                .write_all(b"HTTP/1.1 500 Internal Error\r\nConnection: close\r\n\r\n")
-                .await;
-            let _ = stream.flush().await;
-            let _ = stream.shutdown().await;
-        }
-        return Ok(());
-    }
-
-    if method == "GET" && path == "/stream" {
-        if !is_authorized(&request_token) {
-            let _ = stream.write_all(b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 12\r\nConnection: close\r\n\r\nUnauthorized").await;
-            let _ = stream.flush().await;
-            let _ = stream.shutdown().await;
+                let _ = stream.write_all(response_header.as_bytes()).await;
+                let _ = stream.write_all(&jpeg).await;
+                let _ = stream.flush().await;
+                let _ = stream.shutdown().await;
+            } else {
+                let _ = stream
+                    .write_all(b"HTTP/1.1 500 Internal Error\r\nConnection: close\r\n\r\n")
+                    .await;
+                let _ = stream.flush().await;
+                let _ = stream.shutdown().await;
+            }
             return Ok(());
         }
 
-        let mjpeg_header = "HTTP/1.1 200 OK\r\nContent-Type: multipart/x-mixed-replace; boundary=frame\r\nCache-Control: no-cache, no-store, must-revalidate\r\nPragma: no-cache\r\nConnection: close\r\n\r\n";
-        if stream.write_all(mjpeg_header.as_bytes()).await.is_err() {
+        if method == "GET" && path == "/stream" {
+            if !is_authorized(&request_token) {
+                let _ = stream.write_all(b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 12\r\nConnection: close\r\n\r\nUnauthorized").await;
+                let _ = stream.flush().await;
+                let _ = stream.shutdown().await;
+                return Ok(());
+            }
+
+            let mjpeg_header = "HTTP/1.1 200 OK\r\nContent-Type: multipart/x-mixed-replace; boundary=frame\r\nCache-Control: no-cache, no-store, must-revalidate\r\nPragma: no-cache\r\nConnection: close\r\n\r\n";
+            if stream.write_all(mjpeg_header.as_bytes()).await.is_err() {
+                return Ok(());
+            }
+
+            while running.load(Ordering::SeqCst) {
+                if let Ok(Some(jpeg)) =
+                    tokio::task::spawn_blocking(|| capture_screen_jpeg(55)).await
+                {
+                    let part_header = format!(
+                        "--frame\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\n\r\n",
+                        jpeg.len()
+                    );
+                    if stream.write_all(part_header.as_bytes()).await.is_err() {
+                        break;
+                    }
+                    if stream.write_all(&jpeg).await.is_err() {
+                        break;
+                    }
+                    if stream.write_all(b"\r\n").await.is_err() {
+                        break;
+                    }
+                }
+                tokio::time::sleep(Duration::from_millis(45)).await;
+            }
             return Ok(());
         }
 
-        while running.load(Ordering::SeqCst) {
-            if let Some(jpeg) = capture_screen_jpeg(55) {
-                let part_header = format!(
-                    "--frame\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\n\r\n",
-                    jpeg.len()
-                );
-                if stream.write_all(part_header.as_bytes()).await.is_err() {
-                    break;
-                }
-                if stream.write_all(&jpeg).await.is_err() {
-                    break;
-                }
-                if stream.write_all(b"\r\n").await.is_err() {
-                    break;
+        if method == "POST" && path == "/api/input" {
+            let mut allowed = is_authorized(&request_token);
+            if let Some(body_start) = req_str.find("\r\n\r\n") {
+                let body = &req_str[body_start + 4..];
+                if let Ok(payload) = serde_json::from_str::<MobileInputPayload>(body) {
+                    if !allowed {
+                        allowed = is_authorized(&payload.token);
+                    }
+                    if allowed {
+                        process_mobile_input(&payload, &emulator);
+                    }
                 }
             }
-            tokio::time::sleep(Duration::from_millis(45)).await;
-        }
-        return Ok(());
-    }
 
-    if method == "POST" && path == "/api/input" {
-        let mut allowed = is_authorized(&request_token);
-        if let Some(body_start) = req_str.find("\r\n\r\n") {
-            let body = &req_str[body_start + 4..];
-            if let Ok(payload) = serde_json::from_str::<MobileInputPayload>(body) {
-                if !allowed {
-                    allowed = is_authorized(&payload.token);
-                }
-                if allowed {
-                    process_mobile_input(&payload, &emulator);
-                }
+            if !allowed {
+                let _ = stream.write_all(b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 12\r\nConnection: close\r\n\r\nUnauthorized").await;
+                let _ = stream.flush().await;
+                let _ = stream.shutdown().await;
+                return Ok(());
             }
-        }
 
-        if !allowed {
-            let _ = stream.write_all(b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 12\r\nConnection: close\r\n\r\nUnauthorized").await;
+            let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nAccess-Control-Allow-Origin: *\r\nConnection: keep-alive\r\n\r\nok").await;
             let _ = stream.flush().await;
-            let _ = stream.shutdown().await;
-            return Ok(());
+            continue;
         }
 
-        let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\nok").await;
+        let _ = stream
+            .write_all(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n")
+            .await;
         let _ = stream.flush().await;
         let _ = stream.shutdown().await;
         return Ok(());
     }
-
-    let _ = stream
-        .write_all(b"HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n")
-        .await;
-    let _ = stream.flush().await;
-    let _ = stream.shutdown().await;
-    Ok(())
 }
 
 fn process_mobile_input(payload: &MobileInputPayload, emulator: &InputEmulator) {
@@ -688,4 +798,29 @@ pub fn generate_qr_svg(url: &str) -> Result<String, String> {
 
     svg.push_str("</svg>");
     Ok(svg)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn reads_multiple_http_requests_without_losing_post_body() {
+        let (mut writer, mut reader) = tokio::io::duplex(1024);
+        writer
+            .write_all(b"POST /api/input HTTP/1.1\r\nContent-Length: 4\r\n\r\ntestGET /api/status HTTP/1.1\r\n\r\n")
+            .await
+            .unwrap();
+        let mut pending = Vec::new();
+        let first = read_http_request(&mut reader, &mut pending)
+            .await
+            .unwrap()
+            .unwrap();
+        let second = read_http_request(&mut reader, &mut pending)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(first.ends_with("\r\n\r\ntest"));
+        assert!(second.starts_with("GET /api/status"));
+    }
 }

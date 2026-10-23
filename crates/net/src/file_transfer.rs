@@ -2,13 +2,15 @@ use common::{NerveError, Result};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tracing::{error, info, warn};
 
 pub const FILE_TRANSFER_PORT: u16 = 48106;
-const FILE_TRANSFER_MAGIC: &[u8; 4] = b"NRVF";
+const FILE_TRANSFER_MAGIC: &[u8; 4] = b"NRV2";
 const CHUNK_SIZE: usize = 65536;
+const MAX_TRANSFER_FILE_SIZE: u64 = 16 * 1024 * 1024 * 1024;
+const MAX_SECURE_RECORD: usize = CHUNK_SIZE + 28;
 
 static STAGED_FILES: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
 static PENDING_DROP_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
@@ -378,10 +380,62 @@ pub struct FileTransferServer {
     is_running: Arc<AtomicBool>,
 }
 
+fn record_context(sequence: u64) -> [u8; 21] {
+    let mut context = [0u8; 21];
+    context[..13].copy_from_slice(b"file-transfer");
+    context[13..].copy_from_slice(&sequence.to_be_bytes());
+    context
+}
+
+async fn write_secure_record<S: AsyncWrite + Unpin>(
+    socket: &mut S,
+    key: &str,
+    sequence: &mut u64,
+    plaintext: &[u8],
+) -> Result<()> {
+    let encrypted =
+        crate::secure_input::seal_payload(key, &record_context(*sequence), plaintext, CHUNK_SIZE)
+            .map_err(NerveError::Protocol)?;
+    socket
+        .write_all(&(encrypted.len() as u32).to_be_bytes())
+        .await?;
+    socket.write_all(&encrypted).await?;
+    *sequence = sequence
+        .checked_add(1)
+        .ok_or_else(|| NerveError::Protocol("File transfer sequence overflow".into()))?;
+    Ok(())
+}
+
+async fn read_secure_record<S: AsyncRead + Unpin>(
+    socket: &mut S,
+    key: &str,
+    sequence: &mut u64,
+    replay: &mut crate::secure_input::ReplayGuard,
+) -> Result<Vec<u8>> {
+    let mut length = [0u8; 4];
+    socket.read_exact(&mut length).await?;
+    let length = u32::from_be_bytes(length) as usize;
+    if !(28..=MAX_SECURE_RECORD).contains(&length) {
+        return Err(NerveError::Protocol(
+            "Invalid encrypted file record length".into(),
+        ));
+    }
+    let mut encrypted = vec![0u8; length];
+    socket.read_exact(&mut encrypted).await?;
+    let plaintext = replay
+        .open_payload(key, &record_context(*sequence), &encrypted, CHUNK_SIZE)
+        .map_err(NerveError::Protocol)?;
+    *sequence = sequence
+        .checked_add(1)
+        .ok_or_else(|| NerveError::Protocol("File transfer sequence overflow".into()))?;
+    Ok(plaintext)
+}
+
 impl FileTransferServer {
     pub async fn start<F>(
         port: u16,
         security_key: Arc<Mutex<Option<String>>>,
+        paired_peer_ip: Arc<Mutex<Option<String>>>,
         enabled: Arc<AtomicBool>,
         on_files_received: F,
     ) -> Result<Self>
@@ -401,11 +455,19 @@ impl FileTransferServer {
                         if !enabled.load(Ordering::Relaxed) {
                             continue;
                         }
+                        let paired = paired_peer_ip.lock().ok().and_then(|ip| ip.clone());
+                        if paired.as_deref() != Some(addr.ip().to_string().as_str()) {
+                            continue;
+                        }
                         info!("Incoming file transfer connection from {addr}");
                         let key = security_key.clone();
+                        let enabled_for_connection = enabled.clone();
                         let cb = on_files_received.clone();
                         tokio::spawn(async move {
-                            if let Err(e) = handle_file_connection(socket, key, cb).await {
+                            if let Err(e) =
+                                handle_file_connection(socket, key, enabled_for_connection, cb)
+                                    .await
+                            {
                                 warn!("File transfer failed: {e}");
                             }
                         });
@@ -432,6 +494,7 @@ impl FileTransferServer {
 pub async fn handle_file_connection<F>(
     mut socket: TcpStream,
     security_key: Arc<Mutex<Option<String>>>,
+    enabled: Arc<AtomicBool>,
     on_files_received: F,
 ) -> Result<()>
 where
@@ -443,29 +506,20 @@ where
         return Err(NerveError::Protocol("Invalid file transfer magic".into()));
     }
 
-    let mut token_len_buf = [0u8; 2];
-    socket.read_exact(&mut token_len_buf).await?;
-    let token_len = u16::from_be_bytes(token_len_buf) as usize;
-    if token_len > 256 {
-        return Err(NerveError::Protocol("Token too large".into()));
-    }
-    let mut token_buf = vec![0u8; token_len];
-    socket.read_exact(&mut token_buf).await?;
-    let token = String::from_utf8_lossy(&token_buf);
+    let key = security_key
+        .lock()
+        .ok()
+        .and_then(|key| key.clone())
+        .ok_or_else(|| NerveError::Protocol("File transfer is not paired".into()))?;
+    let mut replay = crate::secure_input::ReplayGuard::new();
+    let mut received_sequence = 0u64;
 
-    if let Ok(guard) = security_key.lock() {
-        if let Some(ref key) = *guard {
-            if !key.is_empty() && !token.is_empty() && token != *key {
-                return Err(NerveError::Protocol(
-                    "Security key mismatch for file transfer".into(),
-                ));
-            }
-        }
+    let count_buf =
+        read_secure_record(&mut socket, &key, &mut received_sequence, &mut replay).await?;
+    if count_buf.len() != 4 {
+        return Err(NerveError::Protocol("Invalid encrypted file count".into()));
     }
-
-    let mut count_buf = [0u8; 4];
-    socket.read_exact(&mut count_buf).await?;
-    let file_count = u32::from_be_bytes(count_buf) as usize;
+    let file_count = u32::from_be_bytes(count_buf.try_into().unwrap()) as usize;
     if file_count == 0 || file_count > 1000 {
         return Err(NerveError::Protocol("Invalid file count".into()));
     }
@@ -475,23 +529,28 @@ where
     let mut received_files = Vec::new();
 
     for _ in 0..file_count {
-        let mut name_len_buf = [0u8; 2];
-        socket.read_exact(&mut name_len_buf).await?;
-        let name_len = u16::from_be_bytes(name_len_buf) as usize;
-        if name_len == 0 || name_len > 1024 {
+        ensure_transfer_allowed(&security_key, &key, &enabled)?;
+        let metadata =
+            read_secure_record(&mut socket, &key, &mut received_sequence, &mut replay).await?;
+        if metadata.len() < 10 {
+            return Err(NerveError::Protocol(
+                "Invalid encrypted file metadata".into(),
+            ));
+        }
+        let name_len = u16::from_be_bytes(metadata[..2].try_into().unwrap()) as usize;
+        if name_len == 0 || name_len > 1024 || metadata.len() != 2 + name_len + 8 {
             return Err(NerveError::Protocol("Invalid filename length".into()));
         }
-        let mut name_buf = vec![0u8; name_len];
-        socket.read_exact(&mut name_buf).await?;
-        let raw_name = String::from_utf8_lossy(&name_buf);
+        let raw_name = String::from_utf8_lossy(&metadata[2..2 + name_len]);
         let safe_name = Path::new(&*raw_name)
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("received_file");
 
-        let mut size_buf = [0u8; 8];
-        socket.read_exact(&mut size_buf).await?;
-        let file_size = u64::from_be_bytes(size_buf);
+        let file_size = u64::from_be_bytes(metadata[2 + name_len..].try_into().unwrap());
+        if file_size > MAX_TRANSFER_FILE_SIZE {
+            return Err(NerveError::Protocol("File exceeds transfer limit".into()));
+        }
 
         let final_path = get_unique_path(&staging_dir, safe_name);
         let final_name = final_path
@@ -503,11 +562,15 @@ where
         let mut out_file = tokio::fs::File::create(&part_path).await?;
 
         let mut remaining = file_size;
-        let mut buffer = vec![0u8; CHUNK_SIZE];
         while remaining > 0 {
+            ensure_transfer_allowed(&security_key, &key, &enabled)?;
             let to_read = std::cmp::min(remaining as usize, CHUNK_SIZE);
-            socket.read_exact(&mut buffer[..to_read]).await?;
-            out_file.write_all(&buffer[..to_read]).await?;
+            let chunk =
+                read_secure_record(&mut socket, &key, &mut received_sequence, &mut replay).await?;
+            if chunk.len() != to_read {
+                return Err(NerveError::Protocol("Invalid encrypted file chunk".into()));
+            }
+            out_file.write_all(&chunk).await?;
             remaining -= to_read as u64;
         }
 
@@ -519,6 +582,8 @@ where
 
         received_files.push(final_path);
     }
+
+    ensure_transfer_allowed(&security_key, &key, &enabled)?;
 
     let mut pending_target = None;
     if let Ok(mut guard) = PENDING_DROP_DIR.lock() {
@@ -556,7 +621,25 @@ where
     if save_immediately {
         on_files_received(final_files);
     }
-    socket.write_all(b"OK\n").await?;
+    let mut ack_sequence = 0u64;
+    write_secure_record(&mut socket, &key, &mut ack_sequence, b"OK").await?;
+    Ok(())
+}
+
+fn ensure_transfer_allowed(
+    current_key: &Mutex<Option<String>>,
+    transfer_key: &str,
+    enabled: &AtomicBool,
+) -> Result<()> {
+    if !enabled.load(Ordering::SeqCst)
+        || !current_key
+            .lock()
+            .is_ok_and(|key| key.as_deref() == Some(transfer_key))
+    {
+        return Err(NerveError::Protocol(
+            "File transfer authorization was revoked".into(),
+        ));
+    }
     Ok(())
 }
 
@@ -579,31 +662,51 @@ impl FileTransferClient {
         if valid_paths.is_empty() {
             return Ok(0);
         }
+        if valid_paths.len() > 1000 || !(16..=256).contains(&security_token.len()) {
+            return Err(NerveError::Protocol(
+                "Invalid transfer count or pairing key".into(),
+            ));
+        }
 
         let mut stream = TcpStream::connect(target_addr).await?;
 
         stream.write_all(FILE_TRANSFER_MAGIC).await?;
-
-        let token_bytes = security_token.as_bytes();
-        let token_len = token_bytes.len() as u16;
-        stream.write_all(&token_len.to_be_bytes()).await?;
-        stream.write_all(token_bytes).await?;
-
+        let mut sent_sequence = 0u64;
         let count = valid_paths.len() as u32;
-        stream.write_all(&count.to_be_bytes()).await?;
+        write_secure_record(
+            &mut stream,
+            security_token,
+            &mut sent_sequence,
+            &count.to_be_bytes(),
+        )
+        .await?;
 
         let mut total_bytes = 0u64;
 
         for path in &valid_paths {
             let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("file");
             let name_bytes = name.as_bytes();
+            if name_bytes.is_empty() || name_bytes.len() > 1024 {
+                return Err(NerveError::Protocol("Invalid filename length".into()));
+            }
             let name_len = name_bytes.len() as u16;
-            stream.write_all(&name_len.to_be_bytes()).await?;
-            stream.write_all(name_bytes).await?;
 
             let metadata = tokio::fs::metadata(path).await?;
             let size = metadata.len();
-            stream.write_all(&size.to_be_bytes()).await?;
+            if size > MAX_TRANSFER_FILE_SIZE {
+                return Err(NerveError::Protocol("File exceeds transfer limit".into()));
+            }
+            let mut file_header = Vec::with_capacity(name_bytes.len() + 10);
+            file_header.extend_from_slice(&name_len.to_be_bytes());
+            file_header.extend_from_slice(name_bytes);
+            file_header.extend_from_slice(&size.to_be_bytes());
+            write_secure_record(
+                &mut stream,
+                security_token,
+                &mut sent_sequence,
+                &file_header,
+            )
+            .await?;
 
             let mut file = tokio::fs::File::open(path).await?;
 
@@ -612,7 +715,13 @@ impl FileTransferClient {
             while sent < size {
                 let to_read = std::cmp::min((size - sent) as usize, CHUNK_SIZE);
                 file.read_exact(&mut buffer[..to_read]).await?;
-                stream.write_all(&buffer[..to_read]).await?;
+                write_secure_record(
+                    &mut stream,
+                    security_token,
+                    &mut sent_sequence,
+                    &buffer[..to_read],
+                )
+                .await?;
                 sent += to_read as u64;
             }
 
@@ -621,14 +730,73 @@ impl FileTransferClient {
 
         stream.flush().await?;
 
-        let mut ack = [0u8; 3];
-        stream.read_exact(&mut ack).await?;
-        if &ack != b"OK\n" {
+        let mut replay = crate::secure_input::ReplayGuard::new();
+        let mut ack_sequence = 0u64;
+        let ack =
+            read_secure_record(&mut stream, security_token, &mut ack_sequence, &mut replay).await?;
+        if ack != b"OK" {
             return Err(NerveError::Protocol(
                 "File transfer was not acknowledged".into(),
             ));
         }
 
         Ok(total_bytes)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn secure_records_require_matching_key_and_sequence() {
+        let (mut sender, mut receiver) = tokio::io::duplex(1024);
+        let key = "1234567890abcdef";
+        let mut send_sequence = 0;
+        let mut receive_sequence = 0;
+        let mut replay = crate::secure_input::ReplayGuard::new();
+
+        write_secure_record(&mut sender, key, &mut send_sequence, b"file contents")
+            .await
+            .unwrap();
+        assert!(read_secure_record(
+            &mut receiver,
+            "fedcba0987654321",
+            &mut receive_sequence,
+            &mut replay,
+        )
+        .await
+        .is_err());
+        assert_eq!(receive_sequence, 0);
+
+        write_secure_record(&mut sender, key, &mut send_sequence, b"next")
+            .await
+            .unwrap();
+        assert!(
+            read_secure_record(&mut receiver, key, &mut receive_sequence, &mut replay)
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn secure_records_round_trip() {
+        let (mut sender, mut receiver) = tokio::io::duplex(1024);
+        let key = "1234567890abcdef";
+        let mut send_sequence = 0;
+        let mut receive_sequence = 0;
+        let mut replay = crate::secure_input::ReplayGuard::new();
+
+        for contents in [b"metadata".as_slice(), b"file contents"] {
+            write_secure_record(&mut sender, key, &mut send_sequence, contents)
+                .await
+                .unwrap();
+            assert_eq!(
+                read_secure_record(&mut receiver, key, &mut receive_sequence, &mut replay)
+                    .await
+                    .unwrap(),
+                contents
+            );
+        }
     }
 }

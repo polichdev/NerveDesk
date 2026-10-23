@@ -32,10 +32,16 @@ pub struct MirrorSender {
     pub stream: std::net::TcpStream,
     pub codec: Codec,
     next_id: u64,
+    security_key: String,
+    inbound: Vec<u8>,
+    feedback_replay: crate::secure_input::ReplayGuard,
 }
 
 impl MirrorSender {
-    pub async fn connect(target: SocketAddr) -> Result<Self, String> {
+    pub async fn connect(target: SocketAddr, security_key: String) -> Result<Self, String> {
+        if !(16..=256).contains(&security_key.len()) {
+            return Err("Pairing key is required for screen streaming".into());
+        }
         let h264_target = SocketAddr::new(target.ip(), Codec::H264.port());
         if let Ok(Ok(mut stream)) = tokio::time::timeout(
             std::time::Duration::from_secs(1),
@@ -53,7 +59,7 @@ impl MirrorSender {
                 Ok(Ok(_))
             ) && ready[0] == 0x48
             {
-                return Self::configure(stream, Codec::H264);
+                return Self::configure(stream, Codec::H264, security_key);
             }
         }
         let stream = tokio::time::timeout(
@@ -63,10 +69,10 @@ impl MirrorSender {
         .await
         .map_err(|_| format!("Receiver did not respond on TCP {}", target.port()))?
         .map_err(|e| format!("Cannot connect to receiver on TCP {}: {e}", target.port()))?;
-        Self::configure(stream, Codec::Jpeg)
+        Self::configure(stream, Codec::Jpeg, security_key)
     }
 
-    fn configure(stream: TcpStream, codec: Codec) -> Result<Self, String> {
+    fn configure(stream: TcpStream, codec: Codec, security_key: String) -> Result<Self, String> {
         let stream = stream.into_std().map_err(|e| e.to_string())?;
         stream.set_nonblocking(false).map_err(|e| e.to_string())?;
         stream.set_nodelay(true).map_err(|e| e.to_string())?;
@@ -82,6 +88,9 @@ impl MirrorSender {
             stream,
             codec,
             next_id: 1,
+            security_key,
+            inbound: Vec::new(),
+            feedback_replay: crate::secure_input::ReplayGuard::new(),
         })
     }
 
@@ -99,6 +108,8 @@ impl MirrorSender {
         self.stream = stream;
         self.codec = Codec::Jpeg;
         self.next_id = 1;
+        self.inbound.clear();
+        self.feedback_replay = crate::secure_input::ReplayGuard::new();
         Ok(())
     }
 
@@ -112,36 +123,55 @@ impl MirrorSender {
             match self.stream.read(&mut buf) {
                 Ok(0) => return Err("Receiver disconnected".into()),
                 Ok(n) => {
+                    self.inbound.extend_from_slice(&buf[..n]);
                     let mut cursor = 0;
-                    while cursor < n {
-                        match buf[cursor] {
+                    while cursor < self.inbound.len() {
+                        match self.inbound[cursor] {
                             0x06 => {
                                 got_ack = true;
                                 cursor += 1;
                             }
-                            0x02 => {
-                                if cursor + 3 <= n {
-                                    let len = u16::from_le_bytes([buf[cursor + 1], buf[cursor + 2]])
-                                        as usize;
-                                    if cursor + 3 + len <= n {
-                                        let payload: Vec<u8> =
-                                            buf[cursor + 3..cursor + 3 + len].to_vec();
-                                        if let Ok((_header, event)) =
-                                            common::decode_packet(&payload)
-                                        {
-                                            on_event(&event);
+                            0xA1 => {
+                                if cursor + 3 > self.inbound.len() {
+                                    break;
+                                }
+                                let len = u16::from_le_bytes([
+                                    self.inbound[cursor + 1],
+                                    self.inbound[cursor + 2],
+                                ]) as usize;
+                                if len > 2048 + 28 {
+                                    return Err("Invalid mirror feedback length".into());
+                                }
+                                if cursor + 3 + len > self.inbound.len() {
+                                    break;
+                                }
+                                let payload = &self.inbound[cursor + 3..cursor + 3 + len];
+                                if let Ok(plain) = self.feedback_replay.open_payload(
+                                    &self.security_key,
+                                    b"mirror-feedback",
+                                    payload,
+                                    2048,
+                                ) {
+                                    if plain.len() >= 3 && plain[0] == 0x02 {
+                                        let size =
+                                            u16::from_le_bytes([plain[1], plain[2]]) as usize;
+                                        if plain.len() == size + 3 {
+                                            if let Ok((_header, event)) =
+                                                common::decode_packet(&plain[3..])
+                                            {
+                                                on_event(&event);
+                                            }
                                         }
-                                        cursor += 3 + len;
-                                        continue;
                                     }
                                 }
-                                break;
+                                cursor += 3 + len;
                             }
                             _ => {
                                 cursor += 1;
                             }
                         }
                     }
+                    self.inbound.drain(..cursor);
                 }
                 Err(ref e)
                     if e.kind() == std::io::ErrorKind::WouldBlock
@@ -178,13 +208,21 @@ impl MirrorSender {
             height,
             offset_x,
             offset_y,
-            payload.len(),
+            payload.len() + 28,
             (self.next_id & 0xffffffff) as u32,
         );
+        let encrypted = crate::secure_input::seal_payload(
+            &self.security_key,
+            &header,
+            payload,
+            MAX_FRAME_BYTES,
+        )?;
         self.stream.write_all(&header).map_err(|e| e.to_string())?;
-        self.stream.write_all(payload).map_err(|e| e.to_string())?;
+        self.stream
+            .write_all(&encrypted)
+            .map_err(|e| e.to_string())?;
         self.next_id += 1;
-        Ok(header.len() + payload.len())
+        Ok(header.len() + encrypted.len())
     }
 }
 
@@ -211,6 +249,9 @@ impl MirrorReceiver {
     pub async fn read_frame<R: tokio::io::AsyncReadExt + Unpin>(
         stream: &mut R,
         codec: Codec,
+        key: &str,
+        replay: &mut crate::secure_input::ReplayGuard,
+        last_id: &mut u32,
     ) -> Result<(u32, u32, i16, i16, Vec<u8>), String> {
         let mut header = [0u8; HEADER_LEN];
         stream
@@ -218,11 +259,17 @@ impl MirrorReceiver {
             .await
             .map_err(|e| e.to_string())?;
         let (width, height, offset_x, offset_y, len) = parse_header(codec, &header)?;
+        let id = u32::from_le_bytes(header[16..20].try_into().unwrap());
+        if id <= *last_id {
+            return Err("Repeated mirror frame".into());
+        }
         let mut payload = vec![0u8; len];
         stream
             .read_exact(&mut payload)
             .await
             .map_err(|e| e.to_string())?;
+        let payload = replay.open_payload(key, &header, &payload, MAX_FRAME_BYTES)?;
+        *last_id = id;
         Ok((width, height, offset_x, offset_y, payload))
     }
 }
@@ -262,7 +309,7 @@ fn parse_header(
         || width > 7680
         || height > 4320
         || len == 0
-        || len > MAX_FRAME_BYTES
+        || len > MAX_FRAME_BYTES + 28
     {
         return Err("Invalid mirror frame header".into());
     }

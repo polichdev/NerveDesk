@@ -4,6 +4,8 @@ pub mod file_transfer;
 pub mod folder_sync;
 pub mod mirror;
 pub mod mobile_server;
+mod mobile_tls;
+pub mod secure_input;
 pub mod udp;
 pub mod video;
 
