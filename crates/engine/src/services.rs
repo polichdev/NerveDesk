@@ -21,6 +21,7 @@ pub type FileReceivedCallback = Arc<dyn Fn(Vec<String>) + Send + Sync>;
 pub fn start_background_services(state: &AppState, on_file_received: Option<FileReceivedCallback>) {
     spawn_discovery_emitter(state);
     spawn_discovery_listener(state);
+    spawn_pair_probe(state);
     spawn_input_receiver(state, on_file_received);
     spawn_clipboard_receiver(state);
     spawn_clipboard_sender(state);
@@ -28,8 +29,58 @@ pub fn start_background_services(state: &AppState, on_file_received: Option<File
     spawn_mirror_receiver(state);
 }
 
+fn spawn_pair_probe(state: &AppState) {
+    let paired_ip = state.paired_peer_ip.clone();
+    let paired_key = state.paired_security_key.clone();
+    let authenticated = state.authenticated_peer_seen.clone();
+    engine_async_spawn(async move {
+        let socket = match tokio::net::UdpSocket::bind("0.0.0.0:0").await {
+            Ok(socket) => socket,
+            Err(e) => {
+                warn!("Pair probe socket failed: {e}");
+                return;
+            }
+        };
+        let mut response = [0u8; 128];
+        loop {
+            let ip = paired_ip.lock().ok().and_then(|ip| ip.clone());
+            let key = paired_key.lock().ok().and_then(|key| key.clone());
+            if let (Some(ip), Some(key)) = (ip, key) {
+                if let Ok(address) = format!("{ip}:48100").parse::<SocketAddr>() {
+                    if let Ok(packet) =
+                        net::secure_input::seal_payload(&key, b"pair-probe", b"NerveDesk", 32)
+                    {
+                        let challenge = &packet[..12];
+                        let _ = socket.send_to(&packet, address).await;
+                        if let Ok(Ok((len, sender))) = tokio::time::timeout(
+                            Duration::from_millis(500),
+                            socket.recv_from(&mut response),
+                        )
+                        .await
+                        {
+                            if sender.ip() == address.ip()
+                                && net::secure_input::ReplayGuard::new()
+                                    .open_payload(&key, b"pair-ack", &response[..len], 32)
+                                    .ok()
+                                    .as_deref()
+                                    == Some(challenge)
+                            {
+                                if let Ok(mut seen) = authenticated.lock() {
+                                    *seen = Some(Instant::now());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+    });
+}
+
 fn spawn_discovery_emitter(state: &AppState) {
     let paired_ip_for_disc = state.paired_peer_ip.clone();
+    let paired_key_for_disc = state.paired_security_key.clone();
     let edge_for_disc = state.screen_edge.clone();
     engine_async_spawn(async move {
         let my_name = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Desktop-PC".into());
@@ -42,7 +93,12 @@ fn spawn_discovery_emitter(state: &AppState) {
                 if let Ok(edge) = edge_for_disc.lock() {
                     emitter.set_screen_edge(edge.clone());
                 }
+
+                let current_key = paired_key_for_disc.lock().ok().and_then(|k| k.clone());
+                emitter.set_pairing_key(current_key.clone());
+
                 let _ = emitter.emit_beacon().await;
+
                 let paired_ip = paired_ip_for_disc.lock().ok().and_then(|ip| ip.clone());
                 if let Some(ip) = paired_ip {
                     if let Ok(address) = format!("{ip}:48103").parse() {
@@ -59,16 +115,28 @@ fn spawn_discovery_listener(state: &AppState) {
     let seen_for_disc = state.device_last_seen.clone();
     let peer_device_for_disc = state.peer_device.clone();
     let paired_ip_for_disc = state.paired_peer_ip.clone();
+    let paired_key_for_disc = state.paired_security_key.clone();
     let edge_for_disc = state.screen_edge.clone();
 
     engine_async_spawn(async move {
         if let Ok(listener) = DiscoveryListener::bind().await {
             loop {
-                if let Ok((beacon, peer_addr)) = listener.recv_beacon().await {
+
+                let current_key = paired_key_for_disc.lock().ok().and_then(|k| k.clone());
+                let key_ref = current_key.as_deref();
+                if let Ok((beacon, peer_addr)) = listener.recv_beacon(None).await {
                     let my_name = std::env::var("COMPUTERNAME").unwrap_or_default();
                     if !my_name.is_empty() && beacon.device_name.eq_ignore_ascii_case(&my_name) {
                         continue;
                     }
+                    let ip = peer_addr.ip().to_string();
+                    let is_paired = paired_ip_for_disc
+                        .lock()
+                        .ok()
+                        .and_then(|p| p.clone())
+                        .as_deref()
+                        == Some(ip.as_str());
+
                     if peer_addr.port() != 48103 {
                         let (sw, sh) = get_screen_dimensions();
                         let local_edge = edge_for_disc
@@ -79,15 +147,10 @@ fn spawn_discovery_listener(state: &AppState) {
                             DiscoveryBeacon::new(my_name, DeviceRole::Host, 48100, 48101, sw, sh)
                                 .with_edge(local_edge);
                         let address = SocketAddr::new(peer_addr.ip(), 48103);
-                        let _ = listener.reply_to(&reply, address).await;
+
+                        let reply_key = if is_paired { key_ref } else { None };
+                        let _ = listener.reply_to(&reply, address, reply_key).await;
                     }
-                    let ip = peer_addr.ip().to_string();
-                    let is_paired = paired_ip_for_disc
-                        .lock()
-                        .ok()
-                        .and_then(|p| p.clone())
-                        .as_deref()
-                        == Some(ip.as_str());
                     if is_paired {
                         if let Some(edge) = edge_from_name(&beacon.screen_edge) {
                             input::set_remote_edge(edge);
@@ -151,32 +214,34 @@ fn spawn_input_receiver(state: &AppState, on_file_received: Option<FileReceivedC
     let seen_for_rx = state.device_last_seen.clone();
     let peer_device_for_rx = state.peer_device.clone();
     let paired_ip_for_rx = state.paired_peer_ip.clone();
+    let state_key_for_input = state.paired_security_key.clone();
     let keyboard_sharing_for_rx = state.keyboard_sharing.clone();
     let drag_badge_for_rx = state.drag_badge.clone();
 
     engine_async_spawn(async move {
         let bind_addr: SocketAddr = "0.0.0.0:48100".parse().unwrap();
-        let mut receiver = match UdpInputReceiver::bind(bind_addr).await {
-            Ok(r) => r,
-            Err(e) => {
-                warn!("Auto background receiver bind failed: {:?}", e);
-                return;
-            }
-        };
+        let mut receiver =
+            match UdpInputReceiver::bind(bind_addr, state_key_for_input, paired_ip_for_rx.clone())
+                .await
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    warn!("Auto background receiver bind failed: {:?}", e);
+                    return;
+                }
+            };
 
         let emulator = InputEmulator::new();
         loop {
             match receiver.recv_event().await {
                 Ok((_header, event, peer)) => {
                     let peer_ip = peer.ip().to_string();
+                    let paired = paired_ip_for_rx.lock().ok().and_then(|ip| ip.clone());
+                    if paired.as_deref() != Some(peer_ip.as_str()) {
+                        continue;
+                    }
                     if let Ok(mut seen) = seen_for_rx.lock() {
                         seen.insert(peer_ip.clone(), Instant::now());
-                    }
-
-                    if let Ok(mut ip_guard) = paired_ip_for_rx.lock() {
-                        if ip_guard.is_none() {
-                            *ip_guard = Some(peer_ip.clone());
-                        }
                     }
 
                     if let InputEvent::Heartbeat { ref device_name } = event {
@@ -287,6 +352,7 @@ fn spawn_clipboard_receiver(state: &AppState) {
     let paired_key_for_srv = state.paired_security_key.clone();
     let paired_ip_for_srv = state.paired_peer_ip.clone();
     let clipboard_hash_for_srv = state.clipboard_hash.clone();
+    let replay_guard = Arc::new(std::sync::Mutex::new(net::secure_input::ReplayGuard::new()));
 
     engine_async_spawn(async move {
         let listener = match tokio::net::TcpListener::bind("0.0.0.0:48102").await {
@@ -303,14 +369,15 @@ fn spawn_clipboard_receiver(state: &AppState) {
             }
 
             let incoming_ip = peer_addr.ip().to_string();
-            if let Ok(mut guard) = paired_ip_for_srv.lock() {
-                if guard.is_none() {
-                    *guard = Some(incoming_ip);
-                }
+            let paired = paired_ip_for_srv.lock().ok().and_then(|ip| ip.clone());
+            if paired.as_deref() != Some(incoming_ip.as_str()) {
+                continue;
             }
 
             let hash_ref = clipboard_hash_for_srv.clone();
             let key_ref = paired_key_for_srv.clone();
+            let clipboard_enabled = clipboard_sharing_for_srv.clone();
+            let replay_guard = replay_guard.clone();
 
             tokio::spawn(async move {
                 let mut len_buf = [0u8; 4];
@@ -318,13 +385,24 @@ fn spawn_clipboard_receiver(state: &AppState) {
                     return;
                 }
                 let len = u32::from_be_bytes(len_buf) as usize;
-                if len == 0 || len > 64 * 1024 * 1024 + 1024 {
+                if len == 0 || len > 64 * 1024 * 1024 + 1052 {
                     return;
                 }
-                let mut payload_buf = vec![0u8; len];
-                if socket.read_exact(&mut payload_buf).await.is_err() {
+                let mut encrypted = vec![0u8; len];
+                if socket.read_exact(&mut encrypted).await.is_err() {
                     return;
                 }
+                let key = key_ref.lock().ok().and_then(|key| key.clone());
+                let Some(key) = key else { return };
+                let payload_buf = match replay_guard.lock() {
+                    Ok(mut guard) => {
+                        guard.open_payload(&key, b"clipboard", &encrypted, 64 * 1024 * 1024 + 1024)
+                    }
+                    Err(_) => return,
+                };
+                let Ok(mut payload_buf) = payload_buf else {
+                    return;
+                };
 
                 let incoming = if payload_buf.starts_with(b"NCBI") && payload_buf.len() >= 10 {
                     let token_len = u16::from_be_bytes([payload_buf[4], payload_buf[5]]) as usize;
@@ -346,12 +424,12 @@ fn spawn_clipboard_receiver(state: &AppState) {
                         })
                 };
                 if let Some((token, payload)) = incoming {
-                    if let Ok(guard) = key_ref.lock() {
-                        if let Some(ref key) = *guard {
-                            if !key.is_empty() && !token.is_empty() && token != *key {
-                                return;
-                            }
-                        }
+                    if !clipboard_enabled.load(Ordering::SeqCst) {
+                        return;
+                    }
+                    let valid_token = !key.is_empty() && token == key;
+                    if !valid_token {
+                        return;
                     }
 
                     let h = payload.compute_hash();
@@ -412,7 +490,16 @@ fn spawn_clipboard_sender(state: &AppState) {
                         clipboard::ClipboardPayload::Text(t) => {
                             let packet = ClipboardPacket { token, text: t };
                             if let Ok(bytes) = serde_json::to_vec(&packet) {
-                                let len = (bytes.len() as u32).to_be_bytes();
+                                let encrypted = match net::secure_input::seal_payload(
+                                    &packet.token,
+                                    b"clipboard",
+                                    &bytes,
+                                    64 * 1024 * 1024 + 1024,
+                                ) {
+                                    Ok(encrypted) => encrypted,
+                                    Err(_) => continue,
+                                };
+                                let len = (encrypted.len() as u32).to_be_bytes();
                                 let target_addr = format!("{}:48102", ip);
                                 if let Ok(mut stream) = std::net::TcpStream::connect_timeout(
                                     &target_addr.parse().unwrap(),
@@ -420,7 +507,7 @@ fn spawn_clipboard_sender(state: &AppState) {
                                 ) {
                                     use std::io::Write;
                                     let _ = stream.write_all(&len);
-                                    let _ = stream.write_all(&bytes);
+                                    let _ = stream.write_all(&encrypted);
                                     let _ = stream.flush();
                                 }
                             }
@@ -435,14 +522,23 @@ fn spawn_clipboard_sender(state: &AppState) {
                             packet.extend_from_slice(token.as_bytes());
                             packet.extend_from_slice(&format.to_be_bytes());
                             packet.extend_from_slice(&bytes);
+                            let encrypted = match net::secure_input::seal_payload(
+                                &token,
+                                b"clipboard",
+                                &packet,
+                                64 * 1024 * 1024 + 1024,
+                            ) {
+                                Ok(encrypted) => encrypted,
+                                Err(_) => continue,
+                            };
                             let target_addr = format!("{}:48102", ip);
                             if let Ok(mut stream) = std::net::TcpStream::connect_timeout(
                                 &target_addr.parse().unwrap(),
                                 Duration::from_millis(800),
                             ) {
                                 use std::io::Write;
-                                let _ = stream.write_all(&(packet.len() as u32).to_be_bytes());
-                                let _ = stream.write_all(&packet);
+                                let _ = stream.write_all(&(encrypted.len() as u32).to_be_bytes());
+                                let _ = stream.write_all(&encrypted);
                                 let _ = stream.flush();
                             }
                         }
@@ -457,12 +553,15 @@ fn spawn_clipboard_sender(state: &AppState) {
 fn spawn_video_receiver(state: &AppState) {
     let live_fps_for_vid_rx = state.received_video_fps_x10.clone();
     let viewer_for_vid_rx = state.projection_viewer.clone();
+    let paired_peer_ip = state.paired_peer_ip.clone();
+    let paired_key = state.paired_security_key.clone();
     engine_async_spawn(async move {
         let bind_addr: SocketAddr = "0.0.0.0:48101".parse().unwrap();
-        let mut video_receiver = match VideoReceiver::bind(bind_addr).await {
-            Ok(r) => r,
-            Err(_) => return,
-        };
+        let mut video_receiver =
+            match VideoReceiver::bind(bind_addr, paired_peer_ip, paired_key).await {
+                Ok(r) => r,
+                Err(_) => return,
+            };
 
         let decoder_config = VideoDecoderConfig::default();
         let mut decoder = match HardwareVideoDecoder::new(decoder_config) {
@@ -508,6 +607,8 @@ fn spawn_video_receiver(state: &AppState) {
 fn spawn_mirror_receiver(state: &AppState) {
     let mirror_session = Arc::new(tokio::sync::Mutex::new(()));
     for codec in [MirrorCodec::Jpeg, MirrorCodec::H264] {
+        let paired_ip = state.paired_peer_ip.clone();
+        let paired_key = state.paired_security_key.clone();
         let viewer_for_mirror = state.projection_viewer.clone();
         let fps_for_mirror = state.received_mirror_fps_x10.clone();
         let mirror_session = mirror_session.clone();
@@ -520,7 +621,7 @@ fn spawn_mirror_receiver(state: &AppState) {
                 }
             };
             loop {
-                let (stream, _peer_addr) = match receiver.accept().await {
+                let (stream, peer_addr) = match receiver.accept().await {
                     Ok(pair) => pair,
                     Err(e) => {
                         warn!("Mirror accept failed: {e}");
@@ -528,6 +629,12 @@ fn spawn_mirror_receiver(state: &AppState) {
                         continue;
                     }
                 };
+                let allowed = paired_ip.lock().ok().and_then(|ip| ip.clone());
+                if allowed.as_deref() != Some(peer_addr.ip().to_string().as_str()) {
+                    continue;
+                }
+                let key = paired_key.lock().ok().and_then(|key| key.clone());
+                let Some(key) = key else { continue };
                 let _session_guard = mirror_session.lock().await;
 
                 let (mut read_half, mut write_half) = stream.into_split();
@@ -592,10 +699,29 @@ fn spawn_mirror_receiver(state: &AppState) {
                     }
                 }
 
+                let feedback_key = key.clone();
                 let write_task = tokio::spawn(async move {
                     use tokio::io::AsyncWriteExt;
                     while let Some(msg) = input_rx.recv().await {
-                        if write_half.write_all(&msg).await.is_err() {
+                        let wire = if msg == [0x06] {
+                            msg
+                        } else {
+                            let encrypted = match net::secure_input::seal_payload(
+                                &feedback_key,
+                                b"mirror-feedback",
+                                &msg,
+                                2048,
+                            ) {
+                                Ok(encrypted) => encrypted,
+                                Err(_) => continue,
+                            };
+                            let mut wire = Vec::with_capacity(encrypted.len() + 3);
+                            wire.push(0xA1);
+                            wire.extend_from_slice(&(encrypted.len() as u16).to_le_bytes());
+                            wire.extend_from_slice(&encrypted);
+                            wire
+                        };
+                        if write_half.write_all(&wire).await.is_err() {
                             break;
                         }
                     }
@@ -604,10 +730,20 @@ fn spawn_mirror_receiver(state: &AppState) {
                 viewer_for_mirror.set_input_channel(Some(input_tx.clone()));
                 input::disable_edge_detection();
                 let mut frames = 0u64;
+                let mut replay = net::secure_input::ReplayGuard::new();
+                let mut last_id = 0u32;
                 let mut report = Instant::now();
                 loop {
                     let (width, height, offset_x, offset_y, payload) =
-                        match MirrorReceiver::read_frame(&mut read_half, codec).await {
+                        match MirrorReceiver::read_frame(
+                            &mut read_half,
+                            codec,
+                            &key,
+                            &mut replay,
+                            &mut last_id,
+                        )
+                        .await
+                        {
                             Ok(frame) => frame,
                             Err(_) => break,
                         };

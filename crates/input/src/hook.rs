@@ -192,7 +192,6 @@ unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: LPAR
         let msg = w_param.0 as u32;
         let hook_struct = *(l_param.0 as *const MSLLHOOKSTRUCT);
 
-        // SendInput events from the peer must never become a new local drag or edge crossing.
         if (hook_struct.flags & 1) != 0 {
             return CallNextHookEx(HHOOK::default(), n_code, w_param, l_param);
         }
