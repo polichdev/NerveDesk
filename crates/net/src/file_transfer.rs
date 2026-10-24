@@ -2,15 +2,22 @@ use common::{NerveError, Result};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, BufWriter};
 use tokio::net::{TcpListener, TcpStream};
 use tracing::{error, info, warn};
 
 pub const FILE_TRANSFER_PORT: u16 = 48106;
 const FILE_TRANSFER_MAGIC: &[u8; 4] = b"NRV2";
-const CHUNK_SIZE: usize = 65536;
+const CHUNK_SIZE: usize = 262144; // 256 KB chunks for high throughput over LAN/Wi-Fi
 const MAX_TRANSFER_FILE_SIZE: u64 = 16 * 1024 * 1024 * 1024;
-const MAX_SECURE_RECORD: usize = CHUNK_SIZE + 28;
+const MAX_SECURE_RECORD: usize = 1024 * 1024 + 28; // Accept records up to 1 MB for backwards/forwards compatibility
+
+fn tune_socket(socket: &TcpStream) {
+    let _ = socket.set_nodelay(true);
+    let sock_ref = socket2::SockRef::from(socket);
+    let _ = sock_ref.set_send_buffer_size(1024 * 1024);
+    let _ = sock_ref.set_recv_buffer_size(1024 * 1024);
+}
 
 static STAGED_FILES: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
 static PENDING_DROP_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
@@ -396,10 +403,10 @@ async fn write_secure_record<S: AsyncWrite + Unpin>(
     let encrypted =
         crate::secure_input::seal_payload(key, &record_context(*sequence), plaintext, CHUNK_SIZE)
             .map_err(NerveError::Protocol)?;
-    socket
-        .write_all(&(encrypted.len() as u32).to_be_bytes())
-        .await?;
-    socket.write_all(&encrypted).await?;
+    let mut packet = Vec::with_capacity(4 + encrypted.len());
+    packet.extend_from_slice(&(encrypted.len() as u32).to_be_bytes());
+    packet.extend_from_slice(&encrypted);
+    socket.write_all(&packet).await?;
     *sequence = sequence
         .checked_add(1)
         .ok_or_else(|| NerveError::Protocol("File transfer sequence overflow".into()))?;
@@ -452,6 +459,7 @@ impl FileTransferServer {
             while running_clone.load(Ordering::Relaxed) {
                 match listener.accept().await {
                     Ok((socket, addr)) => {
+                        tune_socket(&socket);
                         if !enabled.load(Ordering::Relaxed) {
                             continue;
                         }
@@ -559,7 +567,8 @@ where
             .unwrap_or(safe_name);
         let part_path = staging_dir.join(format!("{final_name}.part"));
 
-        let mut out_file = tokio::fs::File::create(&part_path).await?;
+        let out_file = tokio::fs::File::create(&part_path).await?;
+        let mut out_file = BufWriter::with_capacity(CHUNK_SIZE * 2, out_file);
 
         let mut remaining = file_size;
         while remaining > 0 {
@@ -669,6 +678,7 @@ impl FileTransferClient {
         }
 
         let mut stream = TcpStream::connect(target_addr).await?;
+        tune_socket(&stream);
 
         stream.write_all(FILE_TRANSFER_MAGIC).await?;
         let mut sent_sequence = 0u64;
@@ -708,7 +718,8 @@ impl FileTransferClient {
             )
             .await?;
 
-            let mut file = tokio::fs::File::open(path).await?;
+            let file = tokio::fs::File::open(path).await?;
+            let mut file = BufReader::with_capacity(CHUNK_SIZE * 2, file);
 
             let mut buffer = vec![0u8; CHUNK_SIZE];
             let mut sent = 0u64;
@@ -798,5 +809,36 @@ mod tests {
                 contents
             );
         }
+    }
+
+    #[tokio::test]
+    async fn large_chunk_streaming_round_trip() {
+        let (mut sender, mut receiver) = tokio::io::duplex(512 * 1024);
+        let key = "1234567890abcdef";
+        let mut send_seq = 0;
+        let mut recv_seq = 0;
+        let mut replay = crate::secure_input::ReplayGuard::new();
+        let payload = vec![0x5Au8; 768 * 1024]; // 768 KB spanning multiple 256 KB chunks
+
+        let sender_task = tokio::spawn(async move {
+            for chunk in payload.chunks(CHUNK_SIZE) {
+                write_secure_record(&mut sender, key, &mut send_seq, chunk)
+                    .await
+                    .unwrap();
+            }
+        });
+
+        let mut received = Vec::new();
+        while received.len() < 768 * 1024 {
+            let chunk = read_secure_record(&mut receiver, key, &mut recv_seq, &mut replay)
+                .await
+                .unwrap();
+            received.extend_from_slice(&chunk);
+        }
+
+        sender_task.await.unwrap();
+        assert_eq!(received.len(), 768 * 1024);
+        assert_eq!(received[0], 0x5A);
+        assert_eq!(received[768 * 1024 - 1], 0x5A);
     }
 }
