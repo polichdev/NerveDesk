@@ -3,6 +3,15 @@ ui/tauri.driver.generated.json
 **/*.rs.bk
 Cargo.lock
 
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.der
+
 *.user
 *.suo
 *.userosscache
