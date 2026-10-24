@@ -11,7 +11,7 @@ use common::InputEvent;
 use input::InputEmulator;
 use net::{
     decode_mirror_bgra, DeviceRole, DiscoveryBeacon, DiscoveryBeaconEmitter, DiscoveryListener,
-    MirrorCodec, MirrorReceiver, UdpInputReceiver, VideoReceiver,
+    MirrorCodec, MirrorReceiver, UdpInputReceiver, UdpInputSender, VideoReceiver,
 };
 
 use crate::state::{get_screen_dimensions, AppState, ClipboardPacket, DiscoveredDevice};
@@ -33,6 +33,8 @@ fn spawn_pair_probe(state: &AppState) {
     let paired_ip = state.paired_peer_ip.clone();
     let paired_key = state.paired_security_key.clone();
     let authenticated = state.authenticated_peer_seen.clone();
+    let discovered_for_probe = state.discovered_devices.clone();
+    let peer_device_for_probe = state.peer_device.clone();
     engine_async_spawn(async move {
         let socket = match tokio::net::UdpSocket::bind("0.0.0.0:0").await {
             Ok(socket) => socket,
@@ -43,7 +45,26 @@ fn spawn_pair_probe(state: &AppState) {
         };
         let mut response = [0u8; 128];
         loop {
-            let ip = paired_ip.lock().ok().and_then(|ip| ip.clone());
+            let mut ip = paired_ip.lock().ok().and_then(|ip| ip.clone());
+            if ip.is_none() {
+                if let (Ok(disc_guard), Ok(peer_guard)) =
+                    (discovered_for_probe.lock(), peer_device_for_probe.lock())
+                {
+                    if let Some(ref target_name) = *peer_guard {
+                        if let Some((disc_ip, _)) = disc_guard
+                            .iter()
+                            .find(|(_, dev)| dev.name.eq_ignore_ascii_case(target_name))
+                        {
+                            ip = Some(disc_ip.clone());
+                            if let Ok(mut paired_guard) = paired_ip.lock() {
+                                if paired_guard.is_none() {
+                                    *paired_guard = Some(disc_ip.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             let key = paired_key.lock().ok().and_then(|key| key.clone());
             if let (Some(ip), Some(key)) = (ip, key) {
                 if let Ok(address) = format!("{ip}:48100").parse::<SocketAddr>() {
@@ -117,6 +138,7 @@ fn spawn_discovery_listener(state: &AppState) {
     let paired_ip_for_disc = state.paired_peer_ip.clone();
     let paired_key_for_disc = state.paired_security_key.clone();
     let edge_for_disc = state.screen_edge.clone();
+    let authenticated_for_disc = state.authenticated_peer_seen.clone();
 
     engine_async_spawn(async move {
         if let Ok(listener) = DiscoveryListener::bind().await {
@@ -124,18 +146,34 @@ fn spawn_discovery_listener(state: &AppState) {
 
                 let current_key = paired_key_for_disc.lock().ok().and_then(|k| k.clone());
                 let key_ref = current_key.as_deref();
-                if let Ok((beacon, peer_addr)) = listener.recv_beacon(None).await {
+                if let Ok((beacon, peer_addr, authenticated)) =
+                    listener.recv_beacon_with_auth(key_ref).await
+                {
                     let my_name = std::env::var("COMPUTERNAME").unwrap_or_default();
                     if !my_name.is_empty() && beacon.device_name.eq_ignore_ascii_case(&my_name) {
                         continue;
                     }
                     let ip = peer_addr.ip().to_string();
-                    let is_paired = paired_ip_for_disc
+                    let mut is_paired = paired_ip_for_disc
                         .lock()
                         .ok()
                         .and_then(|p| p.clone())
                         .as_deref()
                         == Some(ip.as_str());
+
+                    if !is_paired {
+                        let matches_peer = peer_device_for_disc
+                            .lock()
+                            .ok()
+                            .and_then(|p| p.clone())
+                            .is_some_and(|name| name.eq_ignore_ascii_case(&beacon.device_name));
+                        if matches_peer && authenticated {
+                            if let Ok(mut guard) = paired_ip_for_disc.lock() {
+                                *guard = Some(ip.clone());
+                            }
+                            is_paired = true;
+                        }
+                    }
 
                     if peer_addr.port() != 48103 {
                         let (sw, sh) = get_screen_dimensions();
@@ -151,9 +189,12 @@ fn spawn_discovery_listener(state: &AppState) {
                         let reply_key = if is_paired { key_ref } else { None };
                         let _ = listener.reply_to(&reply, address, reply_key).await;
                     }
-                    if is_paired {
+                    if is_paired && authenticated {
                         if let Some(edge) = edge_from_name(&beacon.screen_edge) {
                             input::set_remote_edge(edge);
+                        }
+                        if let Ok(mut auth) = authenticated_for_disc.lock() {
+                            *auth = Some(Instant::now());
                         }
                     }
                     if let Ok(mut seen) = seen_for_disc.lock() {
@@ -217,14 +258,15 @@ fn spawn_input_receiver(state: &AppState, on_file_received: Option<FileReceivedC
     let state_key_for_input = state.paired_security_key.clone();
     let keyboard_sharing_for_rx = state.keyboard_sharing.clone();
     let drag_badge_for_rx = state.drag_badge.clone();
+    let authenticated_for_rx = state.authenticated_peer_seen.clone();
 
     engine_async_spawn(async move {
         let bind_addr: SocketAddr = "0.0.0.0:48100".parse().unwrap();
         let mut receiver =
-            match UdpInputReceiver::bind(bind_addr, state_key_for_input, paired_ip_for_rx.clone())
+            match UdpInputReceiver::bind(bind_addr, state_key_for_input.clone(), paired_ip_for_rx.clone())
                 .await
             {
-                Ok(r) => r,
+                Ok(r) => r.with_authenticated_tracker(authenticated_for_rx.clone()),
                 Err(e) => {
                     warn!("Auto background receiver bind failed: {:?}", e);
                     return;
@@ -242,6 +284,9 @@ fn spawn_input_receiver(state: &AppState, on_file_received: Option<FileReceivedC
                     }
                     if let Ok(mut seen) = seen_for_rx.lock() {
                         seen.insert(peer_ip.clone(), Instant::now());
+                    }
+                    if let Ok(mut auth) = authenticated_for_rx.lock() {
+                        *auth = Some(Instant::now());
                     }
 
                     if let InputEvent::Heartbeat { ref device_name } = event {
@@ -269,7 +314,49 @@ fn spawn_input_receiver(state: &AppState, on_file_received: Option<FileReceivedC
                     } = event
                     {
                         if active {
-                            drag_badge_for_rx.show(0, 0, file_name);
+                            if file_name == "request" {
+                                let files = net::get_dragged_files(0);
+                                if !files.is_empty() {
+                                    let dragged_name = files[0]
+                                        .file_name()
+                                        .and_then(|name| name.to_str())
+                                        .unwrap_or("File")
+                                        .to_string();
+                                    let token = state_key_for_input
+                                        .lock()
+                                        .ok()
+                                        .and_then(|k| k.clone())
+                                        .unwrap_or_default();
+                                    let host_addr = format!("{peer_ip}:{}", net::FILE_TRANSFER_PORT);
+                                    let input_addr = format!("{peer_ip}:48100").parse::<SocketAddr>();
+                                    engine_async_spawn(async move {
+                                        if let Ok(input_addr) = input_addr {
+                                            if let Ok(sender) =
+                                                UdpInputSender::new(input_addr, token.clone()).await
+                                            {
+                                                let _ = sender
+                                                    .send_event(&InputEvent::FileDrag {
+                                                        active: true,
+                                                        file_name: dragged_name,
+                                                    })
+                                                    .await;
+                                            }
+                                        }
+                                        let _ = net::FileTransferClient::send_files(
+                                            &host_addr,
+                                            &token,
+                                            &files,
+                                        )
+                                        .await;
+                                    });
+                                }
+                            } else {
+                                let mut pt = windows::Win32::Foundation::POINT::default();
+                                unsafe {
+                                    let _ = windows::Win32::UI::WindowsAndMessaging::GetCursorPos(&mut pt);
+                                }
+                                drag_badge_for_rx.show(pt.x, pt.y, file_name);
+                            }
                         } else {
                             drag_badge_for_rx.hide();
                             if file_name == "cancel" {

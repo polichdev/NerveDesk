@@ -17,6 +17,7 @@ pub struct UdpInputSender {
     target_addr: SocketAddr,
     sequence: AtomicU64,
     security_key: String,
+    paired_peer_ip: Option<Arc<Mutex<Option<String>>>>,
 }
 
 impl UdpInputSender {
@@ -44,7 +45,22 @@ impl UdpInputSender {
             target_addr,
             sequence: AtomicU64::new(1),
             security_key,
+            paired_peer_ip: None,
         })
+    }
+
+    pub fn with_peer_ip_tracker(mut self, peer_ip: Arc<Mutex<Option<String>>>) -> Self {
+        self.paired_peer_ip = Some(peer_ip);
+        self
+    }
+
+    fn current_target_addr(&self) -> SocketAddr {
+        self.paired_peer_ip
+            .as_ref()
+            .and_then(|peer_ip| peer_ip.lock().ok().and_then(|ip| ip.clone()))
+            .and_then(|ip| ip.parse().ok())
+            .map(|ip| SocketAddr::new(ip, self.target_addr.port()))
+            .unwrap_or(self.target_addr)
     }
 
     #[inline]
@@ -69,7 +85,7 @@ impl UdpInputSender {
         let packet = seal(&self.security_key, &buf[..len]).map_err(NerveError::Protocol)?;
         let sent = self
             .socket
-            .send_to(&packet, self.target_addr)
+            .send_to(&packet, self.current_target_addr())
             .await
             .map_err(|e| NerveError::Io(e))?;
 
@@ -77,7 +93,7 @@ impl UdpInputSender {
             "Sent UDP input packet seq={} bytes={} to {}",
             seq,
             sent,
-            self.target_addr
+            self.current_target_addr()
         );
         Ok(sent)
     }
@@ -91,14 +107,14 @@ impl UdpInputSender {
         let packet = seal(&self.security_key, &buf[..len]).map_err(NerveError::Protocol)?;
         let sent = self
             .socket
-            .try_send_to(&packet, self.target_addr)
+            .try_send_to(&packet, self.current_target_addr())
             .map_err(|e| NerveError::Io(e))?;
 
         Ok(sent)
     }
 
     pub fn target_addr(&self) -> SocketAddr {
-        self.target_addr
+        self.current_target_addr()
     }
 }
 
@@ -108,6 +124,7 @@ pub struct UdpInputReceiver {
     paired_peer_ip: Arc<Mutex<Option<String>>>,
     replay_guard: ReplayGuard,
     probe_replay: ReplayGuard,
+    authenticated_tracker: Option<Arc<Mutex<Option<std::time::Instant>>>>,
 }
 
 impl UdpInputReceiver {
@@ -134,7 +151,16 @@ impl UdpInputReceiver {
             paired_peer_ip,
             replay_guard: ReplayGuard::new(),
             probe_replay: ReplayGuard::new(),
+            authenticated_tracker: None,
         })
+    }
+
+    pub fn with_authenticated_tracker(
+        mut self,
+        tracker: Arc<Mutex<Option<std::time::Instant>>>,
+    ) -> Self {
+        self.authenticated_tracker = Some(tracker);
+        self
     }
 
     pub async fn recv_event(&mut self) -> Result<(PacketHeader, InputEvent, SocketAddr)> {
@@ -161,6 +187,11 @@ impl UdpInputReceiver {
                 .as_deref()
                 == Some(b"NerveDesk".as_slice())
             {
+                if let Some(ref tracker) = self.authenticated_tracker {
+                    if let Ok(mut seen) = tracker.lock() {
+                        *seen = Some(std::time::Instant::now());
+                    }
+                }
                 if paired.is_none() {
                     if let Ok(mut configured) = self.paired_peer_ip.lock() {
                         if configured.is_none() {
@@ -179,7 +210,14 @@ impl UdpInputReceiver {
                 continue;
             }
             let plaintext = match self.replay_guard.open(&key, &buf[..len]) {
-                Ok(plaintext) => plaintext,
+                Ok(plaintext) => {
+                    if let Some(ref tracker) = self.authenticated_tracker {
+                        if let Ok(mut seen) = tracker.lock() {
+                            *seen = Some(std::time::Instant::now());
+                        }
+                    }
+                    plaintext
+                }
                 Err(_) => continue,
             };
             match decode_packet(&plaintext) {

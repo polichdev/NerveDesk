@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+﻿use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -298,7 +298,8 @@ pub async fn start_host(
         .ok_or_else(|| "Pair this device with a security key first".to_string())?;
     let input_sender = UdpInputSender::new(target_addr, security_key)
         .await
-        .map_err(|e| format!("Failed to create UDP input sender: {e}"))?;
+        .map_err(|e| format!("Failed to create UDP input sender: {e}"))?
+        .with_peer_ip_tracker(state.paired_peer_ip.clone());
 
     let (event_tx, event_rx) = crossbeam_channel::unbounded::<InputEvent>();
     let hook_manager = InputHookManager::start(event_tx)
@@ -355,7 +356,19 @@ pub async fn start_host(
     let heartbeat_name = my_name.clone();
     let is_file_transfer_enabled = state.file_transfer_enabled.clone();
     let paired_key_for_input = state.paired_security_key.clone();
-    let target_file_addr = format!("{}:{}", target_addr.ip(), net::FILE_TRANSFER_PORT);
+    let drag_badge_for_host = state.drag_badge.clone();
+    let paired_ip_for_files = state.paired_peer_ip.clone();
+
+    input::set_drag_resolver(|source_win| {
+        let files = net::get_dragged_files(source_win);
+        let first_name = files
+            .first()
+            .and_then(|f| f.file_name())
+            .and_then(|n| n.to_str())
+            .unwrap_or("")
+            .to_string();
+        (first_name, files)
+    });
 
     let input_worker = tokio::spawn(async move {
         let mut last_hb = Instant::now();
@@ -363,15 +376,21 @@ pub async fn start_host(
             match event_rx.try_recv() {
                 Ok(event) => {
                     if let InputEvent::FileDrag { active, file_name } = event {
-                        if active && is_file_transfer_enabled.load(Ordering::Relaxed) {
-                            let dragged_files =
-                                net::get_dragged_files(input::take_drag_source_window());
-                            if let Some(first) = dragged_files.first() {
-                                let file_name = first
-                                    .file_name()
-                                    .and_then(|n| n.to_str())
-                                    .unwrap_or("file")
-                                    .to_string();
+                        if active && file_name == "request" {
+                            let mut pt = windows::Win32::Foundation::POINT::default();
+                            unsafe {
+                                let _ = windows::Win32::UI::WindowsAndMessaging::GetCursorPos(&mut pt);
+                            }
+                            drag_badge_for_host.show(pt.x, pt.y, "File");
+                            let _ = input_sender
+                                .send_event(&InputEvent::FileDrag {
+                                    active: true,
+                                    file_name,
+                                })
+                                .await;
+                        } else if active && is_file_transfer_enabled.load(Ordering::Relaxed) {
+                            let dragged_files = input::take_cached_drag_files();
+                            if !dragged_files.is_empty() {
                                 let _ = input_sender
                                     .send_event(&InputEvent::FileDrag {
                                         active: true,
@@ -383,7 +402,12 @@ pub async fn start_host(
                                 } else {
                                     String::new()
                                 };
-                                let addr = target_file_addr.clone();
+                                let addr = paired_ip_for_files
+                                    .lock()
+                                    .ok()
+                                    .and_then(|ip| ip.clone())
+                                    .map(|ip| format!("{ip}:{}", net::FILE_TRANSFER_PORT))
+                                    .unwrap_or_else(|| format!("{}:{}", target_addr.ip(), net::FILE_TRANSFER_PORT));
                                 tokio::spawn(async move {
                                     if let Err(e) = net::FileTransferClient::send_files(
                                         &addr,
@@ -396,9 +420,19 @@ pub async fn start_host(
                                     }
                                 });
                             } else {
-                                warn!("No files found for drag source window");
+                                let _ = input_sender
+                                    .send_event(&InputEvent::FileDrag {
+                                        active: false,
+                                        file_name: "cancel".into(),
+                                    })
+                                    .await;
                             }
                         } else {
+                            drag_badge_for_host.hide();
+                            if !active && file_name == "commit" {
+                                let target_dir = net::get_target_dir_at_cursor();
+                                let _ = net::commit_file_drop(target_dir);
+                            }
                             let _ = input_sender
                                 .send_event(&InputEvent::FileDrag {
                                     active: false,

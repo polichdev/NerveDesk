@@ -189,6 +189,13 @@ impl DiscoveryBeaconEmitter {
             .send_to(&data, self.broadcast_addr)
             .await
             .map_err(NerveError::Io)?;
+        if let Some(key) = self.pairing_key.as_deref() {
+            let signed = encode_beacon(&self.beacon, Some(key))?;
+            self.socket
+                .send_to(&signed, self.broadcast_addr)
+                .await
+                .map_err(NerveError::Io)?;
+        }
         trace!("Emitted unsigned broadcast beacon for {}", self.beacon.device_name);
         Ok(())
     }
@@ -249,6 +256,15 @@ impl DiscoveryListener {
         &self,
         pairing_key: Option<&str>,
     ) -> Result<(DiscoveryBeacon, SocketAddr)> {
+        self.recv_beacon_with_auth(pairing_key)
+            .await
+            .map(|(beacon, addr, _)| (beacon, addr))
+    }
+
+    pub async fn recv_beacon_with_auth(
+        &self,
+        pairing_key: Option<&str>,
+    ) -> Result<(DiscoveryBeacon, SocketAddr, bool)> {
         let mut buf = [0u8; 1024];
         let (len, peer_addr) = self
             .socket
@@ -256,10 +272,13 @@ impl DiscoveryListener {
             .await
             .map_err(|e| NerveError::Io(e))?;
 
-        let beacon = decode_beacon(&buf[..len], pairing_key)?;
+        let authenticated = pairing_key.is_some()
+            && len > 4 + 32
+            && u32::from_le_bytes(buf[..4].try_into().unwrap()) as usize + 4 + 32 == len;
+        let beacon = decode_beacon(&buf[..len], if authenticated { pairing_key } else { None })?;
 
         trace!("Received beacon from {}: {:?}", peer_addr, beacon);
-        Ok((beacon, peer_addr))
+        Ok((beacon, peer_addr, authenticated))
     }
 
     pub async fn reply_to(
