@@ -130,6 +130,21 @@ Run workspace automated tests:
 cargo test --workspace
 ```
 
+## Documentation & Architecture
+
+For deep-dive architectural specifications, security analyses, and protocol details:
+
+- **[System Architecture](docs/ARCHITECTURE.md)**: High-level macro architecture, component topology, and subsystem maps.
+- **[Wire Protocol Specification](docs/specs/PROTOCOL.md)**: NerveWire packet binary layouts, sequence semantics, and connection state machine.
+- **[Concurrency & Threading Model](docs/CONCURRENCY.md)**: Dedicated Win32 hook threads, lock-free ring buffers, and Tokio worker pools.
+- **[Threat Model & Security](docs/THREAT_MODEL.md)**: STRIDE analysis, trust boundaries, and cryptographic invariants.
+- **[Failure Modes & Recovery](docs/FAILURES_AND_RECOVERY.md)**: Panic release for stuck keys, DXGI device removal recovery, and firewall traversal.
+- **[Compatibility Matrix](docs/COMPATIBILITY.md)**: Windows OS version support, GPU encoder capabilities, and network requirements.
+- **[Architecture Decision Records (ADRs)](docs/adr/)**: Formal records of key architectural decisions (ADR-001 to ADR-009).
+- **[RFCs & Design Proposals](docs/rfcs/)**: In-depth design documents, including zero-copy GPU video streaming.
+- **[Changelog](CHANGELOG.md)**: Version history adhering to Keep a Changelog.
+- **[Contributing Guide](CONTRIBUTING.md)**: Environment setup, coding standards, and PR workflows.
+
 ## License
 
 This project is dual-licensed under either:

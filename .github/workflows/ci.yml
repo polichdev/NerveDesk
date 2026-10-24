@@ -1,0 +1,65 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check-and-lint:
+    name: Code Quality & Static Analysis
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust Stable Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Rust Formatting Check
+        run: cargo fmt --all -- --check
+
+      - name: Cargo Clippy Linter
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Build Frontend Assets
+        run: node ui/scripts/build-frontend.mjs
+
+      - name: Run Cargo Unit Tests
+        run: cargo test --workspace --verbose
+
+  build-windows:
+    name: Windows Release Binary Build
+    runs-on: windows-latest
+    needs: check-and-lint
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust Stable Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Frontend Dependencies
+        working-directory: ./ui
+        run: npm ci
+
+      - name: Build Release Binaries
+        run: cargo build --release

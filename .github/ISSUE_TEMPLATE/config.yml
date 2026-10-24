@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Architecture & ADR Documentation
+    url: https://github.com/polichdev/NerveDesk/tree/main/docs
+    about: Read architectural decision records, wire protocol specs, and subsystem guides before opening an issue.
+  - name: Security Vulnerability Reporting
+    url: https://github.com/polichdev/NerveDesk/security/policy
+    about: Please report security vulnerabilities privately according to SECURITY.md.

@@ -1,0 +1,74 @@
+name: Bug Report
+description: Report a reproducible problem or unexpected behavior in NerveDesk
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting an issue! Please check existing issues first to avoid duplicates.
+  - type: input
+    id: version
+    attributes:
+      label: NerveDesk Version / Git Commit
+      description: What version or git commit hash are you using? (e.g., v1.0.0 or 3de6436)
+      placeholder: "v1.0.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - Windows 11 23H2+ (x64)
+        - Windows 11 22H2 / 21H2 (x64)
+        - Windows 10 22H2 (Build 19045, x64)
+        - Windows on ARM64 (Snapdragon X Elite / Dev Kit)
+        - Other (specify below)
+    validations:
+      required: true
+  - type: checkboxes
+    id: modules
+    attributes:
+      label: Affected Subsystems
+      description: Check all modules involved in this issue.
+      options:
+        - label: Seamless Mouse & Keyboard (KVM / Input Hooks)
+        - label: Virtual Display Driver (IddCx)
+        - label: Display Casting / Mirroring (DXGI / MediaFoundation H.264)
+        - label: Audio Bridge (WASAPI Loopback / Bluetooth)
+        - label: Fast File Transfer / Folder Sync
+        - label: Mobile Web Remote (HTTPS :48110)
+        - label: Network Discovery & Pairing (HMAC-SHA256 Beacons)
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Detailed, minimal steps to reproduce the behavior.
+      placeholder: |
+        1. Open NerveDesk on Host PC and Client PC.
+        2. Pair devices using security key.
+        3. Switch to 'Seamless Mouse' and push cursor to right edge.
+        4. See error...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What should happen under normal operation?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What happened instead? Include error codes, visual artifacts, or logs.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Diagnostic Logs
+      description: Paste terminal output or relevant log entries (redact any private credentials).
+      render: shell
