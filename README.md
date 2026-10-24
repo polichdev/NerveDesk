@@ -72,6 +72,7 @@ Built using Rust and Tauri v2 with the system WebView2 runtime, NerveDesk avoids
 - **[Wire Protocol Specification](docs/specs/PROTOCOL.md)**: NerveWire packet binary layouts, sequence semantics, and connection state machine.
 - **[Concurrency & Threading Model](docs/CONCURRENCY.md)**: Dedicated Win32 hook threads, lock-free ring buffers, and Tokio worker pools.
 - **[Threat Model & Security](docs/THREAT_MODEL.md)**: STRIDE analysis, trust boundaries, and cryptographic invariants.
+- **[Privacy Architecture & Zero-Telemetry](docs/PRIVACY.md)**: Peer-to-peer data guarantees, volatile-memory lifecycle, and network audit procedures.
 - **[Failure Modes & Recovery](docs/FAILURES_AND_RECOVERY.md)**: Panic release for stuck keys, DXGI device removal recovery, and firewall traversal.
 - **[Compatibility Matrix](docs/COMPATIBILITY.md)**: Windows OS version support, GPU encoder capabilities, and network requirements.
 - **[Architecture Decision Records (ADRs)](docs/adr/)**: Formal records of key architectural decisions (ADR-001 to ADR-009).
