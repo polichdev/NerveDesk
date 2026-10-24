@@ -3,11 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0f1115">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/png" href="/mobile-icon-192.png">
+  <link rel="apple-touch-icon" href="/mobile-icon-192.png">
   <title>NerveDesk Mobile Remote</title>
   <style>
     :root {
       --bg: #0f1115;
       --card-bg: #181a20;
+      --surface: #1d2028;
       --accent: #0078d4;
       --accent-hover: #1084d9;
       --text: #f4f4f5;
@@ -30,6 +37,8 @@
       background: var(--bg);
       color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      touch-action: pan-y;
+      padding-top: env(safe-area-inset-top);
       height: 100vh;
       height: 100dvh;
       display: flex;
@@ -37,78 +46,39 @@
       overflow: hidden;
     }
 
-    header {
-      height: 48px;
-      background: var(--card-bg);
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 14px;
+    .bottom-nav {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      align-items: stretch;
+      gap: 3px;
+      padding: 7px 8px calc(7px + env(safe-area-inset-bottom));
+      background: rgba(24, 26, 32, 0.98);
+      border-top: 1px solid var(--border);
       flex-shrink: 0;
-      z-index: 10;
-    }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 14px;
-      font-weight: 700;
-      letter-spacing: -0.01em;
-    }
-
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--success);
-      box-shadow: 0 0 8px var(--success);
-    }
-
-    .tabs {
-      display: flex;
-      gap: 4px;
-      background: #111318;
-      padding: 3px;
-      border-radius: 8px;
-      border: 1px solid var(--border);
+      z-index: 20;
     }
 
     .tab-btn {
-      background: transparent;
-      border: none;
-      color: var(--text-muted);
-      padding: 5px 12px;
-      font-size: 12px;
-      font-weight: 600;
-      border-radius: 6px;
-      cursor: pointer;
+      min-width: 0;
+      min-height: 54px;
       display: flex;
+      flex-direction: column;
       align-items: center;
-      gap: 5px;
-      transition: background 0.15s, color 0.15s;
+      justify-content: center;
+      gap: 3px;
+      background: transparent;
+      border: 0;
+      border-radius: 10px;
+      color: var(--text-muted);
+      font: inherit;
+      font-size: 10px;
+      font-weight: 600;
+      cursor: pointer;
     }
 
-    .tab-btn.active {
-      background: var(--accent);
-      color: #ffffff;
-    }
-
-    @media (max-width: 420px) {
-      header { padding: 0 8px; gap: 5px; }
-      .brand { font-size: 12px; gap: 5px; }
-      .tab-btn { padding: 5px 6px; gap: 3px; }
-    }
-
-    .mobile-language {
-      background: #111318;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      color: var(--text);
-      padding: 5px 3px;
-      font-size: 11px;
-    }
+    .tab-btn svg { width: 21px; height: 21px; stroke: currentColor; }
+    .tab-btn.active { color: #fff; background: rgba(0, 120, 212, 0.22); }
+    .tab-btn.active svg { color: #55aaff; }
 
     .tab-content {
       flex: 1;
@@ -126,6 +96,16 @@
     .audio-panel { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 28px; text-align: center; }
     .audio-panel p { color: var(--text-muted); font-size: 14px; line-height: 1.5; max-width: 340px; }
     .audio-play-btn { background: var(--accent); border: 0; border-radius: 10px; color: white; padding: 15px 26px; font-size: 15px; font-weight: 700; }
+    #tabShare, .share-panel, .share-panel * { touch-action: pan-y; }
+    .share-panel { width: min(520px, 100%); margin: 0 auto; padding: 20px 16px 36px; overflow-y: auto; }
+    .share-panel h2 { margin: 4px 0 8px; font-size: 19px; }
+    .share-panel p { color: var(--text-muted); font-size: 13px; line-height: 1.5; }
+    .share-panel textarea { width: 100%; min-height: 86px; resize: vertical; margin: 12px 0 8px; padding: 12px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 9px; font: inherit; user-select: text; -webkit-user-select: text; touch-action: auto; }
+    .share-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+    .share-actions button { padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--accent); color: #fff; font-weight: 600; }
+    .share-actions button.secondary { background: var(--surface); color: var(--text); }
+    .share-outbox { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--border); overflow-wrap: anywhere; }
+    .share-outbox a { color: var(--accent); }
 
     #screenWrap {
       flex: 1;
@@ -421,9 +401,8 @@
   </style>
 </head>
 <body>
-  <div id="pinModal">
+  <div id="pinModal" style="display: none;">
     <div class="pin-card">
-      <select id="mobilePinLanguage" class="mobile-language" aria-label="Language" onchange="setMobileLanguage(this.value)" style="align-self: flex-end; margin-bottom: 14px;"><option value="en">EN</option><option value="uk">UK</option></select>
       <div class="pin-icon-wrap">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
       </div>
@@ -452,26 +431,6 @@
       </button>
     </div>
   </div>
-
-  <header>
-    <div class="brand">
-      <div class="status-dot"></div>
-      <span>NerveDesk</span>
-    </div>
-
-    <div class="tabs">
-      <button class="tab-btn active" id="tabScreenBtn" onclick="switchTab('screen')">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-        <span data-i18n="screen">Screen</span>
-      </button>
-      <button class="tab-btn" id="tabTrackpadBtn" onclick="switchTab('trackpad')">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="3"/><line x1="3" y1="14" x2="21" y2="14"/><line x1="12" y1="14" x2="12" y2="20"/></svg>
-        <span data-i18n="trackpad">Trackpad</span>
-      </button>
-      <button class="tab-btn" id="tabAudioBtn" onclick="switchTab('audio')"><span data-i18n="audio">Audio</span></button>
-    </div>
-    <select id="mobileLanguage" class="mobile-language" aria-label="Language" onchange="setMobileLanguage(this.value)"><option value="en">EN</option><option value="uk">UK</option></select>
-  </header>
 
   <div class="tab-content active" id="tabScreen">
     <div id="screenWrap">
@@ -521,6 +480,32 @@
     </div>
   </div>
 
+  <div class="tab-content" id="tabShare">
+    <div class="share-panel">
+      <h2 data-i18n="share_title">Quick Share</h2>
+      <p data-i18n="share_description">Send files, photos, text, or a link to this PC. Files are saved in the folder selected on the PC.</p>
+      <input id="shareFileInput" type="file" multiple hidden onchange="sendShareFiles(this.files)">
+      <input id="sharePhotoInput" type="file" accept="image/*" multiple hidden onchange="sendShareFiles(this.files)">
+      <div class="share-actions">
+        <button onclick="document.getElementById('shareFileInput').click()" data-i18n="share_choose_files">Choose files</button>
+        <button class="secondary" onclick="document.getElementById('sharePhotoInput').click()" data-i18n="share_choose_photos">Choose photos</button>
+      </div>
+      <textarea id="shareTextInput" maxlength="8192" data-i18n-placeholder="share_text_hint" placeholder="Paste text or a link"></textarea>
+      <div class="share-actions"><button onclick="sendShareText()" data-i18n="share_send_text">Send text to PC</button></div>
+      <p id="shareStatus" role="status"></p>
+      <div class="share-outbox">
+        <h2 data-i18n="share_from_pc">From this PC</h2>
+        <p data-i18n="share_from_pc_hint">Prepare a file or text in NerveDesk on your PC, then download or copy it here.</p>
+        <div id="shareOutboxText"></div>
+        <div class="share-actions">
+          <button class="secondary" id="shareCopyButton" onclick="copySharedText()" hidden data-i18n="share_copy_text">Copy text</button>
+          <button id="shareDownloadButton" onclick="downloadSharedFile()" hidden data-i18n="share_download">Download file</button>
+          <button class="secondary" onclick="refreshShareOutbox()" data-i18n="share_refresh">Refresh</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="keyDrawer">
     <div class="key-input-row">
       <input type="text" id="textInput" class="key-input" placeholder="Type text to send to the PC..." data-i18n-placeholder="text_placeholder">
@@ -534,6 +519,21 @@
     </div>
   </div>
 
+  <nav class="bottom-nav" aria-label="Mobile controls">
+    <button class="tab-btn active" id="tabScreenBtn" onclick="switchTab('screen')" aria-label="Screen">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg><span data-i18n="screen">Screen</span>
+    </button>
+    <button class="tab-btn" id="tabTrackpadBtn" onclick="switchTab('trackpad')" aria-label="Trackpad">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M3 13h18M12 13v8"/></svg><span data-i18n="trackpad">Trackpad</span>
+    </button>
+    <button class="tab-btn" id="tabAudioBtn" onclick="switchTab('audio')" aria-label="Audio">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M4 9v6h4l5 4V5L8 9H4zM17 9a5 5 0 0 1 0 6M19 6a9 9 0 0 1 0 12"/></svg><span data-i18n="audio">Audio</span>
+    </button>
+    <button class="tab-btn" id="tabShareBtn" onclick="switchTab('share')" aria-label="Share">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 16V3m0 0L7 8m5-5 5 5M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg><span data-i18n="share">Share</span>
+    </button>
+  </nav>
+
   <script>
     const mobileTranslations = {
       en: {
@@ -543,7 +543,8 @@
         trackpad_hint_tap: 'Tap to left-click; tap with two fingers to right-click', scroll: 'Scroll',
         left_button: 'Left button', right_button: 'Right button', text_placeholder: 'Type text to send to the PC...', send: 'Send',
         pin_required: 'Enter the 6-digit PIN', pin_invalid: 'Incorrect PIN. Try again', connection_error: 'Could not connect to the PC',
-        session_expired: 'Session expired or the PIN changed'
+        session_expired: 'Session expired or the PIN changed',
+        share: 'Share', share_title: 'Quick Share', share_description: 'Send files, photos, text, or a link to this PC. Files are saved in the folder selected on the PC.', share_choose_files: 'Choose files', share_choose_photos: 'Choose photos', share_text_hint: 'Paste text or a link', share_send_text: 'Send text to PC', share_from_pc: 'From this PC', share_from_pc_hint: 'Prepare a file or text in NerveDesk on your PC, then download or copy it here.', share_copy_text: 'Copy text', share_download: 'Download file', share_refresh: 'Refresh', share_sent: 'Sent to PC', share_failed: 'Could not send', share_empty: 'Nothing shared yet', share_too_large: 'Maximum file size is 100 MB'
       },
       uk: {
         pin_title: 'Доступ до NerveDesk', pin_subtitle: 'Введіть 6-значний PIN-код, показаний на екрані вашого комп’ютера', confirm: 'Підтвердити',
@@ -552,23 +553,26 @@
         trackpad_hint_tap: 'Тап — лівий клік, тап двома пальцями — правий клік', scroll: 'Прокрутка',
         left_button: 'Ліва кнопка (ЛКМ)', right_button: 'Права кнопка (ПКМ)', text_placeholder: 'Введіть текст для надсилання на ПК...', send: 'Надіслати',
         pin_required: 'Введіть 6 цифр PIN-коду', pin_invalid: 'Невірний PIN-код. Спробуйте ще раз', connection_error: 'Помилка зв’язку з ПК',
-        session_expired: 'Сесію завершено або змінено PIN'
+        session_expired: 'Сесію завершено або змінено PIN',
+        share: 'Обмін', share_title: 'Швидкий обмін', share_description: 'Надішліть файли, фото, текст або посилання на ПК. Файли зберігаються у вибраній на ПК папці.', share_choose_files: 'Вибрати файли', share_choose_photos: 'Вибрати фото', share_text_hint: 'Вставте текст або посилання', share_send_text: 'Надіслати текст на ПК', share_from_pc: 'Із цього ПК', share_from_pc_hint: 'Підготуйте файл або текст у NerveDesk на ПК, а тут завантажте чи скопіюйте.', share_copy_text: 'Скопіювати текст', share_download: 'Завантажити файл', share_refresh: 'Оновити', share_sent: 'Надіслано на ПК', share_failed: 'Не вдалося надіслати', share_empty: 'Поки нічого не підготовлено', share_too_large: 'Максимальний розмір файла — 100 МБ'
       }
     };
-    let mobileLanguage = localStorage.getItem('nervedesk_mobile_lang') === 'uk' ? 'uk' : 'en';
+    const phoneLocale = navigator.languages?.[0] || navigator.language || 'en';
+    const mobileLanguage = /^uk(?:-|$)/i.test(phoneLocale) ? 'uk' : 'en';
     function mt(key) { return mobileTranslations[mobileLanguage][key] || key; }
-    function setMobileLanguage(lang, persist = true) {
-      mobileLanguage = lang === 'uk' ? 'uk' : 'en';
-      if (persist) localStorage.setItem('nervedesk_mobile_lang', mobileLanguage);
+    function applyMobileLanguage() {
       document.documentElement.lang = mobileLanguage;
-      document.getElementById('mobileLanguage').value = mobileLanguage;
-      document.getElementById('mobilePinLanguage').value = mobileLanguage;
       document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = mt(el.dataset.i18n); });
       document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = mt(el.dataset.i18nPlaceholder); });
+      document.querySelectorAll('.bottom-nav .tab-btn').forEach(button => {
+        const key = button.querySelector('[data-i18n]')?.dataset.i18n;
+        if (key) button.setAttribute('aria-label', mt(key));
+      });
     }
     let pcWidth = 1920;
     let pcHeight = 1080;
-    let authToken = sessionStorage.getItem('nervedesk_mobile_token') || '';
+    const tokenStorageKey = 'nervedesk_mobile_token';
+    let authToken = localStorage.getItem(tokenStorageKey) || sessionStorage.getItem(tokenStorageKey) || '';
 
     function vibrate(ms = 15) {
       if (navigator.vibrate) {
@@ -632,7 +636,8 @@
         const data = await res.json();
         if (data.ok && data.token) {
           authToken = data.token;
-          sessionStorage.setItem('nervedesk_mobile_token', authToken);
+          localStorage.setItem(tokenStorageKey, authToken);
+          sessionStorage.removeItem(tokenStorageKey);
           hidePinModal();
           vibrate(20);
         } else {
@@ -664,13 +669,16 @@
         });
         const data = await res.json();
         if (data.authorized) {
+          localStorage.setItem(tokenStorageKey, authToken);
+          sessionStorage.removeItem(tokenStorageKey);
           if (data.width && data.height) {
             pcWidth = data.width;
             pcHeight = data.height;
           }
           hidePinModal();
         } else {
-          sessionStorage.removeItem('nervedesk_mobile_token');
+          localStorage.removeItem(tokenStorageKey);
+          sessionStorage.removeItem(tokenStorageKey);
           authToken = '';
           showPinModal();
         }
@@ -686,6 +694,7 @@
     }
 
     function switchTab(tab) {
+      document.getElementById('keyDrawer').style.display = 'none';
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
 
@@ -695,11 +704,129 @@
       } else if (tab === 'trackpad') {
         document.getElementById('tabTrackpadBtn').classList.add('active');
         document.getElementById('tabTrackpad').classList.add('active');
-      } else {
+      } else if (tab === 'audio') {
         document.getElementById('tabAudioBtn').classList.add('active');
         document.getElementById('tabAudio').classList.add('active');
+      } else {
+        document.getElementById('tabShareBtn').classList.add('active');
+        document.getElementById('tabShare').classList.add('active');
+        refreshShareOutbox();
       }
       vibrate(10);
+    }
+
+    let sharedFromPc = null;
+
+    async function refreshShareOutbox() {
+      if (!authToken) return;
+      try {
+        const response = await fetch('/api/share/outbox', { headers: { 'X-Auth-Token': authToken }, cache: 'no-store' });
+        if (response.status === 401) { showPinModal(mt('session_expired')); return; }
+        if (!response.ok) throw new Error('Share unavailable');
+        sharedFromPc = await response.json();
+        const display = document.getElementById('shareOutboxText');
+        display.replaceChildren();
+        if (!sharedFromPc.text && !sharedFromPc.file_name) {
+          const paragraph = document.createElement('p');
+          paragraph.textContent = mt('share_empty');
+          display.appendChild(paragraph);
+        }
+        if (sharedFromPc.file_name) {
+          const paragraph = document.createElement('p');
+          paragraph.textContent = sharedFromPc.file_name;
+          display.appendChild(paragraph);
+        }
+        if (sharedFromPc.text) {
+          const paragraph = document.createElement('p');
+          paragraph.textContent = sharedFromPc.text;
+          display.appendChild(paragraph);
+        }
+        if (sharedFromPc.text && /^https?:\/\//i.test(sharedFromPc.text.trim())) {
+          const link = document.createElement('a');
+          link.href = sharedFromPc.text.trim();
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          link.textContent = sharedFromPc.text.trim();
+          display.appendChild(link);
+        }
+        document.getElementById('shareCopyButton').hidden = !sharedFromPc.text;
+        document.getElementById('shareDownloadButton').hidden = !sharedFromPc.file_id;
+      } catch (error) {
+        document.getElementById('shareStatus').textContent = mt('connection_error');
+      }
+    }
+
+    async function sendShareFiles(files) {
+      const status = document.getElementById('shareStatus');
+      for (const file of files) {
+        if (!file.size || file.size > 100 * 1024 * 1024) {
+          status.textContent = mt('share_too_large');
+          break;
+        }
+        status.textContent = `${file.name}…`;
+        try {
+          const response = await fetch('/api/share/upload?name=' + encodeURIComponent(file.name), {
+            method: 'PUT', headers: { 'X-Auth-Token': authToken }, body: file
+          });
+          if (response.status === 401) { showPinModal(mt('session_expired')); break; }
+          if (!response.ok) throw new Error('Upload failed');
+          status.textContent = `${mt('share_sent')}: ${file.name}`;
+        } catch (error) {
+          status.textContent = `${mt('share_failed')}: ${file.name}`;
+          break;
+        }
+      }
+      document.getElementById('shareFileInput').value = '';
+      document.getElementById('sharePhotoInput').value = '';
+    }
+
+    async function sendShareText() {
+      const input = document.getElementById('shareTextInput');
+      const text = input.value.trim();
+      if (!text) return;
+      try {
+        const response = await fetch('/api/share/text', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Auth-Token': authToken },
+          body: JSON.stringify({ text })
+        });
+        if (response.status === 401) { showPinModal(mt('session_expired')); return; }
+        if (!response.ok) throw new Error('Send failed');
+        input.value = '';
+        document.getElementById('shareStatus').textContent = mt('share_sent');
+      } catch (error) {
+        document.getElementById('shareStatus').textContent = mt('share_failed');
+      }
+    }
+
+    async function copySharedText() {
+      if (!sharedFromPc?.text) return;
+      try {
+        await navigator.clipboard.writeText(sharedFromPc.text);
+        document.getElementById('shareStatus').textContent = mt('share_copy_text');
+      } catch (error) {
+        document.getElementById('shareStatus').textContent = mt('share_failed');
+      }
+    }
+
+    async function downloadSharedFile() {
+      if (!sharedFromPc?.file_id) return;
+      try {
+        const response = await fetch('/api/share/download?id=' + encodeURIComponent(sharedFromPc.file_id), {
+          headers: { 'X-Auth-Token': authToken }, cache: 'no-store'
+        });
+        if (response.status === 401) { showPinModal(mt('session_expired')); return; }
+        if (!response.ok) throw new Error('Download failed');
+        const url = URL.createObjectURL(await response.blob());
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = sharedFromPc.file_name || 'NerveDesk-file';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      } catch (error) {
+        document.getElementById('shareStatus').textContent = mt('share_failed');
+      }
     }
 
     let mobileAudioController = null;
@@ -824,7 +951,8 @@
             body: JSON.stringify(payload)
           });
           if (res.status === 401) {
-            sessionStorage.removeItem('nervedesk_mobile_token');
+            localStorage.removeItem(tokenStorageKey);
+            sessionStorage.removeItem(tokenStorageKey);
             authToken = '';
             showPinModal(mt('session_expired'));
           }
@@ -1002,7 +1130,7 @@
       }
     }, { passive: false });
 
-    setMobileLanguage(mobileLanguage, false);
+    applyMobileLanguage();
     initAuthAndStatus();
   </script>
 </body>
