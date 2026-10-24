@@ -1449,7 +1449,7 @@
                 <li data-i18n="mobile_step_1">Підключіть телефон до тієї ж Wi-Fi мережі, що й ПК.</li>
                 <li data-i18n="mobile_step_2">Відскануйте QR-код камерою або введіть адресу в браузері.</li>
                 <li data-i18n="mobile_step_3">Після відкриття сторінки введіть PIN.</li>
-                <li data-i18n="mobile_step_4">Керуйте комп'ютером у режимі «Екран» або «Тачпад».</li>
+                <li data-i18n="mobile_step_4">Оберіть режим іконками знизу; файли передавайте через «Обмін».</li>
               </ol>
 
               <div style="display: flex; align-items: center; gap: 12px; background: rgba(0, 120, 212, 0.08); border: 1px solid rgba(0, 120, 212, 0.25); border-radius: 10px; padding: 10px 14px; flex-wrap: wrap;">
@@ -1470,6 +1470,28 @@
               </div>
             </div>
           </div>
+        </div>
+
+        <div class="section-title" data-i18n="mobile_share_title">Швидкий обмін</div>
+        <div class="setting-card" style="align-items: stretch; flex-direction: column; gap: 12px;">
+          <div class="setting-name" data-i18n="mobile_share_from_pc">З ПК на телефон</div>
+          <div class="setting-desc" data-i18n="mobile_share_hint">Оберіть файл або введіть текст. Він стане доступним у вкладці «Обмін» на телефоні.</div>
+          <textarea id="mobileShareText" class="code-input" maxlength="8192" rows="3" style="width: 100%; resize: vertical; padding: 10px;" data-i18n-placeholder="mobile_share_text_placeholder" placeholder="Текст або посилання"></textarea>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+            <button class="btn" onclick="shareDesktopText()" data-i18n="mobile_share_send_text">Поділитися текстом</button>
+            <button class="btn btn-secondary" onclick="pickDesktopShareFile()" data-i18n="mobile_share_choose_file">Поділитися файлом</button>
+            <button class="btn btn-secondary" onclick="clearDesktopShare()" data-i18n="mobile_share_clear">Очистити</button>
+          </div>
+          <div id="mobileSharePrepared" class="setting-desc"></div>
+          <div class="setting-name" data-i18n="mobile_share_from_phone">З телефона на ПК</div>
+          <div class="setting-desc" data-i18n="mobile_share_receive_hint">Отримані файли зберігаються у вибраній папці.</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+            <input id="mobileReceiveFolder" class="code-input" type="text" readonly style="flex: 1; min-width: 220px;">
+            <button class="btn btn-secondary" onclick="pickMobileReceiveFolder()" data-i18n="mobile_share_change_folder">Вибрати папку</button>
+            <button class="btn btn-secondary" onclick="resetMobileReceiveFolder()" data-i18n="mobile_share_default_folder">За замовчуванням</button>
+          </div>
+          <div id="mobileShareReceived" class="setting-desc"></div>
+          <button class="btn btn-secondary" style="align-self: flex-start;" onclick="openMobileReceivedFolder()" data-i18n="mobile_share_open_folder">Відкрити отримані файли</button>
         </div>
 
       </div>
@@ -1542,7 +1564,7 @@
             <div class="help-body"><ol>
               <li data-i18n="help_mobile_1">Підключіть телефон і ПК до однієї Wi-Fi мережі та увімкніть «Мобільний пульт».</li>
               <li data-i18n="help_mobile_2">Відскануйте QR-код телефоном або відкрийте показану адресу.</li>
-              <li data-i18n="help_mobile_3">Введіть PIN з екрана ПК та оберіть «Екран», «Тачпад» або «Звук».</li>
+              <li data-i18n="help_mobile_3">Введіть PIN з екрана ПК. На вкладці «Обмін» надсилайте файли, фото, текст і посилання.</li>
             </ol><button class="btn btn-secondary" onclick="switchTab('mobile')" data-i18n="help_open_mobile">Відкрити мобільний пульт</button></div>
           </details>
         </div>
@@ -1705,7 +1727,7 @@
         help_mobile_question: "Як підключити телефон?",
         help_mobile_1: "Підключіть телефон і ПК до однієї Wi-Fi мережі та увімкніть «Мобільний пульт».",
         help_mobile_2: "Відскануйте QR-код телефоном або відкрийте показану адресу.",
-        help_mobile_3: "Введіть PIN з екрана ПК та оберіть «Екран», «Тачпад» або «Звук».",
+        help_mobile_3: "Введіть PIN з екрана ПК. На вкладці «Обмін» надсилайте файли, фото, текст і посилання.",
         help_open_mobile: "Відкрити мобільний пульт",
 
         home_title: "Головна",
@@ -1896,12 +1918,29 @@
         mobile_step_1: "Підключіть телефон до тієї ж Wi-Fi мережі, що й ПК.",
         mobile_step_2: "Відскануйте QR-код камерою або введіть адресу в браузері.",
         mobile_step_3: "Після відкриття сторінки введіть PIN.",
-        mobile_step_4: "Керуйте комп'ютером у режимі «Екран» або «Тачпад», а звук слухайте на вкладці «Звук».",
+        mobile_step_4: "Оберіть режим іконками знизу; файли передавайте через «Обмін».",
         mobile_pin_label: "PIN-код доступу",
         btn_regen_pin: "Оновити PIN",
         btn_copy_url: "Скопіювати",
         btn_open_browser: "Відкрити в браузері",
         toast_copied_url: "Посилання скопійовано в буфер обміну!",
+        mobile_share_title: "Швидкий обмін",
+        mobile_share_from_pc: "З ПК на телефон",
+        mobile_share_hint: "Оберіть файл або введіть текст. Він стане доступним у вкладці «Обмін» на телефоні.",
+        mobile_share_text_placeholder: "Текст або посилання",
+        mobile_share_send_text: "Поділитися текстом",
+        mobile_share_choose_file: "Поділитися файлом",
+        mobile_share_clear: "Очистити",
+        mobile_share_from_phone: "З телефона на ПК",
+        mobile_share_open_folder: "Відкрити отримані файли",
+        mobile_share_empty: "Поки нічого не підготовлено",
+        mobile_share_received_empty: "Поки нічого не отримано",
+        mobile_share_file: "Файл",
+        mobile_share_text: "Текст",
+        mobile_share_received_text: "Текст скопійовано в буфер обміну ПК",
+        mobile_share_receive_hint: "Отримані файли зберігаються у вибраній папці.",
+        mobile_share_change_folder: "Вибрати папку",
+        mobile_share_default_folder: "За замовчуванням",
 
         settings_title: "Загальні налаштування",
         settings_desc: "Налаштування параметрів програми, оформлення, мови та мережевих зв'язків.",
@@ -1979,7 +2018,7 @@
         help_mobile_question: "How do I connect a phone?",
         help_mobile_1: "Connect the phone and PC to the same Wi-Fi network and enable Mobile Remote.",
         help_mobile_2: "Scan the QR code with the phone or open the displayed address.",
-        help_mobile_3: "Enter the PIN shown on the PC and choose Screen, Trackpad, or Audio.",
+        help_mobile_3: "Enter the PIN shown on the PC. Use the Share tab to send files, photos, text, and links.",
         help_open_mobile: "Open Mobile Remote",
 
         home_title: "Home",
@@ -2170,12 +2209,29 @@
         mobile_step_1: "Connect your phone to the same Wi-Fi network as this PC.",
         mobile_step_2: "Scan the QR code with your camera or enter the address below.",
         mobile_step_3: "Enter the PIN after opening the page.",
-        mobile_step_4: "Control the PC in Screen or Trackpad mode, or listen on the Audio tab.",
+        mobile_step_4: "Choose a mode using the icons at the bottom; transfer files in Share.",
         mobile_pin_label: "Access PIN",
         btn_regen_pin: "Regenerate PIN",
         btn_copy_url: "Copy Link",
         btn_open_browser: "Open in Browser",
         toast_copied_url: "Link copied to clipboard!",
+        mobile_share_title: "Quick Share",
+        mobile_share_from_pc: "From PC to phone",
+        mobile_share_hint: "Choose a file or enter text. It will appear in the Share tab on your phone.",
+        mobile_share_text_placeholder: "Text or link",
+        mobile_share_send_text: "Share text",
+        mobile_share_choose_file: "Share file",
+        mobile_share_clear: "Clear",
+        mobile_share_from_phone: "From phone to PC",
+        mobile_share_open_folder: "Open received files",
+        mobile_share_empty: "Nothing prepared yet",
+        mobile_share_received_empty: "Nothing received yet",
+        mobile_share_file: "File",
+        mobile_share_text: "Text",
+        mobile_share_received_text: "Text copied to the PC clipboard",
+        mobile_share_receive_hint: "Received files are saved in the selected folder.",
+        mobile_share_change_folder: "Choose folder",
+        mobile_share_default_folder: "Default",
 
         settings_title: "General Settings",
         settings_desc: "Configure application parameters, hardware bindings, and network settings.",
@@ -2365,6 +2421,7 @@
           }
         }
       } catch (e) {}
+      refreshDesktopShareStatus();
     }
 
     async function regenerateMobilePin() {
@@ -2402,6 +2459,67 @@
 
     function openMobileInBrowser() {
       callTauri('open_mobile_remote_url').catch(() => {});
+    }
+
+    async function refreshDesktopShareStatus() {
+      try {
+        const [info, folder] = await Promise.all([
+          callTauri('get_mobile_share_info'),
+          callTauri('get_mobile_receive_folder')
+        ]);
+        document.getElementById('mobileReceiveFolder').value = folder;
+        const prepared = [];
+        if (info.file_name) prepared.push(`${t('mobile_share_file')}: ${info.file_name}`);
+        if (info.text) prepared.push(`${t('mobile_share_text')}: ${info.text}`);
+        document.getElementById('mobileSharePrepared').textContent = prepared.join(' · ') || t('mobile_share_empty');
+        document.getElementById('mobileShareReceived').textContent = info.last_received === 'text'
+          ? t('mobile_share_received_text')
+          : (info.last_received || t('mobile_share_received_empty'));
+      } catch (error) {}
+    }
+
+    async function shareDesktopText() {
+      const input = document.getElementById('mobileShareText');
+      const text = input.value.trim();
+      if (!text) return;
+      try {
+        await callTauri('share_mobile_text', { text });
+        await refreshDesktopShareStatus();
+      } catch (error) { alert(String(error)); }
+    }
+
+    async function pickDesktopShareFile() {
+      try {
+        await callTauri('pick_mobile_share_file');
+        await refreshDesktopShareStatus();
+      } catch (error) { alert(String(error)); }
+    }
+
+    async function clearDesktopShare() {
+      await callTauri('clear_mobile_share').catch(() => {});
+      document.getElementById('mobileShareText').value = '';
+      await refreshDesktopShareStatus();
+    }
+
+    function openMobileReceivedFolder() {
+      callTauri('open_mobile_received_folder').catch(error => alert(String(error)));
+    }
+
+    async function pickMobileReceiveFolder() {
+      try {
+        const path = await callTauri('pick_folder_sync_directory');
+        if (path) {
+          await callTauri('set_mobile_receive_folder', { path });
+          await refreshDesktopShareStatus();
+        }
+      } catch (error) { alert(String(error)); }
+    }
+
+    async function resetMobileReceiveFolder() {
+      try {
+        await callTauri('reset_mobile_receive_folder');
+        await refreshDesktopShareStatus();
+      } catch (error) { alert(String(error)); }
     }
 
     let activeEdge = 'Right';
@@ -3404,6 +3522,9 @@
     }
     setInterval(refreshMetrics, 1000);
     refreshMetrics();
+    setInterval(() => {
+      if (document.getElementById('viewMobile').classList.contains('active')) refreshDesktopShareStatus();
+    }, 3000);
     setInterval(() => {
       if (document.getElementById('viewAudio').classList.contains('active')) refreshPhoneAudioStatus();
     }, 3000);

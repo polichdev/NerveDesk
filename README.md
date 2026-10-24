@@ -60,7 +60,8 @@ Built using Rust and Tauri v2 with the system WebView2 runtime, NerveDesk avoids
 - Audio Bridge: Stream system audio bi-directionally between machines using low-latency WASAPI Loopback Capture.
 - Phone Audio: Play Android or iPhone audio through the PC's speakers using Windows Bluetooth A2DP sink support. Pair the phone in Windows, then connect it from Audio Bridge.
 - Folder Synchronization: Bi-directional background folder synchronization with 600 ms delta polling and safe change resolution.
-- Mobile Web Remote: View live screen output and control input from any smartphone or tablet browser via an embedded HTTP server secured by a 6-digit PIN.
+- Mobile Web Remote: View live screen output and control input from a phone browser via an embedded HTTPS server secured by a 6-digit PIN. Add the page to the phone's home screen for the NerveDesk icon. A verified phone stays recognized while the PC app runs and the PIN remains unchanged.
+- Quick Share: Scan the Mobile Remote QR code, enter the PIN, then send files, photos, text, or links from the phone's Share tab. Received files go to `Downloads` by default; choose another folder in Mobile Remote on the PC. Received text goes to the PC clipboard. Prepare one file and text in the PC app to download or copy on the phone (100 MB per file).
 - Zero-Config LAN Discovery: Automatic device pairing on the local subnet via UDP broadcast beacons on port 48103 with alphanumeric security key verification.
 
 

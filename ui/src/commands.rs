@@ -1,4 +1,5 @@
 use std::net::SocketAddr;
+use std::path::Path;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -20,7 +21,8 @@ use engine::{
 use input::InputHookManager;
 use net::{
     generate_qr_svg, get_local_ip, AudioStatus, DeviceRole, DiscoveryBeacon,
-    DiscoveryBeaconEmitter, FolderSync, SyncPreview, SyncStatus, UdpInputSender, VideoSender,
+    DiscoveryBeaconEmitter, FolderSync, MobileShareInfo, SyncPreview, SyncStatus, UdpInputSender,
+    VideoSender,
 };
 
 #[command]
@@ -940,6 +942,90 @@ pub fn toggle_mobile_remote(enable: bool, state: State<'_, AppState>) -> bool {
 #[command]
 pub fn set_mobile_audio_enabled(enabled: bool, state: State<'_, AppState>) -> bool {
     state.mobile_server.set_audio_enabled(enabled)
+}
+
+#[command]
+pub fn get_mobile_share_info(state: State<'_, AppState>) -> MobileShareInfo {
+    state.mobile_server.share_info()
+}
+
+#[command]
+pub fn share_mobile_text(
+    text: String,
+    state: State<'_, AppState>,
+) -> Result<MobileShareInfo, String> {
+    state.mobile_server.share_text(text)
+}
+
+#[command]
+pub fn clear_mobile_share(state: State<'_, AppState>) -> MobileShareInfo {
+    state.mobile_server.clear_share()
+}
+
+#[command]
+pub fn pick_mobile_share_file(
+    state: State<'_, AppState>,
+) -> Result<Option<MobileShareInfo>, String> {
+    let selected = std::thread::spawn(|| unsafe {
+        use windows::Win32::System::Com::{
+            CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize, CLSCTX_ALL,
+            COINIT_APARTMENTTHREADED,
+        };
+        use windows::Win32::UI::Shell::{FileOpenDialog, IFileOpenDialog, SIGDN_FILESYSPATH};
+        CoInitializeEx(None, COINIT_APARTMENTTHREADED)
+            .ok()
+            .map_err(|e| e.to_string())?;
+        let result: Result<Option<String>, String> = (|| {
+            let dialog: IFileOpenDialog =
+                CoCreateInstance(&FileOpenDialog, None, CLSCTX_ALL).map_err(|e| e.to_string())?;
+            if dialog.Show(None).is_err() {
+                return Ok(None);
+            }
+            let item = dialog.GetResult().map_err(|e| e.to_string())?;
+            let name = item
+                .GetDisplayName(SIGDN_FILESYSPATH)
+                .map_err(|e| e.to_string())?;
+            let path = name.to_string().map_err(|e| e.to_string())?;
+            CoTaskMemFree(Some(name.0.cast()));
+            Ok(Some(path))
+        })();
+        CoUninitialize();
+        result
+    })
+    .join()
+    .map_err(|_| "File picker failed".to_string())??;
+    selected
+        .map(|path| state.mobile_server.share_file(Path::new(&path)))
+        .transpose()
+}
+
+#[command]
+pub fn get_mobile_receive_folder(state: State<'_, AppState>) -> String {
+    state.mobile_server.receive_dir()
+}
+
+#[command]
+pub fn set_mobile_receive_folder(
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    state.mobile_server.set_receive_dir(Path::new(&path))
+}
+
+#[command]
+pub fn reset_mobile_receive_folder(state: State<'_, AppState>) -> Result<String, String> {
+    state.mobile_server.reset_receive_dir()
+}
+
+#[command]
+pub fn open_mobile_received_folder(state: State<'_, AppState>) -> Result<(), String> {
+    let dir = std::path::PathBuf::from(state.mobile_server.receive_dir());
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    std::process::Command::new("explorer")
+        .arg(dir)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[command]
