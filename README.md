@@ -67,20 +67,29 @@ Built using Rust and Tauri v2 with the system WebView2 runtime, NerveDesk avoids
 
 ## Documentation
 
-| Document | Description |
-|---|---|
-| [Architecture](docs/ARCHITECTURE.md) | System overview, data flow, network ports, security model |
-| [Screen Mirror](docs/MIRROR.md) | Mirror and extend display modes, codec selection, troubleshooting |
-| [Virtual Display Driver](docs/DRIVER.md) | IddCx driver architecture, build steps, signing requirements |
-| [Repository Structure](docs/STRUCTURE.md) | Workspace layout, crate map, dependency graph |
-| **Crate References** | |
-| [common](docs/crates/COMMON.md) | Packet protocol, `InputEvent`, error types |
-| [input](docs/crates/INPUT.md) | KVM hooks, edge detection, `SendInput` emulator |
-| [net](docs/crates/NET.md) | All network transports, security primitives, mobile server |
-| [capture](docs/crates/CAPTURE.md) | DXGI/WGC screen capture, IddCx loopback receiver |
-| [codec](docs/crates/CODEC.md) | H.264 hardware encoding/decoding, JPEG fallback |
-| [clipboard](docs/crates/CLIPBOARD.md) | Async clipboard synchronization |
-| [engine](docs/crates/ENGINE.md) | Tokio service orchestration, AppState |
+### Specifications & System Architecture
+- **[System Architecture](docs/ARCHITECTURE.md)**: High-level macro architecture, component topology, and subsystem maps.
+- **[Wire Protocol Specification](docs/specs/PROTOCOL.md)**: NerveWire packet binary layouts, sequence semantics, and connection state machine.
+- **[Concurrency & Threading Model](docs/CONCURRENCY.md)**: Dedicated Win32 hook threads, lock-free ring buffers, and Tokio worker pools.
+- **[Threat Model & Security](docs/THREAT_MODEL.md)**: STRIDE analysis, trust boundaries, and cryptographic invariants.
+- **[Failure Modes & Recovery](docs/FAILURES_AND_RECOVERY.md)**: Panic release for stuck keys, DXGI device removal recovery, and firewall traversal.
+- **[Compatibility Matrix](docs/COMPATIBILITY.md)**: Windows OS version support, GPU encoder capabilities, and network requirements.
+- **[Architecture Decision Records (ADRs)](docs/adr/)**: Formal records of key architectural decisions (ADR-001 to ADR-009).
+- **[RFCs & Design Proposals](docs/rfcs/)**: In-depth design documents, including zero-copy GPU video streaming.
+- **[Screen Mirroring Guide](docs/MIRROR.md)**: Mirror and extend display modes, codec selection, and troubleshooting.
+- **[Virtual Display Driver](docs/DRIVER.md)**: IddCx driver architecture, build steps, and signing requirements.
+- **[Repository Structure](docs/STRUCTURE.md)**: Workspace layout, crate map, and dependency graph.
+- **[Changelog](CHANGELOG.md)**: Version history adhering to Keep a Changelog.
+- **[Contributing Guide](CONTRIBUTING.md)**: Environment setup, coding standards, and PR workflows.
+
+### Crate References
+- **[`common`](docs/crates/COMMON.md)**: Packet protocol, `InputEvent`, error types.
+- **[`input`](docs/crates/INPUT.md)**: KVM hooks, edge detection, `SendInput` emulator.
+- **[`net`](docs/crates/NET.md)**: All network transports, security primitives, mobile server.
+- **[`capture`](docs/crates/CAPTURE.md)**: DXGI/WGC screen capture, IddCx loopback receiver.
+- **[`codec`](docs/crates/CODEC.md)**: H.264 hardware encoding/decoding, JPEG fallback.
+- **[`clipboard`](docs/crates/CLIPBOARD.md)**: Async clipboard synchronization.
+- **[`engine`](docs/crates/ENGINE.md)**: Tokio service orchestration, AppState.
 
 ## Technical Scope & Trade-Offs
 
@@ -130,20 +139,6 @@ Run workspace automated tests:
 cargo test --workspace
 ```
 
-## Documentation & Architecture
-
-For deep-dive architectural specifications, security analyses, and protocol details:
-
-- **[System Architecture](docs/ARCHITECTURE.md)**: High-level macro architecture, component topology, and subsystem maps.
-- **[Wire Protocol Specification](docs/specs/PROTOCOL.md)**: NerveWire packet binary layouts, sequence semantics, and connection state machine.
-- **[Concurrency & Threading Model](docs/CONCURRENCY.md)**: Dedicated Win32 hook threads, lock-free ring buffers, and Tokio worker pools.
-- **[Threat Model & Security](docs/THREAT_MODEL.md)**: STRIDE analysis, trust boundaries, and cryptographic invariants.
-- **[Failure Modes & Recovery](docs/FAILURES_AND_RECOVERY.md)**: Panic release for stuck keys, DXGI device removal recovery, and firewall traversal.
-- **[Compatibility Matrix](docs/COMPATIBILITY.md)**: Windows OS version support, GPU encoder capabilities, and network requirements.
-- **[Architecture Decision Records (ADRs)](docs/adr/)**: Formal records of key architectural decisions (ADR-001 to ADR-009).
-- **[RFCs & Design Proposals](docs/rfcs/)**: In-depth design documents, including zero-copy GPU video streaming.
-- **[Changelog](CHANGELOG.md)**: Version history adhering to Keep a Changelog.
-- **[Contributing Guide](CONTRIBUTING.md)**: Environment setup, coding standards, and PR workflows.
 
 ## License
 
