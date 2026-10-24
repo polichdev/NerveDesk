@@ -2,16 +2,18 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use windows::Win32::Foundation::{COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
-    CreatePen, CreateSolidBrush, DeleteObject, DrawTextW, GetDC, ReleaseDC, RoundRect,
-    SelectObject, SetBkMode, SetTextColor, DT_CENTER, DT_END_ELLIPSIS, DT_NOPREFIX, DT_SINGLELINE,
-    DT_VCENTER, PS_SOLID, TRANSPARENT,
+    BeginPaint, CreatePen, CreateSolidBrush, DeleteObject, DrawTextW, EndPaint, FillRect,
+    InvalidateRect, RoundRect, SelectObject, SetBkMode, SetTextColor, HDC, PAINTSTRUCT,
+    DT_CENTER, DT_END_ELLIPSIS, DT_NOPREFIX, DT_SINGLELINE, DT_VCENTER, PS_SOLID, TRANSPARENT,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW, PostMessageW,
-    PostThreadMessageW, RegisterClassW, SetWindowPos, ShowWindow, TranslateMessage, HWND_TOPMOST,
-    MSG, SWP_NOACTIVATE, SWP_NOSIZE, SWP_SHOWWINDOW, SW_HIDE, SW_SHOWNA, WM_APP, WM_PAINT, WM_USER,
-    WNDCLASSW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
-    WS_POPUP,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetCursorPos, GetMessageW,
+    KillTimer, PostMessageW, PostThreadMessageW, RegisterClassW, SetLayeredWindowAttributes,
+    SetTimer, SetWindowPos, ShowWindow, TranslateMessage, CS_DROPSHADOW, HTTRANSPARENT,
+    HWND_TOPMOST, LWA_COLORKEY, MSG, SWP_NOACTIVATE,
+    SWP_SHOWWINDOW, SW_HIDE, SW_SHOWNA, WM_APP, WM_ERASEBKGND, WM_NCHITTEST, WM_PAINT,
+    WM_TIMER, WM_USER, WNDCLASSW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+    WS_EX_TOPMOST, WS_POPUP,
 };
 
 const WM_BADGE_SHOW: u32 = WM_USER + 201;
@@ -19,11 +21,12 @@ const WM_BADGE_MOVE: u32 = WM_USER + 202;
 const WM_BADGE_HIDE: u32 = WM_USER + 203;
 const WM_STOP_BADGE: u32 = WM_APP + 55;
 
+static CURRENT_BADGE_TEXT: Mutex<String> = Mutex::new(String::new());
+
 pub struct DragBadge {
     hwnd_val: Arc<Mutex<Option<usize>>>,
     thread_id: Arc<Mutex<Option<u32>>>,
     is_visible: Arc<AtomicBool>,
-    current_name: Arc<Mutex<String>>,
 }
 
 impl DragBadge {
@@ -31,11 +34,9 @@ impl DragBadge {
         let hwnd_val = Arc::new(Mutex::new(None));
         let thread_id = Arc::new(Mutex::new(None));
         let is_visible = Arc::new(AtomicBool::new(false));
-        let current_name = Arc::new(Mutex::new(String::new()));
 
         let hwnd_holder = hwnd_val.clone();
         let tid_holder = thread_id.clone();
-        let name_holder = current_name.clone();
 
         std::thread::Builder::new()
             .name("nerve-drag-badge".into())
@@ -50,16 +51,13 @@ impl DragBadge {
                     lpfnWndProc: Some(badge_wnd_proc),
                     hInstance: HINSTANCE::default(),
                     lpszClassName: class_name,
+                    style: CS_DROPSHADOW,
                     ..Default::default()
                 };
                 let _ = RegisterClassW(&wnd_class);
 
                 let hwnd = match CreateWindowExW(
-                    WS_EX_TOPMOST
-                        | WS_EX_TOOLWINDOW
-                        | WS_EX_LAYERED
-                        | WS_EX_TRANSPARENT
-                        | WS_EX_NOACTIVATE,
+                    WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED,
                     class_name,
                     windows::core::w!("NerveDesk Drag Badge"),
                     WS_POPUP,
@@ -79,6 +77,7 @@ impl DragBadge {
                 if let Ok(mut guard) = hwnd_holder.lock() {
                     *guard = Some(hwnd.0 as usize);
                 }
+                let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0x00FF00FF), 255, LWA_COLORKEY);
 
                 let mut msg = MSG::default();
                 while GetMessageW(&mut msg, HWND::default(), 0, 0).as_bool() {
@@ -91,27 +90,30 @@ impl DragBadge {
                         let _ = SetWindowPos(
                             hwnd,
                             HWND_TOPMOST,
-                            x + 18,
-                            y + 18,
+                            x + 16,
+                            y + 16,
                             190,
                             38,
                             SWP_NOACTIVATE | SWP_SHOWWINDOW,
                         );
                         let _ = ShowWindow(hwnd, SW_SHOWNA);
-                        paint_badge(hwnd, &name_holder);
+                        let _ = InvalidateRect(hwnd, None, false);
+                        let _ = SetTimer(hwnd, 1, 15, None);
                     } else if msg.message == WM_BADGE_MOVE {
                         let x = msg.wParam.0 as i32;
                         let y = msg.lParam.0 as i32;
                         let _ = SetWindowPos(
                             hwnd,
                             HWND_TOPMOST,
-                            x + 18,
-                            y + 18,
-                            0,
-                            0,
-                            SWP_NOACTIVATE | SWP_NOSIZE,
+                            x + 16,
+                            y + 16,
+                            190,
+                            38,
+                            SWP_NOACTIVATE | SWP_SHOWWINDOW,
                         );
+                        let _ = InvalidateRect(hwnd, None, false);
                     } else if msg.message == WM_BADGE_HIDE {
+                        let _ = KillTimer(hwnd, 1);
                         let _ = ShowWindow(hwnd, SW_HIDE);
                     }
                     let _ = TranslateMessage(&msg);
@@ -126,16 +128,15 @@ impl DragBadge {
             hwnd_val,
             thread_id,
             is_visible,
-            current_name,
         }
     }
 
     pub fn show(&self, x: i32, y: i32, file_name: &str) {
-        if let Ok(mut guard) = self.current_name.lock() {
-            *guard = if file_name.is_empty() {
-                "Drop file here".to_string()
+        if let Ok(mut guard) = CURRENT_BADGE_TEXT.lock() {
+            *guard = if file_name.is_empty() || file_name == "request" {
+                "File".to_string()
             } else {
-                format!("📄 {}", file_name)
+                file_name.to_string()
             };
         }
         self.is_visible.store(true, Ordering::SeqCst);
@@ -200,65 +201,62 @@ unsafe extern "system" fn badge_wnd_proc(
     wparam: WPARAM,
     lparam: LPARAM,
 ) -> LRESULT {
-    if msg == WM_PAINT {
-        return LRESULT(0);
+    match msg {
+        WM_NCHITTEST => LRESULT(HTTRANSPARENT as isize),
+        WM_TIMER => {
+            let mut pt = windows::Win32::Foundation::POINT::default();
+            if GetCursorPos(&mut pt).is_ok() {
+                let _ = SetWindowPos(
+                    hwnd,
+                    HWND_TOPMOST,
+                    pt.x + 16,
+                    pt.y + 16,
+                    190,
+                    38,
+                    SWP_NOACTIVATE,
+                );
+            }
+            LRESULT(0)
+        }
+        WM_PAINT => {
+            let mut ps = PAINTSTRUCT::default();
+            let hdc = BeginPaint(hwnd, &mut ps);
+            if !hdc.is_invalid() {
+                paint_badge_content(hdc);
+                let _ = EndPaint(hwnd, &ps);
+            }
+            LRESULT(0)
+        }
+        WM_ERASEBKGND => LRESULT(1),
+        _ => DefWindowProcW(hwnd, msg, wparam, lparam),
     }
-    DefWindowProcW(hwnd, msg, wparam, lparam)
 }
 
-unsafe fn paint_badge(hwnd: HWND, name_holder: &Arc<Mutex<String>>) {
-    let hdc = GetDC(hwnd);
-    if hdc.is_invalid() {
-        return;
-    }
+unsafe fn paint_badge_content(hdc: HDC) {
+    let rect = RECT { left: 0, top: 0, right: 190, bottom: 38 };
+    let transparent = CreateSolidBrush(COLORREF(0x00FF00FF));
+    let _ = FillRect(hdc, &rect, transparent);
+    let _ = DeleteObject(transparent);
 
-    let rect = RECT {
-        left: 0,
-        top: 0,
-        right: 190,
-        bottom: 38,
-    };
-
-    let bg_color = COLORREF(0x001B1818);
-    let border_color = COLORREF(0x00F6823B);
-    let text_color = COLORREF(0x00FAF5F5);
-
-    let brush = CreateSolidBrush(bg_color);
-    let pen = CreatePen(PS_SOLID, 2, border_color);
-
+    let brush = CreateSolidBrush(COLORREF(0x001B1818));
+    let pen = CreatePen(PS_SOLID, 2, COLORREF(0x00F6823B));
     let old_brush = SelectObject(hdc, brush);
     let old_pen = SelectObject(hdc, pen);
-
-    let _ = RoundRect(hdc, rect.left, rect.top, rect.right, rect.bottom, 12, 12);
-
+    let _ = RoundRect(hdc, 0, 0, 190, 38, 12, 12);
     let _ = SelectObject(hdc, old_brush);
     let _ = SelectObject(hdc, old_pen);
     let _ = DeleteObject(brush);
     let _ = DeleteObject(pen);
 
     let _ = SetBkMode(hdc, TRANSPARENT);
-    let _ = SetTextColor(hdc, text_color);
-
-    let text = if let Ok(guard) = name_holder.lock() {
-        guard.clone()
-    } else {
-        "📄 File".into()
-    };
-
-    let mut text_rect = RECT {
-        left: 10,
-        top: 0,
-        right: 180,
-        bottom: 38,
-    };
-
-    let mut wide: Vec<u16> = text.encode_utf16().collect();
+    let _ = SetTextColor(hdc, COLORREF(0x00FAF5F5));
+    let name = CURRENT_BADGE_TEXT.lock().map(|name| name.clone()).unwrap_or_else(|_| "File".into());
+    let mut wide: Vec<u16> = name.encode_utf16().collect();
+    let mut text_rect = RECT { left: 10, top: 0, right: 180, bottom: 38 };
     let _ = DrawTextW(
         hdc,
         &mut wide,
         &mut text_rect,
         DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX,
     );
-
-    let _ = ReleaseDC(hwnd, hdc);
 }
