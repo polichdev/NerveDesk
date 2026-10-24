@@ -57,6 +57,7 @@ impl Source {
 
 pub async fn start(
     target: SocketAddr,
+    security_key: String,
     window_id: Option<String>,
     screen_config: Option<DxgiCaptureConfig>,
     cancel: Arc<AtomicBool>,
@@ -66,7 +67,7 @@ pub async fn start(
     generation: Arc<AtomicU64>,
     current_generation: u64,
 ) -> Result<tokio::task::JoinHandle<()>, String> {
-    let mut sender = MirrorSender::connect(target).await?;
+    let mut sender = MirrorSender::connect(target, security_key).await?;
     let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
 
     let worker = tokio::task::spawn_blocking(move || {

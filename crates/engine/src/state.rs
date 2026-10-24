@@ -66,6 +66,7 @@ pub struct MobileRemoteInfo {
     pub url: String,
     pub qr_svg: String,
     pub pin: String,
+    pub certificate_fingerprint: String,
 }
 
 pub struct AppState {
@@ -86,6 +87,7 @@ pub struct AppState {
     pub live_mbps_x10: Arc<AtomicU64>,
     pub discovered_devices: Arc<Mutex<HashMap<String, DiscoveredDevice>>>,
     pub device_last_seen: Arc<Mutex<HashMap<String, Instant>>>,
+    pub authenticated_peer_seen: Arc<Mutex<Option<Instant>>>,
     pub keyboard_sharing: Arc<AtomicBool>,
     pub clipboard_sharing: Arc<AtomicBool>,
     pub paired_security_key: Arc<Mutex<Option<String>>>,
@@ -109,7 +111,10 @@ impl AppState {
         let device_last_seen = Arc::new(Mutex::new(HashMap::new()));
         let paired_security_key = Arc::new(Mutex::new(None));
         let paired_peer_ip = Arc::new(Mutex::new(None));
+        let audio_peer_ip = paired_peer_ip.clone();
+        let audio_security_key = paired_security_key.clone();
         let folder_sync = FolderSync::new();
+        folder_sync.set_setup_key(paired_security_key.clone());
         folder_sync.start_saved();
 
         Self {
@@ -130,6 +135,7 @@ impl AppState {
             live_mbps_x10: Arc::new(AtomicU64::new(0)),
             discovered_devices: Arc::new(Mutex::new(HashMap::new())),
             device_last_seen: device_last_seen.clone(),
+            authenticated_peer_seen: Arc::new(Mutex::new(None)),
             keyboard_sharing: Arc::new(AtomicBool::new(true)),
             clipboard_sharing: Arc::new(AtomicBool::new(true)),
             paired_security_key,
@@ -141,7 +147,7 @@ impl AppState {
             file_transfer_enabled: Arc::new(AtomicBool::new(true)),
             drag_badge,
             mobile_server,
-            audio_bridge: Arc::new(AudioBridge::new(device_last_seen)),
+            audio_bridge: Arc::new(AudioBridge::new(audio_peer_ip, audio_security_key)),
             folder_sync,
         }
     }

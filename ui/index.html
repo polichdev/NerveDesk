@@ -208,6 +208,16 @@
       gap: 6px;
     }
 
+    .help-list { display: flex; flex-direction: column; gap: 8px; }
+    .help-item { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; overflow: hidden; }
+    .help-item summary { cursor: pointer; padding: 16px 18px; font-weight: 600; list-style-position: inside; }
+    .help-item summary:hover { background: var(--card-bg-hover); }
+    .help-item[open] summary { border-bottom: 1px solid var(--card-border-subtle); }
+    .help-body { padding: 14px 20px 18px; }
+    .help-body ol { margin-left: 20px; color: var(--text-muted); line-height: 1.6; }
+    .help-body li + li { margin-top: 6px; }
+    .help-body .btn { margin-top: 14px; }
+
 
     .main-wrap {
       flex: 1;
@@ -865,6 +875,12 @@
     </div>
 
     <div class="sidebar-footer">
+      <div class="nav-item" id="navHelp" onclick="switchTab('help')" title="Інструкції" data-i18n-title="nav_help" style="margin: 0;">
+        <div class="nav-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2.2-3 4"/><path d="M12 17h.01"/></svg>
+        </div>
+        <span data-i18n="nav_help">Інструкції</span>
+      </div>
       <div class="nav-item" id="navSettings" onclick="switchTab('settings')" title="Налаштування" style="margin: 0;">
         <div class="nav-icon">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -948,7 +964,7 @@
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="3"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
                 </div>
                 <div class="setting-text">
-                  <div class="setting-name" data-i18n="mod_mobile_name">Мобільний пульт та екран</div>
+                  <div class="setting-name" data-i18n="mod_mobile_name">Мобільний пульт</div>
                   <div class="setting-desc" data-i18n="mod_mobile_desc">Керуйте мишею по зображенню та використовуйте тачпад зі смартфона</div>
                 </div>
               </div>
@@ -970,7 +986,7 @@
                 </div>
                 <div class="setting-text">
                   <div class="setting-name" data-i18n="mod_audio_name">Аудіоміст</div>
-                  <div class="setting-desc" data-i18n="mod_audio_desc">Передавання системного звуку на інший ПК</div>
+                  <div class="setting-desc" data-i18n="mod_audio_desc">Звук між ПК та з телефона</div>
                 </div>
               </div>
               <div class="setting-right">
@@ -1017,13 +1033,16 @@
               </div>
               <div class="setting-text">
                 <div class="setting-name" data-i18n="security_key_name">Ключ безпеки</div>
-                <div class="setting-desc" data-i18n="security_key_desc">Для налаштування згенеруйте ключ на одному ПК та введіть його на іншому пристрої.</div>
+                <div class="setting-desc" data-i18n="security_key_desc">Згенеруйте ключ на одному ПК та налаштуйте з'єднання з тим самим ключем на обох ПК.</div>
               </div>
             </div>
             <div class="setting-right">
               <input type="text" id="securityKeyInput" class="code-input" value="" readonly>
               <button class="btn btn-secondary" onclick="generateNewKey()" data-i18n="btn_new_key">Новий ключ</button>
               <button class="btn btn-primary" onclick="togglePairDrawer()" data-i18n="btn_connect">З'єднати</button>
+              <button class="btn-icon" onclick="copySecurityKey()" title="Скопіювати ключ" aria-label="Скопіювати ключ" data-i18n-title="copy_key_title" data-i18n-aria-label="copy_key_title">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              </button>
               <button class="btn-icon" id="togglePairDrawerBtn" onclick="togglePairDrawer()" title="Розгорнути з'єднання" data-i18n-title="btn_expand">
                 <svg id="pairDrawerChevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
               </button>
@@ -1032,7 +1051,7 @@
 
           <div id="pairDrawer" style="display: none; background: var(--bg-tertiary); border-left: 1px solid var(--card-border); border-right: 1px solid var(--card-border); border-top: 1px solid var(--card-border-subtle); border-bottom: 1px solid var(--card-border-subtle); padding: 14px 18px;">
             <div class="pair-drawer-content">
-              <input type="text" id="peerKeyInput" class="code-input" placeholder="Ключ безпеки" data-i18n-placeholder="placeholder_key" style="flex: 1;">
+              <input type="text" id="peerKeyInput" class="code-input" placeholder="Ключ безпеки" data-i18n-placeholder="placeholder_key" onchange="preparePairingKey()" style="flex: 1;">
               <input type="text" id="peerDeviceNameInput" class="code-input" placeholder="Ім'я пристрою" data-i18n-placeholder="placeholder_device_name" style="flex: 1;">
               <button class="btn btn-primary" onclick="connectWithKeyAndDevice()" data-i18n="btn_connect">З'єднати</button>
             </div>
@@ -1110,7 +1129,6 @@
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
                 <span data-i18n="btn_reconnect_device">Перепідключити пристрій</span>
               </button>
-              <button class="btn btn-secondary" onclick="configurePrivateNetwork()" style="font-size: 12px;" data-i18n="btn_allow_lan">Дозволити доступ у локальній мережі</button>
             </div>
           </div>
         </div>
@@ -1272,7 +1290,7 @@
       <div class="view-container" id="viewAudio">
         <div class="view-header">
           <div class="view-title" data-i18n="audio_title">Аудіоміст</div>
-          <div class="view-desc" data-i18n="audio_desc">Передавайте системний звук між цим ПК та іншим комп’ютером у локальній мережі.</div>
+          <div class="view-desc" data-i18n="audio_desc">Передавайте системний звук між ПК або відтворюйте звук телефона через Bluetooth.</div>
         </div>
         <div class="section-title" data-i18n="sec_activation">Активація</div>
         <div class="setting-card">
@@ -1316,6 +1334,50 @@
             <div class="setting-desc" id="audioStatusText" data-i18n="audio_status_idle">Очікування передавання</div>
           </div></div>
           <div class="setting-right"><button class="btn" id="audioStreamButton" onclick="toggleAudioStream()" data-i18n="audio_start">Почати передавання</button></div>
+        </div>
+
+        <div class="section-title" data-i18n="phone_audio_title">Звук телефона</div>
+        <div class="setting-card">
+          <div class="setting-left"><div class="setting-text">
+            <div class="setting-name" data-i18n="phone_audio_direction_name">Напрямок звуку</div>
+            <div class="setting-desc" data-i18n="phone_audio_direction_desc">Виберіть, де відтворювати звук.</div>
+          </div></div>
+          <div class="setting-right">
+            <select id="phoneAudioDirectionSelect" class="select-input" onchange="onPhoneAudioDirectionChanged()">
+              <option value="phone_to_pc" data-i18n="phone_audio_direction_receive">З телефона на ПК</option>
+              <option value="pc_to_phone" data-i18n="phone_audio_direction_send">З ПК на телефон</option>
+            </select>
+          </div>
+        </div>
+        <div class="setting-card" id="phoneAudioDeviceCard">
+          <div class="setting-left"><div class="setting-text">
+            <div class="setting-name" data-i18n="phone_audio_device">Телефон</div>
+            <div class="setting-desc" data-i18n="phone_audio_desc">Спаріть Android або iPhone з Windows і виберіть телефон зі списку.</div>
+          </div></div>
+          <div class="setting-right">
+            <select id="phoneAudioDeviceSelect" class="select-input" aria-label="Телефон" data-i18n-aria-label="phone_audio_device"></select>
+            <button class="btn btn-secondary" onclick="openPhoneBluetoothSettings()" data-i18n="phone_audio_pair">Спарити телефон</button>
+            <button class="btn btn-secondary" onclick="refreshPhoneAudioDevices()" data-i18n="mirror_refresh">Оновити</button>
+          </div>
+        </div>
+        <div class="setting-card" id="phoneAudioReceiveCard">
+          <div class="setting-left"><div class="setting-text">
+            <div class="setting-name" data-i18n="phone_audio_name">Звук телефона на цьому ПК</div>
+            <div class="setting-desc" id="phoneAudioStatus" data-i18n="phone_audio_disconnected">Телефон не підключено</div>
+            <div class="setting-desc" id="phoneAudioHint" style="display: none;"></div>
+          </div></div>
+          <div class="setting-right">
+            <button class="btn" id="phoneAudioConnectButton" onclick="togglePhoneAudio()" data-i18n="phone_audio_connect">Підключити звук</button>
+            <button class="btn btn-secondary" id="phoneAudioReconnectButton" onclick="reconnectPhoneAudio()" data-i18n="phone_audio_reconnect" style="display: none;">Перепідключити</button>
+            <button class="btn btn-secondary" onclick="openPhoneSoundSettings()" data-i18n="phone_audio_output">Вихід звуку</button>
+          </div>
+        </div>
+        <div class="setting-card" id="phoneAudioSendCard" style="display: none;">
+          <div class="setting-left"><div class="setting-text">
+            <div class="setting-name" data-i18n="phone_audio_send_name">Звук ПК на телефоні</div>
+            <div class="setting-desc" data-i18n="phone_audio_send_desc">Увімкніть Мобільний пульт, відкрийте його на телефоні й натисніть «Звук» → «Відтворити звук».</div>
+          </div></div>
+          <div class="setting-right"><button class="btn" onclick="switchTab('mobile')" data-i18n="open_mobile_qr">Відкрити QR-код та налаштування</button></div>
         </div>
       </div>
 
@@ -1386,7 +1448,7 @@
               <ol style="font-size: 13px; color: var(--text-muted); line-height: 1.6; margin: 0 0 0 18px; padding: 0; display: flex; flex-direction: column; gap: 4px;">
                 <li data-i18n="mobile_step_1">Підключіть телефон до тієї ж Wi-Fi мережі, що й ПК.</li>
                 <li data-i18n="mobile_step_2">Відскануйте QR-код камерою або введіть адресу в браузері.</li>
-                <li data-i18n="mobile_step_3">Введіть 6-значний PIN-код для безпечного входу.</li>
+                <li data-i18n="mobile_step_3">Після відкриття сторінки введіть PIN.</li>
                 <li data-i18n="mobile_step_4">Керуйте комп'ютером у режимі «Екран» або «Тачпад».</li>
               </ol>
 
@@ -1410,6 +1472,80 @@
           </div>
         </div>
 
+      </div>
+
+      <div class="view-container" id="viewHelp">
+        <div class="view-header">
+          <div class="view-title" data-i18n="help_title">Інструкції та відповіді</div>
+          <div class="view-desc" data-i18n="help_desc">Короткі кроки для підключення пристроїв і роботи з кожним модулем.</div>
+        </div>
+        <div class="help-list">
+          <details class="help-item" open>
+            <summary data-i18n="help_devices_question">Як підключити два ПК?</summary>
+            <div class="help-body"><ol>
+              <li data-i18n="help_devices_1">Запустіть NerveDesk на обох ПК в одній локальній мережі.</li>
+              <li data-i18n="help_devices_2">У «Пристроях» створіть ключ на першому ПК. На другому введіть той самий ключ.</li>
+              <li data-i18n="help_devices_3">На кожному ПК натисніть «З’єднати», введіть ім’я іншого ПК і ключ, потім ще раз натисніть «З’єднати».</li>
+            </ol><button class="btn btn-secondary" onclick="switchTab('devices')" data-i18n="help_open_devices">Відкрити пристрої</button></div>
+          </details>
+          <details class="help-item">
+            <summary data-i18n="help_kvm_question">Як керувати другим ПК мишею та клавіатурою?</summary>
+            <div class="help-body"><ol>
+              <li data-i18n="help_kvm_1">Спочатку підключіть ПК у розділі «Пристрої».</li>
+              <li data-i18n="help_kvm_2">Увімкніть «Безмежну мишу» на обох ПК; за потреби увімкніть клавіатуру й буфер обміну.</li>
+              <li data-i18n="help_kvm_3">У «Пристроях» виберіть межу виходу. Перемістіть курсор через цю межу, щоб перейти на другий ПК.</li>
+            </ol><button class="btn btn-secondary" onclick="switchTab('kvm')" data-i18n="help_open_kvm">Відкрити безмежну мишу</button></div>
+          </details>
+          <details class="help-item">
+            <summary data-i18n="help_cast_question">Як показати екран або вікно на іншому ПК?</summary>
+            <div class="help-body"><ol>
+              <li data-i18n="help_cast_1">Підключіть ПК і відкрийте NerveDesk на пристрої, який прийматиме зображення.</li>
+              <li data-i18n="help_cast_2">На ПК-джерелі увімкніть «Дублювання екрана», виберіть приймач і весь екран або відкрите вікно.</li>
+              <li data-i18n="help_cast_3">Натисніть «Почати трансляцію». Вибране вікно не згортайте.</li>
+            </ol><button class="btn btn-secondary" onclick="switchTab('cast')" data-i18n="help_open_cast">Відкрити дублювання екрана</button></div>
+          </details>
+          <details class="help-item">
+            <summary data-i18n="help_audio_question">Як передати звук між ПК?</summary>
+            <div class="help-body"><ol>
+              <li data-i18n="help_audio_1">Підключіть ПК та увімкніть «Аудіоміст» на обох.</li>
+              <li data-i18n="help_audio_2">Виберіть напрямок звуку й інший комп’ютер зі списку.</li>
+              <li data-i18n="help_audio_3">Натисніть кнопку початку передавання або приймання звуку.</li>
+            </ol><button class="btn btn-secondary" onclick="switchTab('audio')" data-i18n="help_open_audio">Відкрити аудіоміст</button></div>
+          </details>
+          <details class="help-item">
+            <summary data-i18n="help_phone_audio_question">Як відтворити звук телефона на ПК?</summary>
+            <div class="help-body"><ol>
+              <li data-i18n="help_phone_audio_1">У «Аудіомості» відкрийте налаштування Bluetooth і спаріть телефон з ПК.</li>
+              <li data-i18n="help_phone_audio_2">Виберіть телефон у списку й натисніть «Підключити звук».</li>
+              <li data-i18n="help_phone_audio_3">На телефоні оберіть цей ПК як пристрій відтворення. Звук лунатиме через динаміки або навушники ПК.</li>
+              <li data-i18n="help_phone_audio_4">Якщо телефон показує «Media audio», але звуку немає, натисніть «Перепідключити» та перевірте вихід звуку Windows.</li>
+            </ol><button class="btn btn-secondary" onclick="switchTab('audio')" data-i18n="help_open_audio">Відкрити аудіоміст</button></div>
+          </details>
+          <details class="help-item">
+            <summary data-i18n="help_pc_phone_audio_question">Як відтворити звук ПК на телефоні?</summary>
+            <div class="help-body"><ol>
+              <li data-i18n="help_pc_phone_audio_1">У «Аудіомості» виберіть напрямок «З ПК на телефон».</li>
+              <li data-i18n="help_pc_phone_audio_2">Увімкніть Мобільний пульт, відкрийте QR-код, підключіть телефон до тієї ж Wi-Fi мережі й введіть PIN.</li>
+              <li data-i18n="help_pc_phone_audio_3">На телефоні відкрийте вкладку «Звук» і натисніть «Відтворити звук».</li>
+            </ol><button class="btn btn-secondary" onclick="switchTab('audio')" data-i18n="help_open_audio">Відкрити аудіоміст</button></div>
+          </details>
+          <details class="help-item">
+            <summary data-i18n="help_sync_question">Як синхронізувати папку?</summary>
+            <div class="help-body"><ol>
+              <li data-i18n="help_sync_1">Підключіть ПК та увімкніть «Синхронізацію папок» на обох.</li>
+              <li data-i18n="help_sync_2">Оберіть папку й інший ПК, натисніть «Підключити папку» та підтвердьте запит на другому ПК.</li>
+              <li data-i18n="help_sync_3">Нові файли передаватимуться автоматично. Для наявних файлів натисніть «Синхронізувати».</li>
+            </ol><button class="btn btn-secondary" onclick="switchTab('sync')" data-i18n="help_open_sync">Відкрити синхронізацію</button></div>
+          </details>
+          <details class="help-item">
+            <summary data-i18n="help_mobile_question">Як підключити телефон?</summary>
+            <div class="help-body"><ol>
+              <li data-i18n="help_mobile_1">Підключіть телефон і ПК до однієї Wi-Fi мережі та увімкніть «Мобільний пульт».</li>
+              <li data-i18n="help_mobile_2">Відскануйте QR-код телефоном або відкрийте показану адресу.</li>
+              <li data-i18n="help_mobile_3">Введіть PIN з екрана ПК та оберіть «Екран», «Тачпад» або «Звук».</li>
+            </ol><button class="btn btn-secondary" onclick="switchTab('mobile')" data-i18n="help_open_mobile">Відкрити мобільний пульт</button></div>
+          </details>
+        </div>
       </div>
 
       <div class="view-container" id="viewSettings">
@@ -1527,7 +1663,50 @@
         nav_audio: "Аудіоміст",
         nav_sync: "Синхронізація папок",
         nav_mobile: "Мобільний пульт",
+        nav_help: "Інструкції",
         nav_settings: "Налаштування",
+
+        help_title: "Інструкції та відповіді",
+        help_desc: "Короткі кроки для підключення пристроїв і роботи з кожним модулем.",
+        help_devices_question: "Як підключити два ПК?",
+        help_devices_1: "Запустіть NerveDesk на обох ПК в одній локальній мережі.",
+        help_devices_2: "У «Пристроях» створіть ключ на першому ПК. На другому введіть той самий ключ.",
+        help_devices_3: "На кожному ПК натисніть «З’єднати», введіть ім’я іншого ПК і ключ, потім ще раз натисніть «З’єднати».",
+        help_open_devices: "Відкрити пристрої",
+        help_kvm_question: "Як керувати другим ПК мишею та клавіатурою?",
+        help_kvm_1: "Спочатку підключіть ПК у розділі «Пристрої».",
+        help_kvm_2: "Увімкніть «Безмежну мишу» на обох ПК; за потреби увімкніть клавіатуру й буфер обміну.",
+        help_kvm_3: "У «Пристроях» виберіть межу виходу. Перемістіть курсор через цю межу, щоб перейти на другий ПК.",
+        help_open_kvm: "Відкрити безмежну мишу",
+        help_cast_question: "Як показати екран або вікно на іншому ПК?",
+        help_cast_1: "Підключіть ПК і відкрийте NerveDesk на пристрої, який прийматиме зображення.",
+        help_cast_2: "На ПК-джерелі увімкніть «Дублювання екрана», виберіть приймач і весь екран або відкрите вікно.",
+        help_cast_3: "Натисніть «Почати трансляцію». Вибране вікно не згортайте.",
+        help_open_cast: "Відкрити дублювання екрана",
+        help_audio_question: "Як передати звук між ПК?",
+        help_audio_1: "Підключіть ПК та увімкніть «Аудіоміст» на обох.",
+        help_audio_2: "Виберіть напрямок звуку й інший комп’ютер зі списку.",
+        help_audio_3: "Натисніть кнопку початку передавання або приймання звуку.",
+        help_open_audio: "Відкрити аудіоміст",
+        help_phone_audio_question: "Як відтворити звук телефона на ПК?",
+        help_phone_audio_1: "У «Аудіомості» відкрийте налаштування Bluetooth і спаріть телефон з ПК.",
+        help_phone_audio_2: "Виберіть телефон у списку й натисніть «Підключити звук».",
+        help_phone_audio_3: "На телефоні оберіть цей ПК як пристрій відтворення. Звук лунатиме через динаміки або навушники ПК.",
+        help_phone_audio_4: "Якщо телефон показує «Media audio», але звуку немає, натисніть «Перепідключити» та перевірте вихід звуку Windows.",
+        help_pc_phone_audio_question: "Як відтворити звук ПК на телефоні?",
+        help_pc_phone_audio_1: "У «Аудіомості» виберіть напрямок «З ПК на телефон».",
+        help_pc_phone_audio_2: "Увімкніть Мобільний пульт, відкрийте QR-код, підключіть телефон до тієї ж Wi-Fi мережі й введіть PIN.",
+        help_pc_phone_audio_3: "На телефоні відкрийте вкладку «Звук» і натисніть «Відтворити звук».",
+        help_sync_question: "Як синхронізувати папку?",
+        help_sync_1: "Підключіть ПК та увімкніть «Синхронізацію папок» на обох.",
+        help_sync_2: "Оберіть папку й інший ПК, натисніть «Підключити папку» та підтвердьте запит на другому ПК.",
+        help_sync_3: "Нові файли передаватимуться автоматично. Для наявних файлів натисніть «Синхронізувати».",
+        help_open_sync: "Відкрити синхронізацію",
+        help_mobile_question: "Як підключити телефон?",
+        help_mobile_1: "Підключіть телефон і ПК до однієї Wi-Fi мережі та увімкніть «Мобільний пульт».",
+        help_mobile_2: "Відскануйте QR-код телефоном або відкрийте показану адресу.",
+        help_mobile_3: "Введіть PIN з екрана ПК та оберіть «Екран», «Тачпад» або «Звук».",
+        help_open_mobile: "Відкрити мобільний пульт",
 
         home_title: "Головна",
         home_desc: "Центральна панель телеметрії, метрик та керування активними модулями NerveDesk.",
@@ -1544,10 +1723,10 @@
         mod_cast_desc: "Показувати екран ПК на ноутбуці через мережу",
         mod_transfer_name: "Перетягування файлів (Drag & Drop)",
         mod_transfer_desc: "Перетягуйте файли між пристроями через межу екрана",
-        mod_mobile_name: "Мобільний пульт та екран",
+        mod_mobile_name: "Мобільний пульт",
         mod_mobile_desc: "Керуйте мишею по зображенню та використовуйте тачпад зі смартфона",
         mod_audio_name: "Аудіоміст",
-        mod_audio_desc: "Передавання системного звуку на інший ПК",
+        mod_audio_desc: "Звук між ПК та з телефона",
         mod_sync_name: "Синхронізація папок",
         mod_sync_desc: "Автоматично передавати нові файли між двома ПК",
         sync_title: "Синхронізація папок",
@@ -1597,7 +1776,7 @@
         sync_event_restored: "Відновлено",
         sync_event_conflict: "Конфлікт",
         audio_title: "Аудіоміст",
-        audio_desc: "Передавайте системний звук між цим ПК та іншим комп’ютером у локальній мережі.",
+        audio_desc: "Передавайте системний звук між ПК або відтворюйте звук телефона через Bluetooth.",
         audio_service_name: "Служба аудіомосту",
         audio_service_desc: "Дозволити передавання та приймання системного звуку",
         audio_controls: "Аудіопотік",
@@ -1616,6 +1795,27 @@
         audio_start_receive: "Отримувати звук",
         audio_stop_receive: "Зупинити отримання",
         audio_no_target: "Обрати комп’ютер",
+        phone_audio_title: "Звук телефона",
+        phone_audio_direction_name: "Напрямок звуку",
+        phone_audio_direction_desc: "Виберіть, де відтворювати звук.",
+        phone_audio_direction_receive: "З телефона на ПК",
+        phone_audio_direction_send: "З ПК на телефон",
+        phone_audio_send_name: "Звук ПК на телефоні",
+        phone_audio_send_desc: "Увімкніть Мобільний пульт, відкрийте його на телефоні й натисніть «Звук» → «Відтворити звук».",
+        phone_audio_name: "Звук телефона на цьому ПК",
+        phone_audio_desc: "Спаріть Android або iPhone з Windows і виберіть телефон зі списку.",
+        phone_audio_device: "Телефон",
+        phone_audio_pair: "Спарити телефон",
+        phone_audio_connect: "Підключити звук",
+        phone_audio_disconnect: "Відключити звук",
+        phone_audio_reconnect: "Перепідключити",
+        phone_audio_output: "Вихід звуку",
+        phone_audio_disconnected: "Телефон не підключено",
+        phone_audio_connecting: "Підключення телефона…",
+        phone_audio_connected: "Bluetooth підключено: {name}",
+        phone_audio_silent_hint: "На телефоні виберіть цей ПК як вихід.",
+        phone_audio_no_devices: "Немає спарених телефонів",
+        phone_audio_select: "Виберіть телефон",
         open_mobile_qr: "Відкрити QR-код та налаштування",
         open_folder_btn: "Відкрити отримані файли",
 
@@ -1626,9 +1826,10 @@
         kvm_activation_desc: "Увімкнути безперешкодне переміщення курсору та введення клавіатури між спареними пристроями",
         sec_encryption: "Ключ шифрування та ім'я пристрою",
         security_key_name: "Ключ безпеки",
-        security_key_desc: "Для налаштування згенеруйте ключ на одному ПК та введіть його на іншому пристрої.",
+        security_key_desc: "Згенеруйте ключ на одному ПК та налаштуйте з'єднання з тим самим ключем на обох ПК.",
         btn_new_key: "Новий ключ",
         btn_connect: "З'єднати",
+        copy_key_title: "Скопіювати ключ",
         btn_expand: "Розгорнути з'єднання",
         placeholder_key: "Ключ безпеки",
         placeholder_device_name: "Ім'я пристрою",
@@ -1642,7 +1843,6 @@
         primary_device: "Головний пристрій",
         slot_available: "Доступно",
         device_nearby: "Знайдено · натисніть, щоб підключити",
-        btn_allow_lan: "Дозволити доступ у локальній мережі",
         status_connected: "Підключено",
         status_connecting: "З'єднання...",
         status_disabled: "Вимкнено",
@@ -1695,8 +1895,8 @@
         mobile_steps_title: "Як підключити телефон:",
         mobile_step_1: "Підключіть телефон до тієї ж Wi-Fi мережі, що й ПК.",
         mobile_step_2: "Відскануйте QR-код камерою або введіть адресу в браузері.",
-        mobile_step_3: "Введіть 6-значний PIN-код для безпечного входу.",
-        mobile_step_4: "Керуйте комп'ютером у режимі «Екран» або «Тачпад».",
+        mobile_step_3: "Після відкриття сторінки введіть PIN.",
+        mobile_step_4: "Керуйте комп'ютером у режимі «Екран» або «Тачпад», а звук слухайте на вкладці «Звук».",
         mobile_pin_label: "PIN-код доступу",
         btn_regen_pin: "Оновити PIN",
         btn_copy_url: "Скопіювати",
@@ -1732,12 +1932,55 @@
         nav_home: "Home",
         nav_devices: "Devices",
         nav_section_navigation: "Navigation",
-        nav_kvm: "Mouse Without Borders",
+        nav_kvm: "Borderless Mouse",
         nav_cast: "Screen Mirror",
         nav_audio: "Audio Bridge",
         nav_sync: "Folder Sync",
         nav_mobile: "Mobile Remote",
+        nav_help: "Help",
         nav_settings: "Settings",
+
+        help_title: "Help & FAQ",
+        help_desc: "Quick steps to connect devices and use each module.",
+        help_devices_question: "How do I connect two PCs?",
+        help_devices_1: "Run NerveDesk on both PCs on the same local network.",
+        help_devices_2: "In Devices, create a key on the first PC. Enter the same key on the second PC.",
+        help_devices_3: "On each PC, click Connect, enter the other PC's name and the key, then click Connect again.",
+        help_open_devices: "Open Devices",
+        help_kvm_question: "How do I control the other PC with mouse and keyboard?",
+        help_kvm_1: "First connect the PCs in Devices.",
+        help_kvm_2: "Enable Borderless Mouse on both PCs; enable keyboard and clipboard sharing if needed.",
+        help_kvm_3: "Choose the exit edge in Devices. Move the cursor across that edge to control the other PC.",
+        help_open_kvm: "Open Borderless Mouse",
+        help_cast_question: "How do I show a screen or window on another PC?",
+        help_cast_1: "Connect the PCs and open NerveDesk on the receiving device.",
+        help_cast_2: "On the source PC, enable Screen Mirror and select the receiver and either the full screen or an open window.",
+        help_cast_3: "Click Start Streaming. Keep the selected window unminimized.",
+        help_open_cast: "Open Screen Mirror",
+        help_audio_question: "How do I stream audio between PCs?",
+        help_audio_1: "Connect the PCs and enable Audio Bridge on both.",
+        help_audio_2: "Choose the audio direction and the other computer from the list.",
+        help_audio_3: "Click the button to start sending or receiving audio.",
+        help_open_audio: "Open Audio Bridge",
+        help_phone_audio_question: "How do I play phone audio on this PC?",
+        help_phone_audio_1: "In Audio Bridge, open Bluetooth settings and pair the phone with this PC.",
+        help_phone_audio_2: "Select the phone from the list and click Connect audio.",
+        help_phone_audio_3: "On the phone, choose this PC as the audio output. Sound plays through the PC's speakers or headphones.",
+        help_phone_audio_4: "If the phone shows Media audio but you hear nothing, click Reconnect and check the Windows sound output.",
+        help_pc_phone_audio_question: "How do I play PC audio on my phone?",
+        help_pc_phone_audio_1: "In Audio Bridge, select PC to phone.",
+        help_pc_phone_audio_2: "Enable Mobile Remote, open the QR code, connect the phone to the same Wi-Fi network, and enter the PIN.",
+        help_pc_phone_audio_3: "On the phone, open Audio and tap Play audio.",
+        help_sync_question: "How do I sync a folder?",
+        help_sync_1: "Connect the PCs and enable Folder Sync on both.",
+        help_sync_2: "Choose a folder and the other PC, click Connect folder, then approve the request on the other PC.",
+        help_sync_3: "New files sync automatically. Click Sync now to include existing files.",
+        help_open_sync: "Open Folder Sync",
+        help_mobile_question: "How do I connect a phone?",
+        help_mobile_1: "Connect the phone and PC to the same Wi-Fi network and enable Mobile Remote.",
+        help_mobile_2: "Scan the QR code with the phone or open the displayed address.",
+        help_mobile_3: "Enter the PIN shown on the PC and choose Screen, Trackpad, or Audio.",
+        help_open_mobile: "Open Mobile Remote",
 
         home_title: "Home",
         home_desc: "Central dashboard for telemetry, metrics, and managing active NerveDesk modules.",
@@ -1748,16 +1991,16 @@
         metric_bandwidth: "Outgoing Video Rate",
 
         sec_active_modules: "Active Modules & Services",
-        mod_kvm_name: "Mouse Without Borders",
+        mod_kvm_name: "Borderless Mouse",
         mod_kvm_desc: "Share keyboard and mouse seamlessly between computers",
         mod_cast_name: "Screen Mirror",
         mod_cast_desc: "Show this PC's screen on a laptop over the network",
         mod_transfer_name: "File Drag & Drop",
         mod_transfer_desc: "Drag files between devices across screen borders",
-        mod_mobile_name: "Mobile Remote & Screen",
+        mod_mobile_name: "Mobile Remote",
         mod_mobile_desc: "Control PC cursor over live image and use phone as trackpad",
         mod_audio_name: "Audio Bridge",
-        mod_audio_desc: "Send system audio to another PC",
+        mod_audio_desc: "Audio between PCs and from your phone",
         mod_sync_name: "Folder Sync",
         mod_sync_desc: "Automatically share new files between two PCs",
         sync_title: "Folder Sync",
@@ -1807,7 +2050,7 @@
         sync_event_restored: "Restored",
         sync_event_conflict: "Conflict",
         audio_title: "Audio Bridge",
-        audio_desc: "Stream system audio between this PC and another computer on your local network.",
+        audio_desc: "Stream system audio between PCs or play phone audio over Bluetooth.",
         audio_service_name: "Audio Bridge Service",
         audio_service_desc: "Allow sending and receiving system audio",
         audio_controls: "Audio Stream",
@@ -1826,19 +2069,41 @@
         audio_start_receive: "Receive audio",
         audio_stop_receive: "Stop receiving",
         audio_no_target: "Choose a computer",
+        phone_audio_title: "Phone audio",
+        phone_audio_direction_name: "Audio direction",
+        phone_audio_direction_desc: "Choose where to play the audio.",
+        phone_audio_direction_receive: "Phone to PC",
+        phone_audio_direction_send: "PC to phone",
+        phone_audio_send_name: "PC audio on phone",
+        phone_audio_send_desc: "Enable Mobile Remote, open it on the phone, and tap Audio → Play audio.",
+        phone_audio_name: "Phone audio on this PC",
+        phone_audio_desc: "Pair your Android phone or iPhone with Windows and select it from the list.",
+        phone_audio_device: "Phone",
+        phone_audio_pair: "Pair phone",
+        phone_audio_connect: "Connect audio",
+        phone_audio_disconnect: "Disconnect audio",
+        phone_audio_reconnect: "Reconnect",
+        phone_audio_output: "Sound output",
+        phone_audio_disconnected: "No phone connected",
+        phone_audio_connecting: "Connecting phone…",
+        phone_audio_connected: "Bluetooth connected: {name}",
+        phone_audio_silent_hint: "Choose this PC as the phone's audio output.",
+        phone_audio_no_devices: "No paired phones",
+        phone_audio_select: "Select a phone",
         open_mobile_qr: "Open QR code & settings",
         open_folder_btn: "Open Received Files",
 
-        kvm_title: "Mouse Without Borders",
+        kvm_title: "Borderless Mouse",
         kvm_desc: "Seamless mouse and keyboard sharing between computers using local network pairing and encryption.",
         sec_activation: "Activation",
-        kvm_activation_name: "Mouse Without Borders Service",
+        kvm_activation_name: "Borderless Mouse Service",
         kvm_activation_desc: "Enable seamless border-crossing cursor and keyboard control across paired devices",
         sec_encryption: "Encryption Key & Device Name",
         security_key_name: "Security Key",
-        security_key_desc: "To configure, create a key on one computer and enter it manually on other computers.",
+        security_key_desc: "Generate a key on one PC, then configure the connection with that same key on both PCs.",
         btn_new_key: "New Key",
         btn_connect: "Connect",
+        copy_key_title: "Copy security key",
         btn_expand: "Expand connection",
         placeholder_key: "Security Key",
         placeholder_device_name: "Device Name",
@@ -1852,7 +2117,6 @@
         primary_device: "Primary Device",
         slot_available: "Available",
         device_nearby: "Nearby · click to connect",
-        btn_allow_lan: "Allow local network access",
         status_connected: "Connected",
         status_connecting: "Connecting...",
         status_disabled: "Disabled",
@@ -1905,8 +2169,8 @@
         mobile_steps_title: "How to connect your phone:",
         mobile_step_1: "Connect your phone to the same Wi-Fi network as this PC.",
         mobile_step_2: "Scan the QR code with your camera or enter the address below.",
-        mobile_step_3: "Enter the 6-digit security PIN to authorize access.",
-        mobile_step_4: "Control your PC via «Live Display» or «Trackpad» mode.",
+        mobile_step_3: "Enter the PIN after opening the page.",
+        mobile_step_4: "Control the PC in Screen or Trackpad mode, or listen on the Audio tab.",
         mobile_pin_label: "Access PIN",
         btn_regen_pin: "Regenerate PIN",
         btn_copy_url: "Copy Link",
@@ -1968,6 +2232,10 @@
       document.querySelectorAll('[data-i18n-title]').forEach(el => {
         const key = el.getAttribute('data-i18n-title');
         el.title = t(key);
+      });
+      document.querySelectorAll('[data-i18n-aria-label]').forEach(el => {
+        const key = el.getAttribute('data-i18n-aria-label');
+        el.setAttribute('aria-label', t(key));
       });
 
       for (const [id, key] of [['mirrorTargetSelect', 'mirror_no_target'], ['audioTargetSelect', 'audio_no_target'], ['syncPeerSelect', 'sync_peer_select']]) {
@@ -2048,11 +2316,16 @@
         document.getElementById('navAudio').classList.add('active');
         document.getElementById('viewAudio').classList.add('active');
         refreshAudioTargets();
+        refreshPhoneAudioDevices();
+        refreshPhoneAudioStatus();
       } else if (tabId === 'sync') {
         document.getElementById('navSync').classList.add('active');
         document.getElementById('viewSync').classList.add('active');
         refreshSyncPeers();
         refreshSyncStatus();
+      } else if (tabId === 'help') {
+        document.getElementById('navHelp').classList.add('active');
+        document.getElementById('viewHelp').classList.add('active');
       } else if (tabId === 'settings') {
         document.getElementById('navSettings').classList.add('active');
         document.getElementById('viewSettings').classList.add('active');
@@ -2109,6 +2382,9 @@
     async function toggleMobileServer(checked) {
       try {
         await callTauri('toggle_mobile_remote', { enable: checked });
+        if (checked && document.getElementById('phoneAudioDirectionSelect').value === 'pc_to_phone') {
+          await callTauri('set_mobile_audio_enabled', { enabled: true });
+        }
         localStorage.setItem('mobile_module_enabled', String(checked));
         await updateMobileRemoteInfo();
       } catch (e) {}
@@ -2170,15 +2446,6 @@
       document.getElementById('peerKeyInput').focus();
     }
 
-    async function configurePrivateNetwork() {
-      try {
-        await callTauri('configure_private_network');
-        setTimeout(refreshNearbyDevice, 2500);
-      } catch (error) {
-        alert(String(error));
-      }
-    }
-
     function setStatus(element, state, label) {
       if (!element) return;
       element.dataset.state = state;
@@ -2187,22 +2454,23 @@
 
     function renderPeerStatus(metrics) {
       const savedPeer = localStorage.getItem('paired_device_name');
+      const visiblePeer = savedPeer || (metrics?.peer_online ? metrics.peer_device : null);
       const box = document.getElementById('monitorBoxPeer');
       const slot = document.getElementById('peerAvailableSlot');
       const button = document.getElementById('btnReconnectDevice');
-      slot.style.display = savedPeer ? 'none' : 'flex';
-      box.style.display = savedPeer ? 'flex' : 'none';
-      if (!savedPeer) {
+      slot.style.display = visiblePeer ? 'none' : 'flex';
+      box.style.display = visiblePeer ? 'flex' : 'none';
+      if (!visiblePeer) {
         button.style.display = 'none';
         return;
       }
-      document.getElementById('peerBoxLabel').textContent = savedPeer.toUpperCase();
+      document.getElementById('peerBoxLabel').textContent = visiblePeer.toUpperCase();
       const state = isPeerDisabled ? 'disabled' : isReconnecting ? 'connecting' : metrics?.peer_online ? 'connected' : 'offline';
       const label = state === 'connected' ? t('status_connected') : state === 'connecting' ? t('status_connecting') : state === 'disabled' ? t('status_disabled') : t('status_offline');
       setStatus(document.getElementById('peerBoxSub'), state, label);
       box.style.opacity = isPeerDisabled ? '0.65' : '1';
       box.style.borderStyle = isPeerDisabled ? 'dashed' : 'solid';
-      button.style.display = state === 'offline' ? 'inline-flex' : 'none';
+      button.style.display = state === 'offline' && savedPeer ? 'inline-flex' : 'none';
       button.disabled = isReconnecting;
     }
 
@@ -2291,6 +2559,109 @@
       if (devices.some(device => device.ip === previous)) select.value = previous;
       else select.value = '';
       if (select.value) localStorage.setItem('audio_target_ip', select.value);
+    }
+
+    let phoneAudioConnected = false;
+
+    let phoneAudioDirectionRevision = 0;
+
+    async function onPhoneAudioDirectionChanged() {
+      const revision = ++phoneAudioDirectionRevision;
+      const direction = document.getElementById('phoneAudioDirectionSelect').value;
+      localStorage.setItem('phone_audio_direction', direction);
+      const sending = direction === 'pc_to_phone';
+      document.getElementById('phoneAudioDeviceCard').style.display = sending ? 'none' : '';
+      document.getElementById('phoneAudioReceiveCard').style.display = sending ? 'none' : '';
+      document.getElementById('phoneAudioSendCard').style.display = sending ? '' : 'none';
+      const active = sending && await callTauri('get_mobile_remote_info').then(info => info.is_active).catch(() => false);
+      if (revision === phoneAudioDirectionRevision) {
+        await callTauri('set_mobile_audio_enabled', { enabled: active }).catch(() => {});
+      }
+    }
+
+    async function refreshPhoneAudioDevices() {
+      const select = document.getElementById('phoneAudioDeviceSelect');
+      const previous = select.value;
+      try {
+        const devices = await callTauri('list_bluetooth_audio_devices');
+        select.replaceChildren();
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = t(devices.length ? 'phone_audio_select' : 'phone_audio_no_devices');
+        select.appendChild(placeholder);
+        for (const device of devices) {
+          const option = document.createElement('option');
+          option.value = device.id;
+          option.textContent = device.name;
+          select.appendChild(option);
+        }
+        if (devices.some(device => device.id === previous)) select.value = previous;
+      } catch (err) {
+        document.getElementById('phoneAudioStatus').textContent = String(err);
+      }
+    }
+
+    async function refreshPhoneAudioStatus() {
+      try {
+        const status = await callTauri('get_bluetooth_audio_status');
+        phoneAudioConnected = status.connected;
+        document.getElementById('phoneAudioConnectButton').textContent = t(status.connected ? 'phone_audio_disconnect' : 'phone_audio_connect');
+        document.getElementById('phoneAudioReconnectButton').style.display = status.connected ? '' : 'none';
+        document.getElementById('phoneAudioStatus').textContent = status.connected
+          ? t('phone_audio_connected').replace('{name}', status.device_name || '')
+          : t(status.state === 'connecting' ? 'phone_audio_connecting' : 'phone_audio_disconnected');
+        const hint = document.getElementById('phoneAudioHint');
+        hint.style.display = status.connected ? '' : 'none';
+        hint.textContent = status.connected ? t('phone_audio_silent_hint') : '';
+      } catch (err) {
+        document.getElementById('phoneAudioStatus').textContent = String(err);
+      }
+    }
+
+    async function togglePhoneAudio() {
+      const button = document.getElementById('phoneAudioConnectButton');
+      button.disabled = true;
+      try {
+        if (phoneAudioConnected) {
+          await callTauri('disconnect_bluetooth_audio');
+        } else {
+          const deviceId = document.getElementById('phoneAudioDeviceSelect').value;
+          if (!deviceId) { alert(t('phone_audio_select')); return; }
+          document.getElementById('phoneAudioStatus').textContent = t('phone_audio_connecting');
+          await callTauri('connect_bluetooth_audio', { deviceId });
+        }
+        await refreshPhoneAudioStatus();
+      } catch (err) {
+        document.getElementById('phoneAudioStatus').textContent = String(err);
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    async function reconnectPhoneAudio() {
+      const button = document.getElementById('phoneAudioReconnectButton');
+      button.disabled = true;
+      document.getElementById('phoneAudioStatus').textContent = t('phone_audio_connecting');
+      try {
+        await callTauri('reconnect_bluetooth_audio');
+        await refreshPhoneAudioStatus();
+      } catch (err) {
+        document.getElementById('phoneAudioStatus').textContent = String(err);
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    function openPhoneSoundSettings() {
+      callTauri('open_sound_settings').catch(err => {
+        document.getElementById('phoneAudioStatus').textContent = String(err);
+      });
+    }
+
+    function openPhoneBluetoothSettings() {
+      callTauri('open_bluetooth_settings').catch(err => {
+        document.getElementById('phoneAudioStatus').textContent = String(err);
+      });
     }
 
     async function toggleAudioStream() {
@@ -2511,15 +2882,51 @@
     function generateNewKey() {
       const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%^&*";
       let key = "";
-      for (let i = 0; i < 16; i++) {
-        key += chars.charAt(Math.floor(Math.random() * chars.length));
+      const values = new Uint32Array(24);
+      crypto.getRandomValues(values);
+      for (let i = 0; i < values.length; i++) {
+        key += chars.charAt(values[i] % chars.length);
       }
       document.getElementById('securityKeyInput').value = key;
     }
 
-    function copySecurityKey() {
-      const val = document.getElementById('securityKeyInput').value;
-      navigator.clipboard.writeText(val).catch(() => {});
+    async function loadPairingKey() {
+      const saved = await callTauri('get_saved_pairing_key');
+      const legacy = localStorage.getItem('paired_security_key');
+      if (saved) {
+        localStorage.removeItem('paired_security_key');
+        return saved;
+      }
+      if (legacy) {
+        await callTauri('prepare_pairing_key', { securityKey: legacy });
+        localStorage.removeItem('paired_security_key');
+        return legacy;
+      }
+      return '';
+    }
+
+    let pairingPreparation = Promise.resolve();
+    function preparePairingKey() {
+      const key = document.getElementById('peerKeyInput').value.trim();
+      if (key.length < 16 || key.length > 256) return pairingPreparation;
+      pairingPreparation = pairingPreparation
+        .then(() => callTauri('prepare_pairing_key', { securityKey: key }))
+        .then(() => { document.getElementById('securityKeyInput').value = key; })
+        .catch(err => { alert(String(err)); });
+      return pairingPreparation;
+    }
+
+    async function copySecurityKey() {
+      const input = document.getElementById('securityKeyInput');
+      const val = input.value;
+      if (!val) return;
+      try {
+        await navigator.clipboard.writeText(val);
+      } catch (_) {
+        input.select();
+        document.execCommand('copy');
+        input.setSelectionRange(0, 0);
+      }
     }
 
     function copyDeviceName() {
@@ -2539,7 +2946,8 @@
     }
 
     async function connectWithKeyAndDevice() {
-      const key = document.getElementById('peerKeyInput').value.trim();
+      const key = document.getElementById('peerKeyInput').value.trim()
+        || document.getElementById('securityKeyInput').value.trim();
       const name = document.getElementById('peerDeviceNameInput').value.trim();
       if (!name) {
         alert(t('alert_enter_device_name'));
@@ -2553,9 +2961,10 @@
       try {
         isReconnecting = true;
         renderPeerStatus(lastMetrics);
+        await pairingPreparation;
         await callTauri('pair_device', { targetName: name, securityKey: key });
         localStorage.setItem('paired_device_name', name);
-        localStorage.setItem('paired_security_key', key);
+        localStorage.removeItem('paired_security_key');
         localStorage.setItem('peer_device_disabled', 'false');
         if (localStorage.getItem('kvm_module_enabled') === 'true') {
           await callTauri('start_host', { targetIp: name, streamVideo: false });
@@ -2604,13 +3013,14 @@
       if (menu) menu.style.display = 'none';
 
       const target = localStorage.getItem('paired_device_name');
-      const key = localStorage.getItem('paired_security_key') || '';
+      const key = await loadPairingKey().catch(() => '');
       if (!target || isReconnecting) return;
       isReconnecting = true;
       renderPeerStatus(lastMetrics);
 
       try {
         await callTauri('pair_device', { targetName: target, securityKey: key });
+        localStorage.removeItem('paired_security_key');
         if (localStorage.getItem('kvm_module_enabled') === 'true') {
           await callTauri('start_host', { targetIp: target, streamVideo: false });
         }
@@ -2665,6 +3075,7 @@
       }
       try {
         await callTauri('stop_service');
+        await callTauri('clear_pairing_key');
       } catch (err) {}
       localStorage.removeItem('paired_device_name');
       localStorage.removeItem('paired_security_key');
@@ -2861,6 +3272,7 @@
         } catch (_) {}
       }
       document.getElementById('audioDirectionSelect').value = localStorage.getItem('audio_direction') === 'receive' ? 'receive' : 'send';
+      document.getElementById('phoneAudioDirectionSelect').value = localStorage.getItem('phone_audio_direction') === 'pc_to_phone' ? 'pc_to_phone' : 'phone_to_pc';
       const kvmEnabled = localStorage.getItem('kvm_module_enabled') === 'true';
       const mirrorEnabled = localStorage.getItem('mirror_module_enabled') === 'true';
       await callTauri('set_module_enabled', { module: 'kvm', enabled: kvmEnabled }).catch(() => {});
@@ -2871,6 +3283,7 @@
       if (localStorage.getItem('mobile_module_enabled') === 'true') {
         await callTauri('toggle_mobile_remote', { enable: true }).catch(() => {});
       }
+      await onPhoneAudioDirectionChanged();
 
       try {
         const name = await callTauri('get_device_name');
@@ -2909,7 +3322,7 @@
       }
       renderPeerStatus(lastMetrics);
 
-      const savedKey = localStorage.getItem('paired_security_key');
+      const savedKey = await loadPairingKey().catch(() => '');
       if (savedKey) {
         document.getElementById('securityKeyInput').value = savedKey;
       } else {
@@ -2991,6 +3404,9 @@
     }
     setInterval(refreshMetrics, 1000);
     refreshMetrics();
+    setInterval(() => {
+      if (document.getElementById('viewAudio').classList.contains('active')) refreshPhoneAudioStatus();
+    }, 3000);
     setInterval(refreshNearbyDevice, 4000);
     refreshNearbyDevice();
   </script>

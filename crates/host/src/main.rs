@@ -15,6 +15,8 @@ use net::{UdpInputSender, VideoSender};
 #[command(name = "host")]
 #[command(about = "NerveDesk Host Daemon - Low-latency input and display streaming")]
 struct Args {
+    #[arg(long, env = "NERVEDESK_PAIRING_KEY")]
+    security_key: String,
     #[arg(short, long, default_value = "127.0.0.1:48100")]
     target: SocketAddr,
 
@@ -47,7 +49,7 @@ async fn main() -> Result<()> {
         env!("CARGO_PKG_VERSION")
     );
 
-    let input_sender = UdpInputSender::new(args.target)
+    let input_sender = UdpInputSender::new(args.target, args.security_key.clone())
         .await
         .context("Failed to initialize input UDP sender")?;
 
@@ -65,7 +67,7 @@ async fn main() -> Result<()> {
         let bitrate_bps = args.bitrate_mbps * 1_000_000;
 
         Some(tokio::spawn(async move {
-            let video_sender = match VideoSender::new(video_target).await {
+            let video_sender = match VideoSender::new(video_target, args.security_key).await {
                 Ok(s) => s,
                 Err(e) => {
                     error!("Failed to initialize VideoSender: {:?}", e);

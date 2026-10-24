@@ -1,4 +1,5 @@
 use std::net::SocketAddr;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
@@ -13,6 +14,11 @@ use net::{UdpInputReceiver, VideoReceiver};
 #[command(name = "client")]
 #[command(about = "NerveDesk Client - Low-latency input receiver and video player")]
 struct Args {
+    #[arg(long, env = "NERVEDESK_PAIRING_KEY")]
+    security_key: String,
+
+    #[arg(long)]
+    peer_ip: std::net::IpAddr,
     #[arg(short, long, default_value = "0.0.0.0:48100")]
     bind: SocketAddr,
 
@@ -38,16 +44,22 @@ async fn main() -> Result<()> {
         env!("CARGO_PKG_VERSION")
     );
 
-    let mut input_receiver = UdpInputReceiver::bind(args.bind)
-        .await
-        .context("Failed to bind UDP input receiver")?;
+    let mut input_receiver = UdpInputReceiver::bind(
+        args.bind,
+        Arc::new(Mutex::new(Some(args.security_key.clone()))),
+        Arc::new(Mutex::new(Some(args.peer_ip.to_string()))),
+    )
+    .await
+    .context("Failed to bind UDP input receiver")?;
 
     let emulator = InputEmulator::new();
 
     let video_worker = if args.recv_video {
         let video_bind = args.video_bind;
         Some(tokio::spawn(async move {
-            let mut video_receiver = match VideoReceiver::bind(video_bind).await {
+            let paired = Arc::new(Mutex::new(Some(args.peer_ip.to_string())));
+            let key = Arc::new(Mutex::new(Some(args.security_key)));
+            let mut video_receiver = match VideoReceiver::bind(video_bind, paired, key).await {
                 Ok(r) => r,
                 Err(e) => {
                     error!("Failed to bind VideoReceiver: {:?}", e);

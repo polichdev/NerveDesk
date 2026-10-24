@@ -46,11 +46,6 @@ pub fn show_main_window(app: tauri::AppHandle) {
 }
 
 #[command]
-pub fn configure_private_network() -> Result<(), String> {
-    crate::firewall::request_private_lan()
-}
-
-#[command]
 pub fn get_paired_peer_ip(state: State<AppState>) -> Option<String> {
     state.paired_peer_ip.lock().ok().and_then(|ip| ip.clone())
 }
@@ -83,20 +78,31 @@ pub fn get_metrics(state: State<AppState>) -> AppMetrics {
         }
     }
 
+    let paired_ip_for_display = state.paired_peer_ip.lock().unwrap().clone();
+    if peer.is_none() {
+        if let Some(ip) = paired_ip_for_display.as_ref() {
+            peer = Some(
+                state
+                    .discovered_devices
+                    .lock()
+                    .ok()
+                    .and_then(|devices| devices.get(ip).map(|device| device.name.clone()))
+                    .unwrap_or_else(|| ip.clone()),
+            );
+        }
+    }
+
     let edge = state.screen_edge.lock().unwrap().clone();
     let is_active =
         state.is_kvm_active.load(Ordering::SeqCst) || state.is_projecting.load(Ordering::SeqCst);
-    let peer_ip = state.paired_peer_ip.lock().unwrap().clone();
-    let peer_online = peer_ip
-        .as_ref()
-        .and_then(|ip| {
-            state
-                .device_last_seen
-                .lock()
-                .ok()
-                .and_then(|seen| seen.get(ip).copied())
-        })
-        .is_some_and(|last_seen| last_seen.elapsed() < Duration::from_secs(5));
+    let peer_ip = paired_ip_for_display;
+    let peer_online = peer_ip.is_some()
+        && state
+            .authenticated_peer_seen
+            .lock()
+            .ok()
+            .and_then(|seen| *seen)
+            .is_some_and(|last_seen| last_seen.elapsed() < Duration::from_secs(5));
     let v_display = state.display_manager.is_plugged();
 
     let fps_x10 = if state.is_projecting.load(Ordering::SeqCst) {
@@ -174,12 +180,8 @@ pub async fn pair_device(
     if clean_name.is_empty() {
         return Err("Device name cannot be empty".into());
     }
-    if security_key.trim().is_empty() {
-        return Err("Security key cannot be empty".into());
-    }
-
-    if let Ok(mut key_guard) = state.paired_security_key.lock() {
-        *key_guard = Some(security_key.trim().to_string());
+    if !(16..=256).contains(&security_key.trim().len()) {
+        return Err("Security key must contain 16 to 256 characters".into());
     }
 
     let my_name = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Desktop-PC".into());
@@ -191,6 +193,14 @@ pub async fn pair_device(
     }
 
     let resolved_ip = resolve_target_ip(clean_name, &state).await?;
+    crate::secret_store::save_key(security_key.trim())?;
+    *state
+        .authenticated_peer_seen
+        .lock()
+        .map_err(|e| e.to_string())? = None;
+    if let Ok(mut key_guard) = state.paired_security_key.lock() {
+        *key_guard = Some(security_key.trim().to_string());
+    }
     if let Ok(mut ip_guard) = state.paired_peer_ip.lock() {
         *ip_guard = Some(resolved_ip);
     }
@@ -198,6 +208,52 @@ pub async fn pair_device(
         *peer_guard = Some(clean_name.to_string());
     }
     Ok(format!("Device configured: {clean_name}"))
+}
+
+#[command]
+pub fn get_saved_pairing_key() -> Result<Option<String>, String> {
+    crate::secret_store::load_key()
+}
+
+#[command]
+pub fn prepare_pairing_key(security_key: String, state: State<'_, AppState>) -> Result<(), String> {
+    let key = security_key.trim();
+    if !(16..=256).contains(&key.len()) {
+        return Err("Security key must contain 16 to 256 characters".into());
+    }
+    crate::secret_store::save_key(key)?;
+    let mut current = state
+        .paired_security_key
+        .lock()
+        .map_err(|e| e.to_string())?;
+    if current.as_deref() != Some(key) {
+        *current = Some(key.to_string());
+        *state.paired_peer_ip.lock().map_err(|e| e.to_string())? = None;
+        *state
+            .authenticated_peer_seen
+            .lock()
+            .map_err(|e| e.to_string())? = None;
+    }
+    Ok(())
+}
+
+#[command]
+pub fn clear_pairing_key(state: State<'_, AppState>) -> Result<(), String> {
+    stop_kvm_internal(&state);
+    stop_projection_internal(&state);
+    state.audio_bridge.set_enabled(false)?;
+    crate::secret_store::clear_key()?;
+    *state
+        .paired_security_key
+        .lock()
+        .map_err(|e| e.to_string())? = None;
+    *state.paired_peer_ip.lock().map_err(|e| e.to_string())? = None;
+    *state
+        .authenticated_peer_seen
+        .lock()
+        .map_err(|e| e.to_string())? = None;
+    *state.peer_device.lock().map_err(|e| e.to_string())? = None;
+    Ok(())
 }
 
 #[command]
@@ -211,10 +267,10 @@ pub async fn start_host(
     let resolved_ip = resolve_target_ip(&target_ip, &state).await?;
 
     let peer_available = state
-        .device_last_seen
+        .authenticated_peer_seen
         .lock()
         .ok()
-        .and_then(|seen| seen.get(&resolved_ip).copied())
+        .and_then(|seen| *seen)
         .is_some_and(|last_seen| last_seen.elapsed() < Duration::from_secs(5));
     input::set_peer_available(peer_available);
 
@@ -228,7 +284,13 @@ pub async fn start_host(
 
     info!("Starting internal Host KVM engine -> input={}", target_addr);
 
-    let input_sender = UdpInputSender::new(target_addr)
+    let security_key = state
+        .paired_security_key
+        .lock()
+        .ok()
+        .and_then(|key| key.clone())
+        .ok_or_else(|| "Pair this device with a security key first".to_string())?;
+    let input_sender = UdpInputSender::new(target_addr, security_key)
         .await
         .map_err(|e| format!("Failed to create UDP input sender: {e}"))?;
 
@@ -259,14 +321,13 @@ pub async fn start_host(
     let is_running_in = state.is_kvm_active.clone();
     is_running_in.store(true, Ordering::SeqCst);
     let online_running = is_running_in.clone();
-    let online_seen = state.device_last_seen.clone();
-    let online_peer_ip = resolved_ip.clone();
+    let online_seen = state.authenticated_peer_seen.clone();
     let online_worker = tokio::spawn(async move {
         while online_running.load(Ordering::SeqCst) {
             let available = online_seen
                 .lock()
                 .ok()
-                .and_then(|seen| seen.get(&online_peer_ip).copied())
+                .and_then(|seen| *seen)
                 .is_some_and(|last_seen| last_seen.elapsed() < Duration::from_secs(5));
             input::set_peer_available(available);
             tokio::time::sleep(Duration::from_millis(250)).await;
@@ -449,9 +510,16 @@ pub async fn start_virtual_display_cast(
     let generation = state.projection_generation.clone();
     let current_generation = generation.load(Ordering::SeqCst);
 
+    let video_key = state
+        .paired_security_key
+        .lock()
+        .ok()
+        .and_then(|key| key.clone());
     let vid_worker = if let Some(listener) = frame_listener {
+        let video_key =
+            video_key.ok_or_else(|| "Pair this device before streaming its display".to_string())?;
         tokio::spawn(async move {
-            let sender = match VideoSender::new(video_target).await {
+            let sender = match VideoSender::new(video_target, video_key).await {
                 Ok(sender) => sender,
                 Err(e) => {
                     error!("VideoSender error: {:?}", e);
@@ -553,8 +621,15 @@ pub async fn start_virtual_display_cast(
         let mirror_target: SocketAddr = format!("{}:48104", resolved_ip)
             .parse()
             .map_err(|e| format!("Invalid mirror target address: {e}"))?;
+        let security_key = state
+            .paired_security_key
+            .lock()
+            .ok()
+            .and_then(|key| key.clone())
+            .ok_or_else(|| "Pair this device before streaming its screen".to_string())?;
         match mirror_worker::start(
             mirror_target,
+            security_key,
             source_window,
             mirror_capture_config,
             cancel_flag,
@@ -802,6 +877,9 @@ pub fn set_autostart_enabled(enabled: bool) -> Result<(), String> {
 
 #[command]
 pub async fn send_file_to_peer(path: String, state: State<'_, AppState>) -> Result<String, String> {
+    if !state.file_transfer_enabled.load(Ordering::SeqCst) {
+        return Err("File transfer is disabled".into());
+    }
     let target_ip = if let Ok(guard) = state.paired_peer_ip.lock() {
         guard.clone()
     } else {
@@ -825,9 +903,13 @@ pub fn get_mobile_remote_info(state: State<'_, AppState>) -> MobileRemoteInfo {
     let ip = get_local_ip();
     let port = state.mobile_server.port();
     let is_active = state.mobile_server.is_active();
-    let url = format!("http://{}:{}", ip, port);
+    let url = format!("https://{}:{}", ip, port);
     let qr_svg = generate_qr_svg(&url).unwrap_or_default();
     let pin = state.mobile_server.get_pin();
+    let certificate_fingerprint = state
+        .mobile_server
+        .certificate_fingerprint()
+        .unwrap_or_default();
     MobileRemoteInfo {
         is_active,
         ip,
@@ -835,6 +917,7 @@ pub fn get_mobile_remote_info(state: State<'_, AppState>) -> MobileRemoteInfo {
         url,
         qr_svg,
         pin,
+        certificate_fingerprint,
     }
 }
 
@@ -855,10 +938,15 @@ pub fn toggle_mobile_remote(enable: bool, state: State<'_, AppState>) -> bool {
 }
 
 #[command]
+pub fn set_mobile_audio_enabled(enabled: bool, state: State<'_, AppState>) -> bool {
+    state.mobile_server.set_audio_enabled(enabled)
+}
+
+#[command]
 pub fn open_mobile_remote_url(state: State<'_, AppState>) {
     let ip = get_local_ip();
     let port = state.mobile_server.port();
-    let url = format!("http://{}:{}", ip, port);
+    let url = format!("https://{}:{}", ip, port);
     let _ = std::process::Command::new("cmd")
         .args(["/c", "start", &url])
         .spawn();
