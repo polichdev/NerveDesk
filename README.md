@@ -20,7 +20,7 @@
 
 NerveDesk is a lightweight, low-latency hybrid KVM (Keyboard, Video, Mouse) and virtual display streaming application for Windows, built with Rust and Tauri v2. It connects multiple computers over a local network into a unified workspace, enabling seamless cursor transitions across monitor boundaries, virtual secondary screen projection, audio streaming, clipboard synchronization, and directory replication.
 
-![NerveDesk Preview](docs/preview.jpg)
+![NerveDesk Preview](docs/preview.png)
 
 ### Performance Highlights
 
