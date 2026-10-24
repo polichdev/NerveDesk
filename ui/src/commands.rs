@@ -38,6 +38,9 @@ pub fn quit_app(app: tauri::AppHandle) {
 #[command]
 pub fn show_main_window(app: tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
+        if let Some(icon) = app.default_window_icon() {
+            let _ = window.set_icon(icon.clone());
+        }
         if window.is_minimized().unwrap_or(false) {
             let _ = window.unminimize();
         }

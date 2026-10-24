@@ -19,14 +19,17 @@ pub fn setup_tray(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = TrayIconBuilder::new()
         .tooltip("NerveDesk")
         .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click {
-                button: MouseButton::Left | MouseButton::Right,
-                button_state: MouseButtonState::Up,
-                ..
-            } = event
-            {
-                if let Some(panel) = tray.app_handle().get_webview_window("tray-panel") {
-                    toggle_panel(&panel);
+            if let TrayIconEvent::Click { button, button_state: MouseButtonState::Up, .. } = event {
+                match button {
+                    MouseButton::Left => {
+                        crate::commands::show_main_window(tray.app_handle().clone());
+                    }
+                    MouseButton::Right => {
+                        if let Some(panel) = tray.app_handle().get_webview_window("tray-panel") {
+                            toggle_panel(&panel);
+                        }
+                    }
+                    _ => {}
                 }
             }
         });

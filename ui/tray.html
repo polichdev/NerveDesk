@@ -43,7 +43,7 @@
       <button class="row" data-action="sync"><span class="label" id="syncLabel"></span><span class="switch"></span></button>
     </div>
     <div class="status" id="status"></div>
-    <div class="footer"><a id="openButton" role="button" tabindex="0"></a><a id="quitButton" role="button" tabindex="0"></a></div>
+    <div class="footer" style="justify-content:flex-end"><a id="quitButton" role="button" tabindex="0"></a></div>
   </div>
   <script>
     const invoke = window.__TAURI__.core.invoke;
@@ -57,14 +57,13 @@
     const labels = uk ? {
       online:'Підключено', offline:'Немає підключення', noPeer:'Комп’ютер не обрано',
       kvm:'Безмежна миша', mirror:'Дублювання екрана', audio:'Аудіоміст', sync:'Синхронізація папок',
-      mobile:'Мобільний пульт', open:'Відкрити', quit:'Вихід'
+      mobile:'Мобільний пульт', quit:'Вихід'
     } : {
       online:'Connected', offline:'Disconnected', noPeer:'No computer selected',
       kvm:'Borderless Mouse', mirror:'Screen mirroring', audio:'Audio Bridge', sync:'Folder sync',
-      mobile:'Mobile remote', open:'Open', quit:'Exit'
+      mobile:'Mobile remote', quit:'Exit'
     };
     for (const key of ['kvm','mirror','mobile','audio','sync']) document.getElementById(key+'Label').textContent = labels[key];
-    document.getElementById('openButton').textContent = labels.open;
     document.getElementById('quitButton').textContent = labels.quit;
     let busy = false;
     let metrics = null;
@@ -116,8 +115,6 @@
       busy = false;
     }
     document.querySelectorAll('[data-action]').forEach(button => button.addEventListener('click', () => toggle(button.dataset.action)));
-    document.getElementById('openButton').addEventListener('click', () => invoke('show_main_window'));
-    document.getElementById('openButton').addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.currentTarget.click(); } });
     document.getElementById('quitButton').addEventListener('click', () => invoke('quit_app'));
     document.getElementById('quitButton').addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.currentTarget.click(); } });
     refresh();

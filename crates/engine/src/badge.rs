@@ -9,7 +9,7 @@ use windows::Win32::Graphics::Gdi::{
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetCursorPos, GetMessageW,
     KillTimer, PostMessageW, PostThreadMessageW, RegisterClassW, SetLayeredWindowAttributes,
-    SetTimer, SetWindowPos, ShowWindow, TranslateMessage, CS_DROPSHADOW, HTTRANSPARENT,
+    SetTimer, SetWindowPos, ShowWindow, TranslateMessage, HTTRANSPARENT,
     HWND_TOPMOST, LWA_COLORKEY, MSG, SWP_NOACTIVATE,
     SWP_SHOWWINDOW, SW_HIDE, SW_SHOWNA, WM_APP, WM_ERASEBKGND, WM_NCHITTEST, WM_PAINT,
     WM_TIMER, WM_USER, WNDCLASSW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
@@ -31,27 +31,37 @@ pub struct DragBadge {
 
 impl DragBadge {
     pub fn new() -> Self {
-        let hwnd_val = Arc::new(Mutex::new(None));
-        let thread_id = Arc::new(Mutex::new(None));
-        let is_visible = Arc::new(AtomicBool::new(false));
+        Self {
+            hwnd_val: Arc::new(Mutex::new(None)),
+            thread_id: Arc::new(Mutex::new(None)),
+            is_visible: Arc::new(AtomicBool::new(false)),
+        }
+    }
 
-        let hwnd_holder = hwnd_val.clone();
-        let tid_holder = thread_id.clone();
-
-        std::thread::Builder::new()
+    fn ensure_thread(&self) {
+        if self.thread_id.lock().ok().and_then(|t| *t).is_some() {
+            return;
+        }
+        let hwnd_holder = self.hwnd_val.clone();
+        let tid_holder = self.thread_id.clone();
+        let (init_tx, init_rx) = std::sync::mpsc::channel();
+        let _ = std::thread::Builder::new()
             .name("nerve-drag-badge".into())
             .spawn(move || unsafe {
                 let tid = windows::Win32::System::Threading::GetCurrentThreadId();
                 if let Ok(mut guard) = tid_holder.lock() {
                     *guard = Some(tid);
                 }
-
+                let hinstance = HINSTANCE(
+                    windows::Win32::System::LibraryLoader::GetModuleHandleW(None)
+                        .unwrap_or_default()
+                        .0,
+                );
                 let class_name = windows::core::w!("NerveDeskDragBadgeClass");
                 let wnd_class = WNDCLASSW {
                     lpfnWndProc: Some(badge_wnd_proc),
-                    hInstance: HINSTANCE::default(),
+                    hInstance: hinstance,
                     lpszClassName: class_name,
-                    style: CS_DROPSHADOW,
                     ..Default::default()
                 };
                 let _ = RegisterClassW(&wnd_class);
@@ -67,17 +77,21 @@ impl DragBadge {
                     38,
                     HWND::default(),
                     None,
-                    HINSTANCE::default(),
+                    hinstance,
                     None,
                 ) {
                     Ok(h) => h,
-                    Err(_) => return,
+                    Err(_) => {
+                        let _ = init_tx.send(false);
+                        return;
+                    }
                 };
 
                 if let Ok(mut guard) = hwnd_holder.lock() {
                     *guard = Some(hwnd.0 as usize);
                 }
                 let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0x00FF00FF), 255, LWA_COLORKEY);
+                let _ = init_tx.send(true);
 
                 let mut msg = MSG::default();
                 while GetMessageW(&mut msg, HWND::default(), 0, 0).as_bool() {
@@ -121,17 +135,12 @@ impl DragBadge {
                 }
 
                 let _ = DestroyWindow(hwnd);
-            })
-            .expect("Failed to spawn drag badge thread");
-
-        Self {
-            hwnd_val,
-            thread_id,
-            is_visible,
-        }
+            });
+        let _ = init_rx.recv_timeout(std::time::Duration::from_millis(500));
     }
 
     pub fn show(&self, x: i32, y: i32, file_name: &str) {
+        self.ensure_thread();
         if let Ok(mut guard) = CURRENT_BADGE_TEXT.lock() {
             *guard = if file_name.is_empty() || file_name == "request" {
                 "File".to_string()
