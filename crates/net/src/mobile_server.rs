@@ -19,10 +19,20 @@ use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXSCREEN, SM_
 
 pub struct MobileServer {
     is_running: Arc<AtomicBool>,
+    audio_enabled: Arc<AtomicBool>,
+    audio_stream_in_use: Arc<AtomicBool>,
     port: u16,
     pin: Arc<Mutex<String>>,
     tokens: Arc<Mutex<HashMap<String, Instant>>>,
     pin_attempts: Arc<Mutex<HashMap<std::net::IpAddr, (u8, Instant)>>>,
+}
+
+struct AudioStreamLease(Arc<AtomicBool>);
+
+impl Drop for AudioStreamLease {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -177,6 +187,8 @@ impl MobileServer {
     pub fn new(port: u16) -> Self {
         Self {
             is_running: Arc::new(AtomicBool::new(false)),
+            audio_enabled: Arc::new(AtomicBool::new(false)),
+            audio_stream_in_use: Arc::new(AtomicBool::new(false)),
             port,
             pin: Arc::new(Mutex::new(generate_random_pin())),
             tokens: Arc::new(Mutex::new(HashMap::new())),
@@ -202,6 +214,8 @@ impl MobileServer {
         }
 
         let is_running = self.is_running.clone();
+        let audio_enabled = self.audio_enabled.clone();
+        let audio_stream_in_use = self.audio_stream_in_use.clone();
         let port = self.port;
         let pin = self.pin.clone();
         let tokens = self.tokens.clone();
@@ -259,6 +273,8 @@ impl MobileServer {
                         Ok(Ok((socket, peer))) => {
                             let emulator = emulator.clone();
                             let running_flag = is_running.clone();
+                            let audio_flag = audio_enabled.clone();
+                            let audio_stream_flag = audio_stream_in_use.clone();
                             let pin_ref = pin.clone();
                             let tokens_ref = tokens.clone();
                             let attempts_ref = pin_attempts.clone();
@@ -277,6 +293,8 @@ impl MobileServer {
                                     peer.ip(),
                                     emulator,
                                     running_flag,
+                                    audio_flag,
+                                    audio_stream_flag,
                                     pin_ref,
                                     tokens_ref,
                                     attempts_ref,
@@ -296,7 +314,14 @@ impl MobileServer {
 
     pub fn stop(&self) {
         self.is_running.store(false, Ordering::SeqCst);
+        self.audio_enabled.store(false, Ordering::SeqCst);
         self.tokens.lock().unwrap().clear();
+    }
+
+    pub fn set_audio_enabled(&self, enabled: bool) -> bool {
+        let active = enabled && self.is_active();
+        self.audio_enabled.store(active, Ordering::SeqCst);
+        active
     }
 
     pub fn is_active(&self) -> bool {
@@ -372,6 +397,8 @@ async fn handle_http_client<S: AsyncRead + AsyncWrite + Unpin>(
     peer_ip: std::net::IpAddr,
     emulator: Arc<InputEmulator>,
     running: Arc<AtomicBool>,
+    audio_enabled: Arc<AtomicBool>,
+    audio_stream_in_use: Arc<AtomicBool>,
     pin: Arc<Mutex<String>>,
     tokens: Arc<Mutex<HashMap<String, Instant>>>,
     pin_attempts: Arc<Mutex<HashMap<std::net::IpAddr, (u8, Instant)>>>,
@@ -564,6 +591,92 @@ async fn handle_http_client<S: AsyncRead + AsyncWrite + Unpin>(
                 }
                 tokio::time::sleep(Duration::from_millis(45)).await;
             }
+            return Ok(());
+        }
+
+        if method == "GET" && path == "/audio.pcm" {
+            if !is_authorized(&request_token) {
+                let _ = stream.write_all(b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 12\r\nConnection: close\r\n\r\nUnauthorized").await;
+                return Ok(());
+            }
+            if !audio_enabled.load(Ordering::SeqCst) {
+                stream
+                    .write_all(
+                        b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                    )
+                    .await?;
+                return Ok(());
+            }
+            if audio_stream_in_use
+                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                .is_err()
+            {
+                stream
+                    .write_all(
+                        b"HTTP/1.1 409 Conflict\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                    )
+                    .await?;
+                return Ok(());
+            }
+            let _lease = AudioStreamLease(audio_stream_in_use.clone());
+            let (sender, mut receiver) = tokio::sync::mpsc::channel::<Vec<u8>>(8);
+            let capture_running = running.clone();
+            let capture_enabled = audio_enabled.clone();
+            tokio::task::spawn_blocking(move || {
+                if let Err(e) =
+                    crate::audio::capture_for_mobile(sender, capture_running, capture_enabled)
+                {
+                    tracing::warn!("Mobile audio capture stopped: {e}");
+                }
+            });
+            let Some(format_header) =
+                tokio::time::timeout(Duration::from_secs(10), receiver.recv())
+                    .await
+                    .ok()
+                    .flatten()
+            else {
+                let _ = stream.write_all(b"HTTP/1.1 500 Internal Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await;
+                return Ok(());
+            };
+            let header = b"HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nCache-Control: no-store\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n";
+            tokio::time::timeout(Duration::from_secs(5), stream.write_all(header)).await??;
+            let mut first_packet = Some(format_header);
+            while running.load(Ordering::SeqCst)
+                && audio_enabled.load(Ordering::SeqCst)
+                && is_authorized(&request_token)
+            {
+                let Some(packet) = (if let Some(header) = first_packet.take() {
+                    Some(header)
+                } else {
+                    let mut closed = [0u8; 1];
+                    tokio::select! {
+                        packet = receiver.recv() => packet,
+                        read = stream.read(&mut closed) => {
+                            if read.is_err() || read.ok() == Some(0) { break; }
+                            continue;
+                        }
+                        _ = tokio::time::sleep(Duration::from_secs(1)) => continue,
+                    }
+                }) else {
+                    break;
+                };
+                let size = (packet.len() as u32).to_le_bytes();
+                let chunk = [size.as_slice(), packet.as_slice()].concat();
+                let write = async {
+                    stream
+                        .write_all(format!("{:X}\r\n", chunk.len()).as_bytes())
+                        .await?;
+                    stream.write_all(&chunk).await?;
+                    stream.write_all(b"\r\n").await
+                };
+                if !matches!(
+                    tokio::time::timeout(Duration::from_secs(5), write).await,
+                    Ok(Ok(()))
+                ) {
+                    break;
+                }
+            }
+            let _ = stream.write_all(b"0\r\n\r\n").await;
             return Ok(());
         }
 

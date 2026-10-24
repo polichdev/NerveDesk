@@ -362,6 +362,101 @@ fn audio_client() -> Result<IAudioClient, String> {
     }
 }
 
+pub(crate) fn capture_for_mobile(
+    sender: tokio::sync::mpsc::Sender<Vec<u8>>,
+    running: Arc<AtomicBool>,
+    audio_enabled: Arc<AtomicBool>,
+) -> Result<(), String> {
+    if !audio_enabled.load(Ordering::SeqCst) {
+        return Err("Mobile audio is disabled".into());
+    }
+    let _com = ComApartment::init()?;
+    let client = audio_client()?;
+    unsafe {
+        let format = client.GetMixFormat().map_err(|e| e.to_string())?;
+        let wave = &*format;
+        let tag = if wave.wFormatTag == 0xfffe && wave.cbSize >= 22 {
+            std::ptr::read_unaligned(format.cast::<u8>().add(24).cast::<u16>())
+        } else {
+            wave.wFormatTag
+        };
+        let supported = matches!(
+            (tag, wave.wBitsPerSample),
+            (3, 32) | (1, 16) | (1, 24) | (1, 32)
+        );
+        let expected_align = wave.nChannels as usize * (wave.wBitsPerSample as usize / 8);
+        let sample_rate = wave.nSamplesPerSec;
+        if !supported
+            || wave.nChannels == 0
+            || wave.nChannels > 8
+            || !(8_000..=384_000).contains(&sample_rate)
+            || wave.nBlockAlign as usize != expected_align
+        {
+            CoTaskMemFree(Some(format.cast()));
+            return Err("Unsupported Windows audio output format".into());
+        }
+        let mut header = Vec::with_capacity(16);
+        header.extend_from_slice(b"NDA3");
+        header.extend_from_slice(&wave.nSamplesPerSec.to_le_bytes());
+        header.extend_from_slice(&wave.nChannels.to_le_bytes());
+        header.extend_from_slice(&wave.wBitsPerSample.to_le_bytes());
+        header.extend_from_slice(&tag.to_le_bytes());
+        header.extend_from_slice(&wave.nBlockAlign.to_le_bytes());
+        let block_align = wave.nBlockAlign as usize;
+        let init = client.Initialize(
+            AUDCLNT_SHAREMODE_SHARED,
+            AUDCLNT_STREAMFLAGS_LOOPBACK,
+            1_000_000,
+            0,
+            format,
+            None,
+        );
+        CoTaskMemFree(Some(format.cast()));
+        init.map_err(|e| format!("WASAPI loopback: {e}"))?;
+        sender
+            .blocking_send(header)
+            .map_err(|_| "Mobile listener closed".to_string())?;
+        let capture: IAudioCaptureClient = client.GetService().map_err(|e| e.to_string())?;
+        client.Start().map_err(|e| e.to_string())?;
+        let result = (|| {
+            while running.load(Ordering::SeqCst)
+                && audio_enabled.load(Ordering::SeqCst)
+                && !sender.is_closed()
+            {
+                let count = capture.GetNextPacketSize().map_err(|e| e.to_string())?;
+                if count == 0 {
+                    thread::sleep(Duration::from_millis(5));
+                    continue;
+                }
+                let mut data = std::ptr::null_mut();
+                let mut frames = 0;
+                let mut flags = 0;
+                capture
+                    .GetBuffer(&mut data, &mut frames, &mut flags, None, None)
+                    .map_err(|e| e.to_string())?;
+                let bytes = (frames as usize).checked_mul(block_align);
+                if bytes.is_none_or(|bytes| bytes > MAX_PACKET_BYTES) {
+                    let _ = capture.ReleaseBuffer(frames);
+                    return Err("Audio packet is too large".into());
+                }
+                let bytes = bytes.unwrap();
+                let packet = if flags & AUDCLNT_BUFFERFLAGS_SILENT.0 as u32 != 0 {
+                    vec![0; bytes]
+                } else {
+                    std::slice::from_raw_parts(data, bytes).to_vec()
+                };
+                capture.ReleaseBuffer(frames).map_err(|e| e.to_string())?;
+                if sender.blocking_send(packet).is_err() {
+                    break;
+                }
+            }
+            Ok(())
+        })();
+        let _ = client.Stop();
+        result
+    }
+}
+
 struct SourceMute {
     volume: IAudioEndpointVolume,
     restore: bool,
