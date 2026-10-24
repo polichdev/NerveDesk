@@ -1,3 +1,4 @@
+pub mod av1;
 pub mod chunker;
 pub mod decoder;
 pub mod encoder;

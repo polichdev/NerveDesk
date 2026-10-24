@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use capture::{CaptureApartment, DxgiCaptureConfig, DxgiOutputDuplicator, WindowCapture};
-use codec::h264;
+use codec::{av1, h264};
 use net::{encode_mirror_bgra, MirrorCodec as Codec, MirrorSender};
 use tracing::{error, warn};
 
@@ -106,6 +106,8 @@ pub async fn start(
         };
 
         let emulator = input::InputEmulator::new();
+        let mut av1_encoder: Option<av1::Encoder> = None;
+        let mut av1_encoder_size = (0, 0);
         let mut encoder: Option<h264::Encoder> = None;
         let mut encoder_size = (0, 0);
 
@@ -132,7 +134,14 @@ pub async fn start(
                 }
                 Err(e) => {
                     warn!("Mirror stream broken: {e}");
-                    if sender.codec == Codec::H264 && sender.fallback_to_jpeg(target).is_ok() {
+                    if sender.codec == Codec::Av1 {
+                        if sender.fallback_to_h264(target).is_ok() || sender.fallback_to_jpeg(target).is_ok() {
+                            av1_encoder = None;
+                            encoder = None;
+                            receiver_ready = true;
+                            continue;
+                        }
+                    } else if sender.codec == Codec::H264 && sender.fallback_to_jpeg(target).is_ok() {
                         encoder = None;
                         receiver_ready = true;
                         continue;
@@ -158,6 +167,21 @@ pub async fn start(
 
             if receiver_ready {
                 if let Some((w, h, ox, oy, ref bgra)) = last_frame {
+                    if sender.codec == Codec::Av1 && av1_encoder_size != (w, h) {
+                        match av1::Encoder::new(w, h) {
+                            Ok(new_encoder) => {
+                                av1_encoder = Some(new_encoder);
+                                av1_encoder_size = (w, h);
+                            }
+                            Err(e) => {
+                                warn!("AV1 encoder unavailable, switching to H.264/JPEG: {e}");
+                                if sender.fallback_to_h264(target).is_err() && sender.fallback_to_jpeg(target).is_err() {
+                                    break;
+                                }
+                                av1_encoder = None;
+                            }
+                        }
+                    }
                     if sender.codec == Codec::H264 && encoder_size != (w, h) {
                         match h264::Encoder::new(w, h) {
                             Ok(new_encoder) => {
@@ -174,13 +198,28 @@ pub async fn start(
                             }
                         }
                     }
-                    let encoded = if sender.codec == Codec::H264 {
+                    let encoded = if sender.codec == Codec::Av1 {
+                        if let Some(ref mut enc) = av1_encoder {
+                            enc.encode(bgra)
+                        } else {
+                            Err("AV1 encoder not initialized".into())
+                        }
+                    } else if sender.codec == Codec::H264 {
                         encoder.as_mut().unwrap().encode(bgra)
                     } else {
                         encode_mirror_bgra(w, h, bgra)
                     };
                     let encoded = match encoded {
                         Ok(bytes) => bytes,
+                        Err(e) if sender.codec == Codec::Av1 => {
+                            warn!("AV1 encoding failed, switching to H.264/JPEG: {e}");
+                            if sender.fallback_to_h264(target).is_err() && sender.fallback_to_jpeg(target).is_err() {
+                                error!("Fallback from AV1 failed: {e}");
+                                break;
+                            }
+                            av1_encoder = None;
+                            continue;
+                        }
                         Err(e) if sender.codec == Codec::H264 => {
                             warn!("H.264 encoding failed, switching to JPEG: {e}");
                             if let Err(e) = sender.fallback_to_jpeg(target) {
@@ -213,7 +252,14 @@ pub async fn start(
                         }
                         Err(e) => {
                             error!("Mirror send failed: {e}");
-                            if sender.codec == Codec::H264
+                            if sender.codec == Codec::Av1
+                                && (sender.fallback_to_h264(target).is_ok()
+                                    || sender.fallback_to_jpeg(target).is_ok())
+                            {
+                                av1_encoder = None;
+                                receiver_ready = true;
+                                continue;
+                            } else if sender.codec == Codec::H264
                                 && sender.fallback_to_jpeg(target).is_ok()
                             {
                                 encoder = None;

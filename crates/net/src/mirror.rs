@@ -4,6 +4,7 @@ use tokio::net::{TcpListener, TcpStream};
 
 const JPEG_MAGIC: [u8; 4] = *b"NDM2";
 const H264_MAGIC: [u8; 4] = *b"NDH1";
+const AV1_MAGIC: [u8; 4] = *b"NDAV";
 const MAX_FRAME_BYTES: usize = 16 * 1024 * 1024;
 const HEADER_LEN: usize = 20;
 
@@ -11,6 +12,7 @@ const HEADER_LEN: usize = 20;
 pub enum Codec {
     Jpeg,
     H264,
+    Av1,
 }
 
 impl Codec {
@@ -18,12 +20,14 @@ impl Codec {
         match self {
             Self::Jpeg => 48104,
             Self::H264 => 48105,
+            Self::Av1 => 48111,
         }
     }
     fn magic(self) -> [u8; 4] {
         match self {
             Self::Jpeg => JPEG_MAGIC,
             Self::H264 => H264_MAGIC,
+            Self::Av1 => AV1_MAGIC,
         }
     }
 }
@@ -41,6 +45,26 @@ impl MirrorSender {
     pub async fn connect(target: SocketAddr, security_key: String) -> Result<Self, String> {
         if !(16..=256).contains(&security_key.len()) {
             return Err("Pairing key is required for screen streaming".into());
+        }
+        let av1_target = SocketAddr::new(target.ip(), Codec::Av1.port());
+        if let Ok(Ok(mut stream)) = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            TcpStream::connect(av1_target),
+        )
+        .await
+        {
+            let mut ready = [0u8; 1];
+            if matches!(
+                tokio::time::timeout(
+                    std::time::Duration::from_secs(2),
+                    tokio::io::AsyncReadExt::read_exact(&mut stream, &mut ready)
+                )
+                .await,
+                Ok(Ok(_))
+            ) && ready[0] == 0x41
+            {
+                return Self::configure(stream, Codec::Av1, security_key);
+            }
         }
         let h264_target = SocketAddr::new(target.ip(), Codec::H264.port());
         if let Ok(Ok(mut stream)) = tokio::time::timeout(
@@ -92,6 +116,34 @@ impl MirrorSender {
             inbound: Vec::new(),
             feedback_replay: crate::secure_input::ReplayGuard::new(),
         })
+    }
+
+    pub fn fallback_to_h264(&mut self, target: SocketAddr) -> Result<(), String> {
+        let h264_target = SocketAddr::new(target.ip(), Codec::H264.port());
+        let mut stream =
+            std::net::TcpStream::connect_timeout(&h264_target, std::time::Duration::from_secs(2))
+                .map_err(|e| e.to_string())?;
+        stream.set_nodelay(true).map_err(|e| e.to_string())?;
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+            .map_err(|e| e.to_string())?;
+        let mut ready = [0u8; 1];
+        stream.read_exact(&mut ready).map_err(|e| e.to_string())?;
+        if ready[0] != 0x48 {
+            return Err("Invalid H.264 ready handshake".into());
+        }
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_millis(1)))
+            .map_err(|e| e.to_string())?;
+        stream
+            .set_write_timeout(Some(std::time::Duration::from_secs(3)))
+            .map_err(|e| e.to_string())?;
+        self.stream = stream;
+        self.codec = Codec::H264;
+        self.next_id = 1;
+        self.inbound.clear();
+        self.feedback_replay = crate::secure_input::ReplayGuard::new();
+        Ok(())
     }
 
     pub fn fallback_to_jpeg(&mut self, target: SocketAddr) -> Result<(), String> {

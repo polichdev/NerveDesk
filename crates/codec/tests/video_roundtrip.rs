@@ -33,3 +33,28 @@ fn bgra_frame_survives_transport_packetization() {
     assert_eq!((decoded.width, decoded.height), (width, height));
     assert_eq!(decoded.bgra, pixels);
 }
+
+#[test]
+fn av1_roundtrip_encodes_and_decodes_frames() {
+    let width = 64;
+    let height = 32;
+    let pixels: Vec<u8> = (0..width * height * 4)
+        .map(|index| ((index * 37) % 251) as u8)
+        .collect();
+    let mut encoder = codec::av1::Encoder::new(width, height).unwrap();
+    let mut decoder = codec::av1::Decoder::new(width, height).unwrap();
+
+    let frame1 = encoder.encode(&pixels).unwrap();
+    assert!(!frame1.is_empty());
+    let decoded1 = decoder.decode(&frame1).unwrap();
+    assert!(decoded1.is_some());
+    let bgra1 = decoded1.unwrap();
+    assert_eq!(bgra1.len(), (width * height * 4) as usize);
+
+    let frame2 = encoder.encode(&pixels).unwrap();
+    assert!(!frame2.is_empty());
+    let decoded2 = decoder.decode(&frame2).unwrap();
+    assert!(decoded2.is_some());
+    let bgra2 = decoded2.unwrap();
+    assert_eq!(bgra2.len(), (width * height * 4) as usize);
+}

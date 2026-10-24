@@ -693,7 +693,7 @@ fn spawn_video_receiver(state: &AppState) {
 
 fn spawn_mirror_receiver(state: &AppState) {
     let mirror_session = Arc::new(tokio::sync::Mutex::new(()));
-    for codec in [MirrorCodec::Jpeg, MirrorCodec::H264] {
+    for codec in [MirrorCodec::Av1, MirrorCodec::H264, MirrorCodec::Jpeg] {
         let paired_ip = state.paired_peer_ip.clone();
         let paired_key = state.paired_security_key.clone();
         let viewer_for_mirror = state.projection_viewer.clone();
@@ -727,7 +727,55 @@ fn spawn_mirror_receiver(state: &AppState) {
                 let (mut read_half, mut write_half) = stream.into_split();
                 let (input_tx, mut input_rx) = tokio::sync::mpsc::unbounded_channel::<Vec<u8>>();
 
-                let decode_worker = if codec == MirrorCodec::H264 {
+                let decode_worker = if codec == MirrorCodec::Av1 {
+                    let (frame_tx, mut frame_rx) =
+                        tokio::sync::mpsc::channel::<(u32, u32, i16, i16, Vec<u8>)>(2);
+                    let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
+                    let viewer = viewer_for_mirror.clone();
+                    let worker = tokio::task::spawn_blocking(move || {
+                        let apartment = match codec::av1::Apartment::new() {
+                            Ok(apartment) => apartment,
+                            Err(e) => {
+                                let _ = ready_tx.send(Err(e));
+                                return;
+                            }
+                        };
+                        let _apartment = apartment;
+                        if let Err(e) = codec::av1::Decoder::new(64, 64) {
+                            let _ = ready_tx.send(Err(e));
+                            return;
+                        }
+                        let _ = ready_tx.send(Ok(()));
+                        let mut decoder = None;
+                        let mut size = (0, 0);
+                        while let Some((width, height, ox, oy, bytes)) = frame_rx.blocking_recv() {
+                            if size != (width, height) {
+                                match codec::av1::Decoder::new(width, height) {
+                                    Ok(new_decoder) => {
+                                        decoder = Some(new_decoder);
+                                        size = (width, height);
+                                    }
+                                    Err(e) => {
+                                        warn!("AV1 decoder initialization failed: {e}");
+                                        break;
+                                    }
+                                }
+                            }
+                            match decoder.as_mut().unwrap().decode(&bytes) {
+                                Ok(Some(bgra)) => viewer.present_frame(width, height, ox, oy, bgra),
+                                Ok(None) => {}
+                                Err(e) => {
+                                    warn!("AV1 decode failed: {e}");
+                                    break;
+                                }
+                            }
+                        }
+                    });
+                    if !matches!(ready_rx.await, Ok(Ok(()))) {
+                        continue;
+                    }
+                    Some((frame_tx, worker))
+                } else if codec == MirrorCodec::H264 {
                     let (frame_tx, mut frame_rx) =
                         tokio::sync::mpsc::channel::<(u32, u32, i16, i16, Vec<u8>)>(2);
                     let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
@@ -779,7 +827,12 @@ fn spawn_mirror_receiver(state: &AppState) {
                     None
                 };
 
-                if codec == MirrorCodec::H264 {
+                if codec == MirrorCodec::Av1 {
+                    use tokio::io::AsyncWriteExt;
+                    if write_half.write_all(&[0x41]).await.is_err() {
+                        continue;
+                    }
+                } else if codec == MirrorCodec::H264 {
                     use tokio::io::AsyncWriteExt;
                     if write_half.write_all(&[0x48]).await.is_err() {
                         continue;
