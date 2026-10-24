@@ -38,9 +38,13 @@ pub fn quit_app(app: tauri::AppHandle) {
 #[command]
 pub fn show_main_window(app: tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
+        if window.is_minimized().unwrap_or(false) {
+            let _ = window.unminimize();
+        }
         let _ = window.show();
-        let _ = window.unminimize();
         let _ = window.set_focus();
+        #[cfg(target_os = "windows")]
+        crate::window::apply_windows_dark_theme_webview(&window);
     }
     if let Some(panel) = app.get_webview_window("tray-panel") {
         let _ = panel.hide();

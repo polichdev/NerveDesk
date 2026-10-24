@@ -1253,7 +1253,9 @@
             </div>
           </div>
           <div class="setting-right">
-            <select id="mirrorTargetSelect" class="select-input" onchange="saveMirrorTarget()"></select>
+            <select id="mirrorTargetSelect" class="select-input" onchange="saveMirrorTarget()">
+              <option value="" data-i18n="mirror_no_target">Обрати комп’ютер</option>
+            </select>
             <button class="btn btn-secondary" onclick="refreshMirrorTargets()" data-i18n="mirror_refresh">Оновити</button>
           </div>
         </div>
@@ -1266,7 +1268,9 @@
             </div>
           </div>
           <div class="setting-right">
-            <select id="mirrorSourceSelect" class="select-input" onchange="updateMirrorSourceTitle(this)"></select>
+            <select id="mirrorSourceSelect" class="select-input" onchange="updateMirrorSourceTitle(this)">
+              <option value="" data-i18n="mirror_entire_screen">Весь екран</option>
+            </select>
             <button class="btn btn-secondary" onclick="refreshCaptureWindows()" data-i18n="mirror_refresh">Оновити</button>
           </div>
         </div>
@@ -1324,7 +1328,9 @@
             <div class="setting-desc" data-i18n="audio_target_desc">Увімкніть аудіоміст на обох ПК і виберіть пристрій.</div>
           </div></div>
           <div class="setting-right">
-            <select id="audioTargetSelect" class="select-input" onchange="localStorage.setItem('audio_target_ip', this.value)"></select>
+            <select id="audioTargetSelect" class="select-input" onchange="localStorage.setItem('audio_target_ip', this.value)">
+              <option value="" data-i18n="audio_no_target">Обрати комп’ютер</option>
+            </select>
             <button class="btn btn-secondary" onclick="refreshAudioTargets()" data-i18n="mirror_refresh">Оновити</button>
           </div>
         </div>
@@ -1355,7 +1361,9 @@
             <div class="setting-desc" data-i18n="phone_audio_desc">Спаріть Android або iPhone з Windows і виберіть телефон зі списку.</div>
           </div></div>
           <div class="setting-right">
-            <select id="phoneAudioDeviceSelect" class="select-input" aria-label="Телефон" data-i18n-aria-label="phone_audio_device"></select>
+            <select id="phoneAudioDeviceSelect" class="select-input" aria-label="Телефон" data-i18n-aria-label="phone_audio_device">
+              <option value="" data-i18n="phone_audio_select">Оберіть телефон зі списку</option>
+            </select>
             <button class="btn btn-secondary" onclick="openPhoneBluetoothSettings()" data-i18n="phone_audio_pair">Спарити телефон</button>
             <button class="btn btn-secondary" onclick="refreshPhoneAudioDevices()" data-i18n="mirror_refresh">Оновити</button>
           </div>
@@ -1403,7 +1411,9 @@
         <div class="setting-card sync-connection-card">
           <div class="setting-desc" data-i18n="sync_setup_hint" style="margin-bottom: 14px;">Після підключення нові файли передаватимуться автоматично. Для синхронізації наявних файлів натисніть «Синхронізувати».</div>
           <div class="sync-form-grid">
-            <label><span data-i18n="sync_peer_label">Інший комп’ютер</span><select id="syncPeerSelect" class="select-input"></select></label>
+            <label><span data-i18n="sync_peer_label">Інший комп’ютер</span><select id="syncPeerSelect" class="select-input">
+              <option value="" data-i18n="sync_peer_select">Обрати комп’ютер</option>
+            </select></label>
             <label><span data-i18n="sync_folder_label">Папка на цьому ПК</span><span class="sync-inline"><input id="syncFolderPath" class="code-input" type="text" readonly><button class="btn btn-secondary" onclick="pickSyncFolder()" data-i18n="sync_browse">Огляд</button></span></label>
           </div>
           <div class="sync-actions"><button class="btn btn-secondary" onclick="refreshSyncPeers()" data-i18n="mirror_refresh">Оновити</button><button class="btn" id="syncAddButton" onclick="addSyncPair()" data-i18n="sync_add">Підключити папку</button></div>
@@ -2294,7 +2304,7 @@
         el.setAttribute('aria-label', t(key));
       });
 
-      for (const [id, key] of [['mirrorTargetSelect', 'mirror_no_target'], ['audioTargetSelect', 'audio_no_target'], ['syncPeerSelect', 'sync_peer_select']]) {
+      for (const [id, key] of [['mirrorTargetSelect', 'mirror_no_target'], ['mirrorSourceSelect', 'mirror_entire_screen'], ['audioTargetSelect', 'audio_no_target'], ['phoneAudioDeviceSelect', 'phone_audio_select'], ['syncPeerSelect', 'sync_peer_select']]) {
         const placeholder = document.getElementById(id)?.querySelector('option[value=""]');
         if (placeholder) placeholder.textContent = t(key);
       }

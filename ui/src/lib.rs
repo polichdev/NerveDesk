@@ -80,6 +80,10 @@ pub fn run() {
                 api.prevent_close();
                 let _ = window.hide();
             }
+            #[cfg(target_os = "windows")]
+            if window.label() == "main" && matches!(event, tauri::WindowEvent::Focused(true)) {
+                window::apply_windows_dark_theme_window(window);
+            }
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_device_name,
