@@ -29,11 +29,34 @@ static CAPTURE_ACTIVE: AtomicBool = AtomicBool::new(false);
 static PEER_AVAILABLE: AtomicBool = AtomicBool::new(true);
 static KEYBOARD_SHARING_ENABLED: AtomicBool = AtomicBool::new(true);
 static LBUTTON_DOWN: AtomicBool = AtomicBool::new(false);
+static WAS_DRAGGING_BACK: AtomicBool = AtomicBool::new(false);
+static HOST_DRAGGING_OUT: AtomicBool = AtomicBool::new(false);
+static CANCEL_LOCAL_DRAG: AtomicBool = AtomicBool::new(false);
 static DRAG_SOURCE_WINDOW: AtomicIsize = AtomicIsize::new(0);
+type DragResolver = Box<dyn Fn(isize) -> (String, Vec<std::path::PathBuf>) + Send + Sync>;
+static DRAG_RESOLVER: Mutex<Option<DragResolver>> = Mutex::new(None);
+static CACHED_DRAG_FILES: Mutex<Vec<std::path::PathBuf>> = Mutex::new(Vec::new());
 static LAST_CURSOR_POS: Mutex<Option<POINT>> = Mutex::new(None);
 static EDGE_DETECTOR: Mutex<Option<EdgeDetector>> = Mutex::new(None);
 static CENTER_PT: Mutex<POINT> = Mutex::new(POINT { x: 960, y: 540 });
 static SAVED_EDGE_CONFIG: Mutex<Option<EdgeConfig>> = Mutex::new(None);
+
+pub fn set_drag_resolver<F>(f: F)
+where
+    F: Fn(isize) -> (String, Vec<std::path::PathBuf>) + Send + Sync + 'static,
+{
+    if let Ok(mut guard) = DRAG_RESOLVER.lock() {
+        *guard = Some(Box::new(f));
+    }
+}
+
+pub fn take_cached_drag_files() -> Vec<std::path::PathBuf> {
+    if let Ok(mut guard) = CACHED_DRAG_FILES.lock() {
+        guard.drain(..).collect()
+    } else {
+        Vec::new()
+    }
+}
 
 pub fn set_keyboard_sharing(enabled: bool) {
     KEYBOARD_SHARING_ENABLED.store(enabled, Ordering::SeqCst);
@@ -63,6 +86,9 @@ pub fn set_peer_available(available: bool) {
             CAPTURE_ACTIVE.swap(false, Ordering::SeqCst)
         };
         if was_capturing {
+            unsafe {
+                set_system_cursor_hidden(false);
+            }
             let return_pos = LAST_CURSOR_POS.lock().ok().and_then(|last| *last);
             if let Some(pt) = return_pos {
                 unsafe {
@@ -82,6 +108,9 @@ pub fn disable_edge_detection() {
         *guard = None;
     }
     if CAPTURE_ACTIVE.swap(false, Ordering::SeqCst) {
+        unsafe {
+            set_system_cursor_hidden(false);
+        }
         if let Ok(mut guard) = LAST_CURSOR_POS.lock() {
             *guard = None;
         }
@@ -198,13 +227,39 @@ unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: LPAR
 
         if msg == WM_LBUTTONDOWN {
             LBUTTON_DOWN.store(true, Ordering::SeqCst);
-            let source = windows::Win32::UI::WindowsAndMessaging::GetAncestor(
-                windows::Win32::UI::WindowsAndMessaging::WindowFromPoint(hook_struct.pt),
+            let hwnd = windows::Win32::UI::WindowsAndMessaging::WindowFromPoint(hook_struct.pt);
+            let root = windows::Win32::UI::WindowsAndMessaging::GetAncestor(
+                hwnd,
                 windows::Win32::UI::WindowsAndMessaging::GA_ROOT,
             );
+            let source = if root.is_invalid() || root.0 as usize == 0 {
+                hwnd
+            } else {
+                root
+            };
             DRAG_SOURCE_WINDOW.store(source.0 as isize, Ordering::SeqCst);
         } else if msg == WM_LBUTTONUP {
             LBUTTON_DOWN.store(false, Ordering::SeqCst);
+            let was_dragging_out = HOST_DRAGGING_OUT.swap(false, Ordering::SeqCst);
+            if was_dragging_out {
+                unsafe {
+                    use windows::Win32::UI::Input::KeyboardAndMouse::{
+                        keybd_event, KEYEVENTF_KEYUP, VK_ESCAPE,
+                    };
+                    keybd_event(VK_ESCAPE.0 as u8, 0, Default::default(), 0);
+                    keybd_event(VK_ESCAPE.0 as u8, 0, KEYEVENTF_KEYUP, 0);
+                }
+            }
+            if WAS_DRAGGING_BACK.swap(false, Ordering::SeqCst) {
+                if let Ok(sender_guard) = HOOK_SENDER.lock() {
+                    if let Some(ref sender) = *sender_guard {
+                        let _ = sender.try_send(InputEvent::FileDrag {
+                            active: false,
+                            file_name: "commit".into(),
+                        });
+                    }
+                }
+            }
         }
 
         let mut event_to_send = None;
@@ -239,18 +294,44 @@ unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: LPAR
                 if let Some(TransitionResult::ReturnedToHost { return_x, return_y }) = transition {
                     CAPTURE_ACTIVE.store(false, Ordering::SeqCst);
                     let _ = SetCursorPos(return_x, return_y);
+                    unsafe {
+                        set_system_cursor_hidden(false);
+                    }
                     if let Ok(mut guard) = LAST_CURSOR_POS.lock() {
                         *guard = Some(POINT {
                             x: return_x,
                             y: return_y,
                         });
                     }
-                    if let Ok(sender_guard) = HOOK_SENDER.lock() {
-                        if let Some(ref sender) = *sender_guard {
-                            let _ = sender.try_send(InputEvent::FileDrag {
-                                active: false,
-                                file_name: "cancel".into(),
-                            });
+                    let was_dragging_out = HOST_DRAGGING_OUT.swap(false, Ordering::SeqCst);
+                    let was_dragging = LBUTTON_DOWN.load(Ordering::SeqCst);
+                    if was_dragging_out {
+                        if let Ok(sender_guard) = HOOK_SENDER.lock() {
+                            if let Some(ref sender) = *sender_guard {
+                                let _ = sender.try_send(InputEvent::FileDrag {
+                                    active: false,
+                                    file_name: "cancel".into(),
+                                });
+                            }
+                        }
+                    } else if was_dragging {
+                        WAS_DRAGGING_BACK.store(true, Ordering::SeqCst);
+                        if let Ok(sender_guard) = HOOK_SENDER.lock() {
+                            if let Some(ref sender) = *sender_guard {
+                                let _ = sender.try_send(InputEvent::FileDrag {
+                                    active: true,
+                                    file_name: "request".into(),
+                                });
+                            }
+                        }
+                    } else {
+                        if let Ok(sender_guard) = HOOK_SENDER.lock() {
+                            if let Some(ref sender) = *sender_guard {
+                                let _ = sender.try_send(InputEvent::FileDrag {
+                                    active: false,
+                                    file_name: "cancel".into(),
+                                });
+                            }
                         }
                     }
                 } else if dx != 0 || dy != 0 {
@@ -298,21 +379,54 @@ unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: LPAR
                         return CallNextHookEx(HHOOK::default(), n_code, w_param, l_param);
                     }
                     let was_dragging = LBUTTON_DOWN.load(Ordering::SeqCst);
-                    let _ = SetCursorPos(center.x, center.y);
+                    HOST_DRAGGING_OUT.store(was_dragging, Ordering::SeqCst);
                     if was_dragging {
+                        let mut resolved_name = String::new();
+                        let source = DRAG_SOURCE_WINDOW.swap(0, Ordering::SeqCst);
+                        if let Ok(guard) = DRAG_RESOLVER.lock() {
+                            if let Some(ref resolver) = *guard {
+                                let (name, files) = resolver(source);
+                                resolved_name = name;
+                                if let Ok(mut cache) = CACHED_DRAG_FILES.lock() {
+                                    *cache = files;
+                                }
+                            }
+                        }
+                        unsafe {
+                            use windows::Win32::UI::Input::KeyboardAndMouse::{
+                                keybd_event, mouse_event, ReleaseCapture, KEYEVENTF_KEYUP,
+                                MOUSEEVENTF_MOVE, VK_ESCAPE,
+                            };
+                            use windows::Win32::UI::WindowsAndMessaging::{
+                                GetForegroundWindow, SendMessageW, WM_CANCELMODE,
+                            };
+                            let _ = ReleaseCapture();
+                            let fg = GetForegroundWindow();
+                            if !fg.is_invalid() && fg.0 as usize != 0 {
+                                let _ = SendMessageW(fg, WM_CANCELMODE, WPARAM(0), LPARAM(0));
+                            }
+                            if source != 0 {
+                                let _ = SendMessageW(
+                                    HWND(source as *mut _),
+                                    WM_CANCELMODE,
+                                    WPARAM(0),
+                                    LPARAM(0),
+                                );
+                            }
+                            CANCEL_LOCAL_DRAG.store(true, Ordering::SeqCst);
+                            keybd_event(VK_ESCAPE.0 as u8, 0, Default::default(), 0);
+                            mouse_event(MOUSEEVENTF_MOVE, 0, 0, 0, 0);
+                            keybd_event(VK_ESCAPE.0 as u8, 0, KEYEVENTF_KEYUP, 0);
+                        }
                         if let Ok(sender_guard) = HOOK_SENDER.lock() {
                             if let Some(ref sender) = *sender_guard {
                                 let _ = sender.try_send(InputEvent::CursorPosition {
                                     x: client_x,
                                     y: client_y,
                                 });
-                                let _ = sender.try_send(InputEvent::MouseButton {
-                                    button: MouseButton::Left,
-                                    state: ButtonState::Pressed,
-                                });
                                 let _ = sender.try_send(InputEvent::FileDrag {
-                                    active: true,
-                                    file_name: String::new(),
+                                    active: !resolved_name.is_empty(),
+                                    file_name: resolved_name,
                                 });
                             }
                         }
@@ -323,6 +437,10 @@ unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: LPAR
                             y: client_y,
                         });
                     }
+                    unsafe {
+                        set_system_cursor_hidden(true);
+                    }
+                    let _ = SetCursorPos(center.x, center.y);
                     block_event = true;
                 }
             }
@@ -336,6 +454,16 @@ unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: LPAR
                     block_event = true;
                 }
                 WM_LBUTTONUP => {
+                    let was_dragging_out = HOST_DRAGGING_OUT.swap(false, Ordering::SeqCst);
+                    if was_dragging_out {
+                        unsafe {
+                            use windows::Win32::UI::Input::KeyboardAndMouse::{
+                                keybd_event, KEYEVENTF_KEYUP, VK_ESCAPE,
+                            };
+                            keybd_event(VK_ESCAPE.0 as u8, 0, Default::default(), 0);
+                            keybd_event(VK_ESCAPE.0 as u8, 0, KEYEVENTF_KEYUP, 0);
+                        }
+                    }
                     if let Ok(sender_guard) = HOOK_SENDER.lock() {
                         if let Some(ref sender) = *sender_guard {
                             let _ = sender.try_send(InputEvent::MouseButton {
@@ -445,6 +573,15 @@ unsafe extern "system" fn mouse_proc(n_code: i32, w_param: WPARAM, l_param: LPAR
 }
 
 unsafe extern "system" fn keyboard_proc(n_code: i32, w_param: WPARAM, l_param: LPARAM) -> LRESULT {
+    if n_code >= 0 && CANCEL_LOCAL_DRAG.load(Ordering::SeqCst) {
+        let hook_struct = *(l_param.0 as *const KBDLLHOOKSTRUCT);
+        if hook_struct.vkCode == 0x1B {
+            if w_param.0 as u32 == WM_KEYUP {
+                CANCEL_LOCAL_DRAG.store(false, Ordering::SeqCst);
+            }
+            return CallNextHookEx(HHOOK::default(), n_code, w_param, l_param);
+        }
+    }
     if n_code >= 0
         && CAPTURE_ACTIVE.load(Ordering::Relaxed)
         && KEYBOARD_SHARING_ENABLED.load(Ordering::Relaxed)
@@ -644,6 +781,39 @@ impl InputHookManager {
 
 impl Drop for InputHookManager {
     fn drop(&mut self) {
+        unsafe {
+            set_system_cursor_hidden(false);
+        }
         self.stop();
+    }
+}
+
+unsafe fn set_system_cursor_hidden(hidden: bool) {
+    use windows::Win32::Foundation::HINSTANCE;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        CreateCursor, SetSystemCursor, SystemParametersInfoW, OCR_NORMAL, SPI_SETCURSORS,
+        SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
+    };
+    if hidden {
+        let and_mask = [0xFFu8; 128];
+        let xor_mask = [0x00u8; 128];
+        if let Ok(blank) = CreateCursor(
+            HINSTANCE::default(),
+            0,
+            0,
+            32,
+            32,
+            and_mask.as_ptr() as *const _,
+            xor_mask.as_ptr() as *const _,
+        ) {
+            let _ = SetSystemCursor(blank, OCR_NORMAL);
+        }
+    } else {
+        let _ = SystemParametersInfoW(
+            SPI_SETCURSORS,
+            0,
+            None,
+            SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
+        );
     }
 }
