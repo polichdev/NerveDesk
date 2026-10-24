@@ -39,6 +39,32 @@ NerveDesk is a lightweight, low-latency hybrid KVM (Keyboard, Video, Mouse) and 
 
 ## Architectural Advantages
 
+```mermaid
+flowchart LR
+    subgraph Host["Host PC (Sender)"]
+        HOOKS["Win32 Low-Level Hooks<br/>(Mouse & Keyboard)"]
+        DXGI["DirectX 11 / DXGI<br/>Desktop Duplication"]
+        WASAPI["WASAPI Loopback<br/>System Audio"]
+    end
+
+    subgraph LAN["Isolated LAN Channels (Wi-Fi / Ethernet)"]
+        direction TB
+        UDP_IN["Raw UDP :48100<br/>(Sub-ms Input + ChaCha20)"]
+        TCP_VID["TCP :48105<br/>(H.264 Video Stream)"]
+        TCP_AUD["TCP :48107<br/>(Audio PCM / Opus)"]
+    end
+
+    subgraph Client["Client PC (Receiver)"]
+        EMULATOR["Win32 SendInput<br/>(Hardware Injection)"]
+        RENDER["DirectX 11 / D3D<br/>Display Surface"]
+        AUDIO_OUT["Speakers / Headphones<br/>Playback Endpoint"]
+    end
+
+    HOOKS -->|"Deltas"| UDP_IN -->|"Inject"| EMULATOR
+    DXGI -->|"NVENC/QSV"| TCP_VID -->|"Decode"| RENDER
+    WASAPI -->|"PCM Stream"| TCP_AUD -->|"Play"| AUDIO_OUT
+```
+
 ### Non-Blocking Input Transport
 Traditional software KVMs rely on TCP, where dropped packets stall the entire event stream while waiting for retransmission. NerveDesk uses non-blocking Raw UDP sockets with monotonic sequence numbering, eliminating cursor hitching and micro-stutters during network spikes.
 
