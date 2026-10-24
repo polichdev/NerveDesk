@@ -1,8 +1,10 @@
 use common::{ButtonState, MouseButton};
 use input::InputEmulator;
 use serde::Deserialize;
-use std::collections::HashMap;
+use serde::Serialize;
+use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -23,8 +25,49 @@ pub struct MobileServer {
     audio_stream_in_use: Arc<AtomicBool>,
     port: u16,
     pin: Arc<Mutex<String>>,
-    tokens: Arc<Mutex<HashMap<String, Instant>>>,
+    tokens: Arc<Mutex<HashSet<String>>>,
     pin_attempts: Arc<Mutex<HashMap<std::net::IpAddr, (u8, Instant)>>>,
+    share: Arc<Mutex<ShareState>>,
+    receive_dir: Arc<Mutex<PathBuf>>,
+}
+
+const MAX_SHARE_FILE_BYTES: usize = 100 * 1024 * 1024;
+const MAX_SHARE_TEXT_BYTES: usize = 8 * 1024;
+
+#[derive(Clone)]
+struct SharedFile {
+    id: String,
+    path: PathBuf,
+    name: String,
+    size: u64,
+}
+
+#[derive(Default)]
+struct ShareState {
+    file: Option<SharedFile>,
+    text: Option<String>,
+    last_received: Option<String>,
+}
+
+#[derive(Clone, Serialize)]
+pub struct MobileShareInfo {
+    pub file_id: Option<String>,
+    pub file_name: Option<String>,
+    pub file_size: Option<u64>,
+    pub text: Option<String>,
+    pub last_received: Option<String>,
+}
+
+impl ShareState {
+    fn info(&self) -> MobileShareInfo {
+        MobileShareInfo {
+            file_id: self.file.as_ref().map(|file| file.id.clone()),
+            file_name: self.file.as_ref().map(|file| file.name.clone()),
+            file_size: self.file.as_ref().map(|file| file.size),
+            text: self.text.clone(),
+            last_received: self.last_received.clone(),
+        }
+    }
 }
 
 struct AudioStreamLease(Arc<AtomicBool>);
@@ -52,6 +95,11 @@ pub struct MobileInputPayload {
 #[derive(Debug, Deserialize)]
 pub struct VerifyPinPayload {
     pub pin: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ShareTextPayload {
+    text: String,
 }
 
 fn generate_random_pin() -> String {
@@ -191,8 +239,10 @@ impl MobileServer {
             audio_stream_in_use: Arc::new(AtomicBool::new(false)),
             port,
             pin: Arc::new(Mutex::new(generate_random_pin())),
-            tokens: Arc::new(Mutex::new(HashMap::new())),
+            tokens: Arc::new(Mutex::new(HashSet::new())),
             pin_attempts: Arc::new(Mutex::new(HashMap::new())),
+            share: Arc::new(Mutex::new(ShareState::default())),
+            receive_dir: Arc::new(Mutex::new(load_receive_dir())),
         }
     }
 
@@ -205,7 +255,77 @@ impl MobileServer {
         *self.pin.lock().unwrap() = new_p.clone();
         self.tokens.lock().unwrap().clear();
         self.pin_attempts.lock().unwrap().clear();
+        *self.share.lock().unwrap() = ShareState::default();
         new_p
+    }
+
+    pub fn share_info(&self) -> MobileShareInfo {
+        self.share.lock().unwrap().info()
+    }
+
+    pub fn receive_dir(&self) -> String {
+        self.receive_dir
+            .lock()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned()
+    }
+
+    pub fn set_receive_dir(&self, path: &Path) -> Result<String, String> {
+        let dir = path.canonicalize().map_err(|e| e.to_string())?;
+        if !dir.is_dir() {
+            return Err("Choose an existing folder".into());
+        }
+        let config = receive_dir_config_path()?;
+        std::fs::create_dir_all(config.parent().ok_or("Invalid settings path")?)
+            .map_err(|e| e.to_string())?;
+        std::fs::write(&config, dir.to_string_lossy().as_bytes()).map_err(|e| e.to_string())?;
+        *self.receive_dir.lock().unwrap() = dir;
+        Ok(self.receive_dir())
+    }
+
+    pub fn reset_receive_dir(&self) -> Result<String, String> {
+        let default = mobile_downloads_dir()?;
+        std::fs::create_dir_all(&default).map_err(|e| e.to_string())?;
+        self.set_receive_dir(&default)
+    }
+
+    pub fn share_file(&self, path: &Path) -> Result<MobileShareInfo, String> {
+        let path = path.canonicalize().map_err(|e| e.to_string())?;
+        let metadata = path.metadata().map_err(|e| e.to_string())?;
+        if !metadata.is_file() || metadata.len() > MAX_SHARE_FILE_BYTES as u64 {
+            return Err("Choose a file smaller than 100 MB".into());
+        }
+        let name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or("Invalid file name")?
+            .to_string();
+        let mut share = self.share.lock().map_err(|e| e.to_string())?;
+        share.file = Some(SharedFile {
+            id: generate_session_token(),
+            path,
+            name,
+            size: metadata.len(),
+        });
+        Ok(share.info())
+    }
+
+    pub fn share_text(&self, text: String) -> Result<MobileShareInfo, String> {
+        let text = text.trim();
+        if text.is_empty() || text.len() > MAX_SHARE_TEXT_BYTES {
+            return Err("Text must be between 1 and 8192 bytes".into());
+        }
+        let mut share = self.share.lock().map_err(|e| e.to_string())?;
+        share.text = Some(text.to_string());
+        Ok(share.info())
+    }
+
+    pub fn clear_share(&self) -> MobileShareInfo {
+        let mut share = self.share.lock().unwrap();
+        share.file = None;
+        share.text = None;
+        share.info()
     }
 
     pub fn start(&self) {
@@ -220,6 +340,8 @@ impl MobileServer {
         let pin = self.pin.clone();
         let tokens = self.tokens.clone();
         let pin_attempts = self.pin_attempts.clone();
+        let share = self.share.clone();
+        let receive_dir = self.receive_dir.clone();
 
         std::thread::spawn(move || {
             let rt = match tokio::runtime::Builder::new_multi_thread()
@@ -278,6 +400,8 @@ impl MobileServer {
                             let pin_ref = pin.clone();
                             let tokens_ref = tokens.clone();
                             let attempts_ref = pin_attempts.clone();
+                            let share_ref = share.clone();
+                            let receive_dir_ref = receive_dir.clone();
                             let tls = tls.clone();
                             tokio::spawn(async move {
                                 let Ok(Ok(tls_stream)) = tokio::time::timeout(
@@ -298,6 +422,8 @@ impl MobileServer {
                                     pin_ref,
                                     tokens_ref,
                                     attempts_ref,
+                                    share_ref,
+                                    receive_dir_ref,
                                 )
                                 .await;
                             });
@@ -315,7 +441,7 @@ impl MobileServer {
     pub fn stop(&self) {
         self.is_running.store(false, Ordering::SeqCst);
         self.audio_enabled.store(false, Ordering::SeqCst);
-        self.tokens.lock().unwrap().clear();
+        *self.share.lock().unwrap() = ShareState::default();
     }
 
     pub fn set_audio_enabled(&self, enabled: bool) -> bool {
@@ -355,6 +481,98 @@ fn extract_query_param(path: &str, param: &str) -> Option<String> {
     None
 }
 
+fn request_header<'a>(request: &'a str, name: &str) -> Option<&'a str> {
+    request
+        .lines()
+        .skip(1)
+        .filter_map(|line| line.split_once(':'))
+        .find_map(|(key, value)| key.eq_ignore_ascii_case(name).then_some(value.trim()))
+}
+
+fn decode_file_name(value: &str) -> Option<String> {
+    let mut decoded = Vec::with_capacity(value.len());
+    let mut bytes = value.as_bytes().iter().copied();
+    while let Some(byte) = bytes.next() {
+        if byte == b'%' {
+            let hi = (bytes.next()? as char).to_digit(16)?;
+            let lo = (bytes.next()? as char).to_digit(16)?;
+            decoded.push(((hi << 4) | lo) as u8);
+        } else {
+            decoded.push(byte);
+        }
+    }
+    let name = String::from_utf8(decoded).ok()?;
+    let name = name.rsplit(['/', '\\']).next()?;
+    let safe: String = name
+        .chars()
+        .take(120)
+        .map(|ch| {
+            if ch.is_control() || "<>:\"/\\|?*".contains(ch) {
+                '_'
+            } else {
+                ch
+            }
+        })
+        .collect();
+    let safe = safe.trim_matches([' ', '.']);
+    (!safe.is_empty()).then(|| safe.to_string())
+}
+
+pub fn mobile_downloads_dir() -> Result<PathBuf, String> {
+    unsafe {
+        use windows::Win32::Foundation::HANDLE;
+        use windows::Win32::System::Com::CoTaskMemFree;
+        use windows::Win32::UI::Shell::{
+            FOLDERID_Downloads, SHGetKnownFolderPath, KNOWN_FOLDER_FLAG,
+        };
+        if let Ok(path) =
+            SHGetKnownFolderPath(&FOLDERID_Downloads, KNOWN_FOLDER_FLAG(0), HANDLE::default())
+        {
+            let directory = path.to_string().ok().map(PathBuf::from);
+            CoTaskMemFree(Some(path.0.cast()));
+            if let Some(directory) = directory {
+                return Ok(directory);
+            }
+        }
+    }
+    let profile = std::env::var_os("USERPROFILE").ok_or("USERPROFILE is unavailable")?;
+    Ok(PathBuf::from(profile).join("Downloads"))
+}
+
+fn receive_dir_config_path() -> Result<PathBuf, String> {
+    let appdata = std::env::var_os("APPDATA").ok_or("APPDATA is unavailable")?;
+    Ok(PathBuf::from(appdata)
+        .join("NerveDesk")
+        .join("mobile-receive-folder.txt"))
+}
+
+fn load_receive_dir() -> PathBuf {
+    let default = mobile_downloads_dir().unwrap_or_else(|_| PathBuf::from("Downloads"));
+    receive_dir_config_path()
+        .ok()
+        .and_then(|path| std::fs::read_to_string(path).ok())
+        .map(|path| PathBuf::from(path.trim()))
+        .and_then(|path| path.canonicalize().ok())
+        .filter(|path| path.is_dir())
+        .unwrap_or(default)
+}
+
+async fn write_json<S: AsyncWrite + Unpin>(
+    stream: &mut S,
+    status: &str,
+    value: &impl Serialize,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let body = serde_json::to_vec(value)?;
+    let header = format!(
+        "HTTP/1.1 {status}\r\nContent-Type: application/json; charset=utf-8\r\nCache-Control: no-store\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    stream.write_all(header.as_bytes()).await?;
+    stream.write_all(&body).await?;
+    stream.flush().await?;
+    Ok(())
+}
+
 async fn read_http_request<S: AsyncRead + Unpin>(
     stream: &mut S,
     pending: &mut Vec<u8>,
@@ -362,7 +580,14 @@ async fn read_http_request<S: AsyncRead + Unpin>(
     loop {
         if let Some(header_end) = pending.windows(4).position(|bytes| bytes == b"\r\n\r\n") {
             let header_end = header_end + 4;
+            if header_end > 8192 {
+                return Err("Mobile request headers are too large".into());
+            }
             let headers = String::from_utf8_lossy(&pending[..header_end]);
+            if headers.starts_with("PUT /api/share/upload?") {
+                let request = pending.drain(..header_end).collect::<Vec<_>>();
+                return Ok(Some(String::from_utf8_lossy(&request).into_owned()));
+            }
             let content_length = headers
                 .lines()
                 .filter_map(|line| line.split_once(':'))
@@ -370,8 +595,15 @@ async fn read_http_request<S: AsyncRead + Unpin>(
                 .map(|(_, value)| value.trim().parse::<usize>())
                 .transpose()?
                 .unwrap_or(0);
-            let total = header_end + content_length;
-            if total > 8192 {
+            let max_request = if headers.starts_with("POST /api/share/text ") {
+                16 * 1024
+            } else {
+                8192
+            };
+            let total = header_end
+                .checked_add(content_length)
+                .ok_or("Mobile request is too large")?;
+            if total > max_request {
                 return Err("Mobile request is too large".into());
             }
             if pending.len() >= total {
@@ -379,7 +611,7 @@ async fn read_http_request<S: AsyncRead + Unpin>(
                 return Ok(Some(String::from_utf8_lossy(&request).into_owned()));
             }
         }
-        if pending.len() >= 8192 {
+        if pending.len() >= 16 * 1024 {
             return Err("Mobile request is too large".into());
         }
         let mut chunk = [0u8; 2048];
@@ -400,8 +632,10 @@ async fn handle_http_client<S: AsyncRead + AsyncWrite + Unpin>(
     audio_enabled: Arc<AtomicBool>,
     audio_stream_in_use: Arc<AtomicBool>,
     pin: Arc<Mutex<String>>,
-    tokens: Arc<Mutex<HashMap<String, Instant>>>,
+    tokens: Arc<Mutex<HashSet<String>>>,
     pin_attempts: Arc<Mutex<HashMap<std::net::IpAddr, (u8, Instant)>>>,
+    share: Arc<Mutex<ShareState>>,
+    receive_dir: Arc<Mutex<PathBuf>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut pending = Vec::with_capacity(2048);
     loop {
@@ -437,9 +671,7 @@ async fn handle_http_client<S: AsyncRead + AsyncWrite + Unpin>(
         let is_authorized = |tok: &Option<String>| -> bool {
             if let Some(t) = tok {
                 let guard = tokens.lock().unwrap();
-                guard
-                    .get(t)
-                    .is_some_and(|created| created.elapsed() < Duration::from_secs(3600))
+                guard.contains(t)
             } else {
                 false
             }
@@ -455,6 +687,32 @@ async fn handle_http_client<S: AsyncRead + AsyncWrite + Unpin>(
             let _ = stream.write_all(response.as_bytes()).await;
             let _ = stream.flush().await;
             let _ = stream.shutdown().await;
+            return Ok(());
+        }
+
+        if method == "GET"
+            && matches!(
+                path,
+                "/manifest.webmanifest" | "/mobile-icon-192.png" | "/mobile-icon-512.png"
+            )
+        {
+            let (content_type, body): (&str, &[u8]) = match path {
+                "/manifest.webmanifest" => (
+                    "application/manifest+json; charset=utf-8",
+                    include_bytes!("../assets/manifest.webmanifest"),
+                ),
+                "/mobile-icon-192.png" => (
+                    "image/png",
+                    include_bytes!("../assets/mobile-icon-192.png"),
+                ),
+                _ => ("image/png", include_bytes!("../assets/mobile-icon-512.png")),
+            };
+            let header = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nCache-Control: no-store\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            );
+            stream.write_all(header.as_bytes()).await?;
+            stream.write_all(body).await?;
             return Ok(());
         }
 
@@ -500,7 +758,7 @@ async fn handle_http_client<S: AsyncRead + AsyncWrite + Unpin>(
                     if !blocked && payload.pin.trim() == current_pin {
                         ok = true;
                         token = generate_session_token();
-                        tokens.lock().unwrap().insert(token.clone(), Instant::now());
+                        tokens.lock().unwrap().insert(token.clone());
                         pin_attempts.lock().unwrap().remove(&peer_ip);
                     }
                 }
@@ -529,6 +787,199 @@ async fn handle_http_client<S: AsyncRead + AsyncWrite + Unpin>(
             let _ = stream.flush().await;
             let _ = stream.shutdown().await;
             return Ok(());
+        }
+
+        if path.starts_with("/api/share/") {
+            if !is_authorized(&request_token) {
+                write_json(
+                    &mut stream,
+                    "401 Unauthorized",
+                    &serde_json::json!({"error":"Session expired"}),
+                )
+                .await?;
+                return Ok(());
+            }
+
+            if method == "GET" && path == "/api/share/outbox" {
+                let info = share.lock().unwrap().info();
+                write_json(&mut stream, "200 OK", &info).await?;
+                return Ok(());
+            }
+
+            if method == "POST" && path == "/api/share/text" {
+                let body = req_str
+                    .split_once("\r\n\r\n")
+                    .map(|(_, body)| body)
+                    .unwrap_or("");
+                let payload = serde_json::from_str::<ShareTextPayload>(body);
+                let Ok(payload) = payload else {
+                    write_json(
+                        &mut stream,
+                        "400 Bad Request",
+                        &serde_json::json!({"error":"Invalid text"}),
+                    )
+                    .await?;
+                    return Ok(());
+                };
+                let text = payload.text.trim().to_string();
+                if text.is_empty() || text.len() > MAX_SHARE_TEXT_BYTES {
+                    write_json(
+                        &mut stream,
+                        "413 Content Too Large",
+                        &serde_json::json!({"error":"Text is empty or too long"}),
+                    )
+                    .await?;
+                    return Ok(());
+                }
+                let result = tokio::task::spawn_blocking(move || {
+                    clipboard::ClipboardWriter::write_text(&text)
+                })
+                .await?;
+                if let Err(error) = result {
+                    write_json(
+                        &mut stream,
+                        "500 Internal Server Error",
+                        &serde_json::json!({"error":error.to_string()}),
+                    )
+                    .await?;
+                    return Ok(());
+                }
+                share.lock().unwrap().last_received = Some("text".into());
+                write_json(&mut stream, "200 OK", &serde_json::json!({"ok":true})).await?;
+                return Ok(());
+            }
+
+            if method == "PUT" && path == "/api/share/upload" {
+                let size = request_header(&req_str, "content-length")
+                    .and_then(|s| s.parse::<usize>().ok());
+                let name =
+                    extract_query_param(full_path, "name").and_then(|s| decode_file_name(&s));
+                let (Some(size), Some(name)) = (size, name) else {
+                    write_json(
+                        &mut stream,
+                        "400 Bad Request",
+                        &serde_json::json!({"error":"File name or size is missing"}),
+                    )
+                    .await?;
+                    return Ok(());
+                };
+                if size == 0
+                    || size > MAX_SHARE_FILE_BYTES
+                    || request_header(&req_str, "transfer-encoding").is_some()
+                {
+                    write_json(
+                        &mut stream,
+                        "413 Content Too Large",
+                        &serde_json::json!({"error":"File must be 1 byte to 100 MB"}),
+                    )
+                    .await?;
+                    return Ok(());
+                }
+                let dir = receive_dir.lock().unwrap().clone();
+                tokio::fs::create_dir_all(&dir).await?;
+                let id = generate_session_token();
+                let saved_name = format!("{}_{}", &id[..12], name);
+                let target = dir.join(&saved_name);
+                let temporary = dir.join(format!(".{id}.part"));
+                let mut file = tokio::fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&temporary)
+                    .await?;
+                let upload_result = async {
+                    let mut remaining = size;
+                    let buffered = pending.len().min(remaining);
+                    file.write_all(&pending[..buffered]).await?;
+                    pending.drain(..buffered);
+                    remaining -= buffered;
+                    let mut chunk = [0u8; 32 * 1024];
+                    while remaining > 0 {
+                        if !running.load(Ordering::SeqCst) || !is_authorized(&request_token) {
+                            return Err("Session expired during upload".into());
+                        }
+                        let to_read = remaining.min(chunk.len());
+                        let count = tokio::time::timeout(
+                            Duration::from_secs(30),
+                            stream.read(&mut chunk[..to_read]),
+                        )
+                        .await??;
+                        if count == 0 {
+                            return Err("Upload ended early".into());
+                        }
+                        file.write_all(&chunk[..count]).await?;
+                        remaining -= count;
+                    }
+                    file.flush().await?;
+                    Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
+                }
+                .await;
+                drop(file);
+                if let Err(error) = upload_result {
+                    let _ = tokio::fs::remove_file(&temporary).await;
+                    write_json(
+                        &mut stream,
+                        "400 Bad Request",
+                        &serde_json::json!({"error":error.to_string()}),
+                    )
+                    .await?;
+                    return Ok(());
+                }
+                if let Err(error) = tokio::fs::rename(&temporary, &target).await {
+                    let _ = tokio::fs::remove_file(&temporary).await;
+                    return Err(error.into());
+                }
+                share.lock().unwrap().last_received = Some(saved_name.clone());
+                write_json(
+                    &mut stream,
+                    "200 OK",
+                    &serde_json::json!({"ok":true,"saved_name":saved_name}),
+                )
+                .await?;
+                return Ok(());
+            }
+
+            if method == "GET" && path == "/api/share/download" {
+                let id = extract_query_param(full_path, "id");
+                let selected = share.lock().unwrap().file.clone();
+                let Some(file) = selected.filter(|file| id.as_deref() == Some(file.id.as_str()))
+                else {
+                    write_json(
+                        &mut stream,
+                        "404 Not Found",
+                        &serde_json::json!({"error":"No shared file"}),
+                    )
+                    .await?;
+                    return Ok(());
+                };
+                let mut source = tokio::fs::File::open(&file.path).await?;
+                if source.metadata().await?.len() != file.size {
+                    write_json(
+                        &mut stream,
+                        "409 Conflict",
+                        &serde_json::json!({"error":"Shared file changed"}),
+                    )
+                    .await?;
+                    return Ok(());
+                }
+                let header = format!("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nCache-Control: no-store\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", file.size);
+                stream.write_all(header.as_bytes()).await?;
+                let mut chunk = [0u8; 32 * 1024];
+                loop {
+                    if !running.load(Ordering::SeqCst) || !is_authorized(&request_token) {
+                        break;
+                    }
+                    let count = source.read(&mut chunk).await?;
+                    if count == 0 {
+                        break;
+                    }
+                    tokio::time::timeout(
+                        Duration::from_secs(30),
+                        stream.write_all(&chunk[..count]),
+                    )
+                    .await??;
+                }
+                return Ok(());
+            }
         }
 
         if method == "GET" && path == "/screen.jpg" {
@@ -935,5 +1386,108 @@ mod tests {
             .unwrap();
         assert!(first.ends_with("\r\n\r\ntest"));
         assert!(second.starts_with("GET /api/status"));
+    }
+
+    #[tokio::test]
+    async fn upload_request_leaves_binary_body_for_streaming() {
+        let (mut writer, mut reader) = tokio::io::duplex(1024);
+        writer
+            .write_all(b"PUT /api/share/upload?name=photo.jpg HTTP/1.1\r\nContent-Length: 4\r\n\r\n\0\xff\x80A")
+            .await
+            .unwrap();
+        let mut pending = Vec::new();
+        let headers = read_http_request(&mut reader, &mut pending)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(headers.starts_with("PUT /api/share/upload"));
+        assert!(!headers.contains('�'));
+        assert_eq!(pending, b"\0\xff\x80A");
+    }
+
+    #[tokio::test]
+    async fn share_text_request_accepts_the_documented_limit() {
+        let (mut writer, mut reader) = tokio::io::duplex(16 * 1024);
+        let body = format!("{{\"text\":\"{}\"}}", "a".repeat(MAX_SHARE_TEXT_BYTES));
+        let request = format!(
+            "POST /api/share/text HTTP/1.1\r\nContent-Length: {}\r\n\r\n{}",
+            body.len(),
+            body
+        );
+        writer.write_all(request.as_bytes()).await.unwrap();
+        let parsed = read_http_request(&mut reader, &mut Vec::new())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(parsed, request);
+    }
+
+    #[tokio::test]
+    async fn share_outbox_requires_a_valid_session() {
+        for authorized in [false, true] {
+            let (mut client, server) = tokio::io::duplex(4096);
+            let token = generate_session_token();
+            let tokens = Arc::new(Mutex::new(HashSet::new()));
+            if authorized {
+                tokens.lock().unwrap().insert(token.clone());
+            }
+            let shared = Arc::new(Mutex::new(ShareState {
+                text: Some("https://example.com".into()),
+                ..ShareState::default()
+            }));
+            let task = tokio::spawn(handle_http_client(
+                server,
+                "127.0.0.1".parse().unwrap(),
+                Arc::new(InputEmulator::new()),
+                Arc::new(AtomicBool::new(true)),
+                Arc::new(AtomicBool::new(false)),
+                Arc::new(AtomicBool::new(false)),
+                Arc::new(Mutex::new("123456".into())),
+                tokens,
+                Arc::new(Mutex::new(HashMap::new())),
+                shared,
+                Arc::new(Mutex::new(mobile_downloads_dir().unwrap())),
+            ));
+            client
+                .write_all(
+                    format!("GET /api/share/outbox HTTP/1.1\r\nX-Auth-Token: {token}\r\n\r\n")
+                        .as_bytes(),
+                )
+                .await
+                .unwrap();
+            let mut response = Vec::new();
+            client.read_to_end(&mut response).await.unwrap();
+            task.await.unwrap().unwrap();
+            let response = String::from_utf8(response).unwrap();
+            if authorized {
+                assert!(response.starts_with("HTTP/1.1 200 OK"));
+                assert!(response.contains("https://example.com"));
+            } else {
+                assert!(response.starts_with("HTTP/1.1 401 Unauthorized"));
+                assert!(!response.contains("https://example.com"));
+            }
+        }
+    }
+
+    #[test]
+    fn upload_name_cannot_escape_downloads_folder() {
+        assert_eq!(
+            decode_file_name("..%5c..%2fphoto%3a.jpg"),
+            Some("photo_.jpg".into())
+        );
+        assert_eq!(decode_file_name("%2e%2e"), None);
+        assert_eq!(decode_file_name("%FF"), None);
+    }
+
+    #[test]
+    fn remembered_phone_survives_service_toggle_but_not_pin_change_or_restart() {
+        let server = MobileServer::new(5858);
+        let token = generate_session_token();
+        server.tokens.lock().unwrap().insert(token.clone());
+        server.stop();
+        assert!(server.tokens.lock().unwrap().contains(&token));
+        server.regenerate_pin();
+        assert!(!server.tokens.lock().unwrap().contains(&token));
+        assert!(MobileServer::new(5858).tokens.lock().unwrap().is_empty());
     }
 }

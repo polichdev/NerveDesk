@@ -24,7 +24,8 @@ pub use mirror::{
     MirrorReceiver, MirrorSender,
 };
 pub use mobile_server::{
-    generate_qr_svg, get_local_ip, MobileInputPayload, MobileServer, VerifyPinPayload,
+    generate_qr_svg, get_local_ip, MobileInputPayload, MobileServer, MobileShareInfo,
+    VerifyPinPayload,
 };
 pub use udp::{UdpInputReceiver, UdpInputSender};
 pub use video::{VideoReceiver, VideoSender};

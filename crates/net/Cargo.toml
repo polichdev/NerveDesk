@@ -8,6 +8,7 @@ license.workspace = true
 common = { path = "../common" }
 codec = { path = "../codec" }
 input = { path = "../input" }
+clipboard = { path = "../clipboard" }
 socket2 = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
