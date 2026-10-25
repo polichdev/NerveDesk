@@ -27,8 +27,8 @@ NerveDesk is a lightweight, low-latency hybrid KVM (Keyboard, Video, Mouse) and 
 
 ### Performance Highlights
 
-- Binary Footprint: ~6–7 MB standalone executable (NSIS setup package is under 2 MB).
-- Memory Usage: 10–15 MB RAM in active background operation (compared to 300–800 MB for Electron-based solutions).
+- Binary Footprint: 8 MB standalone executable (NSIS setup package is under 2 MB).
+- Memory Usage: 20 MB RAM in active background operation (compared to 300–800 MB for Electron-based solutions).
 - Input Latency: Sub-millisecond (< 1 ms) over local networks via raw UDP datagrams without TCP Head-of-Line Blocking.
 - Video Transport: ~16 ms glass-to-glass latency at 60 FPS using a direct DirectX 11 GPU capture pipeline with under 2% host CPU usage.
 
