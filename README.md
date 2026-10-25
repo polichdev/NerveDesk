@@ -18,6 +18,8 @@
 [![Folder Sync](https://img.shields.io/badge/Folder_Sync-Bi--Directional-2EA44F.svg)](#core-features)
 [![Async Clipboard](https://img.shields.io/badge/Clipboard-Text_%26_Images-D93F0B.svg)](#core-features)
 [![Mobile Remote](https://img.shields.io/badge/Mobile_Remote-Web_PIN-D4A017.svg)](#core-features)
+[![Continuity Camera](https://img.shields.io/badge/Continuity_Camera-Virtual_Webcam-0078D7.svg)](#core-features)
+[![Game Streaming](https://img.shields.io/badge/Game_Streaming-WebCodecs_H.264-7952B3.svg)](#core-features)
 
 NerveDesk is a lightweight, low-latency hybrid KVM (Keyboard, Video, Mouse) and virtual display streaming application for Windows, built with Rust and Tauri v2. It connects multiple computers over a local network into a unified workspace, enabling seamless cursor transitions across monitor boundaries, virtual secondary screen projection, audio streaming, clipboard synchronization, and directory replication.
 
@@ -33,7 +35,7 @@ NerveDesk is a lightweight, low-latency hybrid KVM (Keyboard, Video, Mouse) and 
 ## Tech Stack
 
 - Systems Core: Rust 1.80+, Tokio asynchronous runtime, windows-rs / winapi, crossbeam channels.
-- Graphics & Media: DirectX 11 (DXGI Desktop Duplication), Windows Graphics Capture, Media Foundation H.264, WASAPI Audio Loopback.
+- Graphics & Media: DirectX 11 (DXGI Desktop Duplication), Windows Graphics Capture, Media Foundation H.264 (Hardware MFT), WebCodecs API, WASAPI Audio Loopback.
 - Display Driver: C++ UMDF v2 Indirect Display Driver (IddCx).
 - Desktop GUI: Tauri v2, system WebView2, Windows DWM Immersive Dark Mode.
 
@@ -88,6 +90,8 @@ Built using Rust and Tauri v2 with the system WebView2 runtime, NerveDesk avoids
 - Phone Audio: Play Android or iPhone audio through the PC's speakers using Windows Bluetooth A2DP sink support. Pair the phone in Windows, then connect it from Audio Bridge.
 - Folder Synchronization: Bi-directional background folder synchronization with 600 ms delta polling and safe change resolution.
 - Mobile Web Remote: View live screen output and control input from a phone browser via an embedded HTTPS server secured by a 6-digit PIN. Add the page to the phone's home screen for the NerveDesk icon. A verified phone stays recognized while the PC app runs and the PIN remains unchanged.
+- Continuity Camera & Virtual Webcam: Transform an iPhone or Android phone into a high-definition PC webcam for conferencing (Google Meet, Zoom, Discord, Teams) and streaming (OBS Studio). Features low-latency MJPEG streaming, virtual camera DirectShow/MediaFoundation driver integration, camera switching, torch/flash control, 90° rotation increments, mirroring, and direct OBS browser source URL copying.
+- Mobile Game Streaming Mode: Ultra-low-latency game streaming directly to mobile browsers at 60 or 120 FPS powered by hardware-accelerated Media Foundation H.264 encoding and client-side WebCodecs decoding. Includes real-time performance HUD (host/device FPS, network packets, decoding queue), 720p/1080p resolution scaling, PC game audio forwarding, automatic landscape orientation lock, and screen wake lock.
 - Quick Share: Scan the Mobile Remote QR code, enter the PIN, then send files, photos, text, or links from the phone's Share tab. Received files go to `Downloads` by default; choose another folder in Mobile Remote on the PC. Received text goes to the PC clipboard. Prepare one file and text in the PC app to download or copy on the phone (100 MB per file).
 - Zero-Config LAN Discovery: Automatic device pairing on the local subnet via UDP broadcast beacons on port 48103 with alphanumeric security key verification.
 
