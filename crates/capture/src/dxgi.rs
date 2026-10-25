@@ -37,6 +37,11 @@ impl Default for DxgiCaptureConfig {
 }
 
 impl DxgiCaptureConfig {
+    pub fn with_timeout(mut self, timeout_ms: u32) -> Self {
+        self.timeout_ms = timeout_ms;
+        self
+    }
+
     pub fn primary_display() -> Result<Self> {
         let factory: IDXGIFactory1 = unsafe {
             CreateDXGIFactory1()
@@ -216,7 +221,7 @@ impl DxgiOutputDuplicator {
             Err(e) if e.code() == DXGI_ERROR_WAIT_TIMEOUT => Ok(None),
             Err(e) if e.code() == DXGI_ERROR_ACCESS_LOST => {
                 warn!("DXGI access lost (resolution change or desktop switch). Reinitializing duplication...");
-                self.reinitialize()?;
+                let _ = self.reinitialize();
                 Ok(None)
             }
             Err(e) => Err(NerveError::Platform(format!(
@@ -246,6 +251,10 @@ impl DxgiOutputDuplicator {
 
     pub fn dimensions(&self) -> (u32, u32) {
         (self.width, self.height)
+    }
+
+    pub fn set_timeout(&mut self, timeout_ms: u32) {
+        self.config.timeout_ms = timeout_ms;
     }
 
     pub fn device(&self) -> &ID3D11Device {

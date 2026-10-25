@@ -111,12 +111,17 @@ pub async fn start(
         let mut encoder: Option<h264::Encoder> = None;
         let mut encoder_size = (0, 0);
 
-        let mut receiver_ready = true;
+        let mut in_flight = 0u32;
         let mut last_frame: Option<(u32, u32, i16, i16, Vec<u8>)> = None;
+        let mut has_new_frame = false;
         let mut last_sent = Instant::now();
         let mut stat_frames = 0u64;
         let mut stat_bytes = 0u64;
         let mut stat_report = Instant::now();
+
+        unsafe {
+            let _ = windows::Win32::Media::timeBeginPeriod(1);
+        }
 
         while !cancel.load(Ordering::Relaxed)
             && projecting.load(Ordering::Relaxed)
@@ -127,10 +132,8 @@ pub async fn start(
             match sender.read_inbound_messages(|event| {
                 let _ = emulator.inject(event);
             }) {
-                Ok(got_ack) => {
-                    if got_ack {
-                        receiver_ready = true;
-                    }
+                Ok(ack_count) => {
+                    in_flight = in_flight.saturating_sub(ack_count);
                 }
                 Err(e) => {
                     warn!("Mirror stream broken: {e}");
@@ -138,25 +141,26 @@ pub async fn start(
                         if sender.fallback_to_h264(target).is_ok() || sender.fallback_to_jpeg(target).is_ok() {
                             av1_encoder = None;
                             encoder = None;
-                            receiver_ready = true;
+                            in_flight = 0;
                             continue;
                         }
                     } else if sender.codec == Codec::H264 && sender.fallback_to_jpeg(target).is_ok() {
                         encoder = None;
-                        receiver_ready = true;
+                        in_flight = 0;
                         continue;
                     }
                     break;
                 }
             }
 
-            if !receiver_ready && last_sent.elapsed() >= Duration::from_millis(100) {
-                receiver_ready = true;
+            if in_flight > 0 && last_sent.elapsed() >= Duration::from_millis(35) {
+                in_flight = 0;
             }
 
             match source.next_frame() {
                 Ok(Some(f)) => {
                     last_frame = Some(f);
+                    has_new_frame = true;
                 }
                 Ok(None) => {}
                 Err(e) => {
@@ -165,7 +169,7 @@ pub async fn start(
                 }
             }
 
-            if receiver_ready {
+            if in_flight < 2 && (has_new_frame || last_sent.elapsed() >= Duration::from_millis(500)) {
                 if let Some((w, h, ox, oy, ref bgra)) = last_frame {
                     if sender.codec == Codec::Av1 && av1_encoder_size != (w, h) {
                         match av1::Encoder::new(w, h) {
@@ -248,7 +252,8 @@ pub async fn start(
                             stat_bytes += n as u64;
                             stat_frames += 1;
                             last_sent = Instant::now();
-                            receiver_ready = false;
+                            in_flight += 1;
+                            has_new_frame = false;
                         }
                         Err(e) => {
                             error!("Mirror send failed: {e}");
@@ -257,13 +262,13 @@ pub async fn start(
                                     || sender.fallback_to_jpeg(target).is_ok())
                             {
                                 av1_encoder = None;
-                                receiver_ready = true;
+                                in_flight = 0;
                                 continue;
                             } else if sender.codec == Codec::H264
                                 && sender.fallback_to_jpeg(target).is_ok()
                             {
                                 encoder = None;
-                                receiver_ready = true;
+                                in_flight = 0;
                                 continue;
                             }
                             break;
@@ -289,6 +294,10 @@ pub async fn start(
             if elapsed < target_cycle {
                 std::thread::sleep(target_cycle - elapsed);
             }
+        }
+
+        unsafe {
+            let _ = windows::Win32::Media::timeEndPeriod(1);
         }
 
         if generation.load(Ordering::SeqCst) == current_generation {

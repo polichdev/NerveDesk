@@ -266,19 +266,21 @@ impl Encoder {
             MFVideoFormat_AV1,
         );
 
-        if let Some(ref transform) = mft {
-            low_latency(transform);
-            let out = media_type(&MFVideoFormat_AV1, width, height)?;
-            unsafe {
-                let _ = out.SetUINT32(
-                    &MF_MT_AVG_BITRATE,
-                    (width as u64 * height as u64 * 2).clamp(500_000, 12_000_000) as u32,
-                );
-                let _ = transform.SetOutputType(0, &out, 0);
-                let _ = transform.SetInputType(0, &media_type(&MFVideoFormat_NV12, width, height)?, 0);
-                let _ = transform.ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0);
-                let _ = transform.ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0);
-            }
+        let Some(ref transform) = mft else {
+            return Err("Hardware AV1 encoder not available".into());
+        };
+
+        low_latency(transform);
+        let out = media_type(&MFVideoFormat_AV1, width, height)?;
+        unsafe {
+            let _ = out.SetUINT32(
+                &MF_MT_AVG_BITRATE,
+                (width as u64 * height as u64 * 2).clamp(500_000, 12_000_000) as u32,
+            );
+            let _ = transform.SetOutputType(0, &out, 0);
+            let _ = transform.SetInputType(0, &media_type(&MFVideoFormat_NV12, width, height)?, 0);
+            let _ = transform.ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0);
+            let _ = transform.ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0);
         }
 
         Ok(Self {
@@ -360,14 +362,16 @@ impl Decoder {
             MFVideoFormat_NV12,
         );
 
-        if let Some(ref transform) = mft {
-            low_latency(transform);
-            unsafe {
-                let _ = transform.SetInputType(0, &media_type(&MFVideoFormat_AV1, width, height)?, 0);
-                let _ = transform.SetOutputType(0, &media_type(&MFVideoFormat_NV12, width, height)?, 0);
-                let _ = transform.ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0);
-                let _ = transform.ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0);
-            }
+        let Some(ref transform) = mft else {
+            return Err("Hardware AV1 decoder not available".into());
+        };
+
+        low_latency(transform);
+        unsafe {
+            let _ = transform.SetInputType(0, &media_type(&MFVideoFormat_AV1, width, height)?, 0);
+            let _ = transform.SetOutputType(0, &media_type(&MFVideoFormat_NV12, width, height)?, 0);
+            let _ = transform.ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0);
+            let _ = transform.ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0);
         }
 
         Ok(Self {

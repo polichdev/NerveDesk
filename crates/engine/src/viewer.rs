@@ -233,6 +233,7 @@ unsafe fn render_loop(
     shared: Arc<ViewerSharedState>,
 ) {
     let _ = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    let _ = windows::Win32::Media::timeBeginPeriod(1);
 
     let class_name = windows::core::w!("NerveDeskProjectionWindowClass");
     let wnd_class = WNDCLASSW {
@@ -371,7 +372,7 @@ unsafe fn render_loop(
             offscreen = None;
         }
 
-        std::thread::sleep(Duration::from_millis(8));
+        std::thread::sleep(Duration::from_millis(3));
     }
 }
 

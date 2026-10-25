@@ -46,26 +46,6 @@ impl MirrorSender {
         if !(16..=256).contains(&security_key.len()) {
             return Err("Pairing key is required for screen streaming".into());
         }
-        let av1_target = SocketAddr::new(target.ip(), Codec::Av1.port());
-        if let Ok(Ok(mut stream)) = tokio::time::timeout(
-            std::time::Duration::from_secs(1),
-            TcpStream::connect(av1_target),
-        )
-        .await
-        {
-            let mut ready = [0u8; 1];
-            if matches!(
-                tokio::time::timeout(
-                    std::time::Duration::from_secs(2),
-                    tokio::io::AsyncReadExt::read_exact(&mut stream, &mut ready)
-                )
-                .await,
-                Ok(Ok(_))
-            ) && ready[0] == 0x41
-            {
-                return Self::configure(stream, Codec::Av1, security_key);
-            }
-        }
         let h264_target = SocketAddr::new(target.ip(), Codec::H264.port());
         if let Ok(Ok(mut stream)) = tokio::time::timeout(
             std::time::Duration::from_secs(1),
@@ -84,6 +64,26 @@ impl MirrorSender {
             ) && ready[0] == 0x48
             {
                 return Self::configure(stream, Codec::H264, security_key);
+            }
+        }
+        let av1_target = SocketAddr::new(target.ip(), Codec::Av1.port());
+        if let Ok(Ok(mut stream)) = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            TcpStream::connect(av1_target),
+        )
+        .await
+        {
+            let mut ready = [0u8; 1];
+            if matches!(
+                tokio::time::timeout(
+                    std::time::Duration::from_secs(2),
+                    tokio::io::AsyncReadExt::read_exact(&mut stream, &mut ready)
+                )
+                .await,
+                Ok(Ok(_))
+            ) && ready[0] == 0x41
+            {
+                return Self::configure(stream, Codec::Av1, security_key);
             }
         }
         let stream = tokio::time::timeout(
@@ -168,9 +168,9 @@ impl MirrorSender {
     pub fn read_inbound_messages(
         &mut self,
         mut on_event: impl FnMut(&common::InputEvent),
-    ) -> Result<bool, String> {
+    ) -> Result<u32, String> {
         let mut buf = [0u8; 2048];
-        let mut got_ack = false;
+        let mut ack_count = 0u32;
         loop {
             match self.stream.read(&mut buf) {
                 Ok(0) => return Err("Receiver disconnected".into()),
@@ -180,7 +180,7 @@ impl MirrorSender {
                     while cursor < self.inbound.len() {
                         match self.inbound[cursor] {
                             0x06 => {
-                                got_ack = true;
+                                ack_count += 1;
                                 cursor += 1;
                             }
                             0xA1 => {
@@ -234,7 +234,7 @@ impl MirrorSender {
                 Err(e) => return Err(e.to_string()),
             }
         }
-        Ok(got_ack)
+        Ok(ack_count)
     }
 
     pub fn send(

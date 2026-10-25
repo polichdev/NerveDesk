@@ -4,8 +4,54 @@ use std::sync::OnceLock;
 use windows::core::{Interface, VARIANT};
 use windows::Win32::Media::MediaFoundation::*;
 use windows::Win32::System::Com::{
-    CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED,
+    CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize, CLSCTX_INPROC_SERVER,
+    COINIT_MULTITHREADED,
 };
+
+fn find_mft_transform(
+    category: windows::core::GUID,
+    in_fmt: windows::core::GUID,
+    out_fmt: windows::core::GUID,
+) -> Option<IMFTransform> {
+    unsafe {
+        let input_type = MFT_REGISTER_TYPE_INFO {
+            guidMajorType: MFMediaType_Video,
+            guidSubtype: in_fmt,
+        };
+        let output_type = MFT_REGISTER_TYPE_INFO {
+            guidMajorType: MFMediaType_Video,
+            guidSubtype: out_fmt,
+        };
+        let mut activates = std::ptr::null_mut();
+        let mut count = 0u32;
+        let flags = MFT_ENUM_FLAG_HARDWARE.0 | MFT_ENUM_FLAG_SORTANDFILTER.0;
+        if MFTEnumEx(
+            category,
+            MFT_ENUM_FLAG(flags),
+            Some(&input_type),
+            Some(&output_type),
+            &mut activates,
+            &mut count,
+        )
+        .is_ok()
+            && count > 0
+            && !activates.is_null()
+        {
+            let mut result = None;
+            for i in 0..count as usize {
+                if let Some(activate) = (*activates.add(i)).as_ref() {
+                    if let Ok(transform) = activate.ActivateObject::<IMFTransform>() {
+                        result = Some(transform);
+                        break;
+                    }
+                }
+            }
+            CoTaskMemFree(Some(activates as *const _));
+            return result;
+        }
+        None
+    }
+}
 
 fn media_foundation() -> Result<(), String> {
     static STARTED: OnceLock<Result<(), String>> = OnceLock::new();
@@ -42,6 +88,7 @@ fn media_type(
     subtype: &windows::core::GUID,
     width: u32,
     height: u32,
+    fps: u32,
 ) -> Result<IMFMediaType, String> {
     unsafe {
         let ty = MFCreateMediaType().map_err(|e| e.to_string())?;
@@ -51,7 +98,7 @@ fn media_type(
             .map_err(|e| e.to_string())?;
         ty.SetUINT64(&MF_MT_FRAME_SIZE, ((width as u64) << 32) | height as u64)
             .map_err(|e| e.to_string())?;
-        ty.SetUINT64(&MF_MT_FRAME_RATE, (30u64 << 32) | 1)
+        ty.SetUINT64(&MF_MT_FRAME_RATE, ((fps as u64) << 32) | 1)
             .map_err(|e| e.to_string())?;
         ty.SetUINT64(&MF_MT_PIXEL_ASPECT_RATIO, (1u64 << 32) | 1)
             .map_err(|e| e.to_string())?;
@@ -88,7 +135,7 @@ fn refresh_decoder_output(transform: &IMFTransform) -> Result<(), String> {
     Err("H.264 decoder does not offer NV12 output".into())
 }
 
-fn sample(bytes: &[u8], time: i64) -> Result<IMFSample, String> {
+fn sample(bytes: &[u8], time: i64, duration: i64) -> Result<IMFSample, String> {
     unsafe {
         let buffer = MFCreateMemoryBuffer(bytes.len() as u32).map_err(|e| e.to_string())?;
         let mut ptr = std::ptr::null_mut();
@@ -104,7 +151,7 @@ fn sample(bytes: &[u8], time: i64) -> Result<IMFSample, String> {
         sample.AddBuffer(&buffer).map_err(|e| e.to_string())?;
         sample.SetSampleTime(time).map_err(|e| e.to_string())?;
         sample
-            .SetSampleDuration(333_333)
+            .SetSampleDuration(duration)
             .map_err(|e| e.to_string())?;
         Ok(sample)
     }
@@ -168,28 +215,64 @@ fn output(transform: &IMFTransform) -> Result<Output, String> {
 fn bgra_to_nv12(width: u32, height: u32, bgra: &[u8]) -> Vec<u8> {
     let w = width as usize;
     let h = height as usize;
-    let mut out = vec![0u8; w * h * 3 / 2];
-    for y in 0..h {
-        for x in 0..w {
-            let p = (y * w + x) * 4;
-            let b = bgra[p] as i32;
-            let g = bgra[p + 1] as i32;
-            let r = bgra[p + 2] as i32;
-            out[y * w + x] = ((66 * r + 129 * g + 25 * b + 128) >> 8)
-                .saturating_add(16)
-                .clamp(0, 255) as u8;
-            if y % 2 == 0 && x % 2 == 0 {
-                let pixels = [p, p + 4, p + w * 4, p + w * 4 + 4];
-                let b = pixels.iter().map(|&i| bgra[i] as i32).sum::<i32>() / 4;
-                let g = pixels.iter().map(|&i| bgra[i + 1] as i32).sum::<i32>() / 4;
-                let r = pixels.iter().map(|&i| bgra[i + 2] as i32).sum::<i32>() / 4;
-                let uv = w * h + y / 2 * w + x;
-                out[uv] = ((-38 * r - 74 * g + 112 * b + 128) >> 8)
-                    .saturating_add(128)
-                    .clamp(0, 255) as u8;
-                out[uv + 1] = ((112 * r - 94 * g - 18 * b + 128) >> 8)
-                    .saturating_add(128)
-                    .clamp(0, 255) as u8;
+    let total_len = w * h * 3 / 2;
+    let mut out = Vec::with_capacity(total_len);
+    unsafe {
+        out.set_len(total_len);
+    }
+    let uv_offset = w * h;
+    let p_out_y: *mut u8 = out.as_mut_ptr();
+    let p_out_uv: *mut u8 = unsafe { out.as_mut_ptr().add(uv_offset) };
+    let p_bgra = bgra.as_ptr();
+
+    for y in (0..h).step_by(2) {
+        let y_row0 = y * w;
+        let y_row1 = (y + 1) * w;
+        let uv_row = (y / 2) * w;
+        let bgra_row0 = y * w * 4;
+        let bgra_row1 = (y + 1) * w * 4;
+
+        for x in (0..w).step_by(2) {
+            let p00 = bgra_row0 + x * 4;
+            let p01 = p00 + 4;
+            let p10 = bgra_row1 + x * 4;
+            let p11 = p10 + 4;
+
+            unsafe {
+                let b00 = *p_bgra.add(p00) as i32;
+                let g00 = *p_bgra.add(p00 + 1) as i32;
+                let r00 = *p_bgra.add(p00 + 2) as i32;
+
+                let b01 = *p_bgra.add(p01) as i32;
+                let g01 = *p_bgra.add(p01 + 1) as i32;
+                let r01 = *p_bgra.add(p01 + 2) as i32;
+
+                let b10 = *p_bgra.add(p10) as i32;
+                let g10 = *p_bgra.add(p10 + 1) as i32;
+                let r10 = *p_bgra.add(p10 + 2) as i32;
+
+                let b11 = *p_bgra.add(p11) as i32;
+                let g11 = *p_bgra.add(p11 + 1) as i32;
+                let r11 = *p_bgra.add(p11 + 2) as i32;
+
+                *p_out_y.add(y_row0 + x) =
+                    ((66 * r00 + 129 * g00 + 25 * b00 + 128) >> 8).saturating_add(16).clamp(0, 255) as u8;
+                *p_out_y.add(y_row0 + x + 1) =
+                    ((66 * r01 + 129 * g01 + 25 * b01 + 128) >> 8).saturating_add(16).clamp(0, 255) as u8;
+                *p_out_y.add(y_row1 + x) =
+                    ((66 * r10 + 129 * g10 + 25 * b10 + 128) >> 8).saturating_add(16).clamp(0, 255) as u8;
+                *p_out_y.add(y_row1 + x + 1) =
+                    ((66 * r11 + 129 * g11 + 25 * b11 + 128) >> 8).saturating_add(16).clamp(0, 255) as u8;
+
+                let r_avg = (r00 + r01 + r10 + r11 + 2) >> 2;
+                let g_avg = (g00 + g01 + g10 + g11 + 2) >> 2;
+                let b_avg = (b00 + b01 + b10 + b11 + 2) >> 2;
+
+                let uv_idx = uv_row + x;
+                *p_out_uv.add(uv_idx) =
+                    ((-38 * r_avg - 74 * g_avg + 112 * b_avg + 128) >> 8).saturating_add(128).clamp(0, 255) as u8;
+                *p_out_uv.add(uv_idx + 1) =
+                    ((112 * r_avg - 94 * g_avg - 18 * b_avg + 128) >> 8).saturating_add(128).clamp(0, 255) as u8;
             }
         }
     }
@@ -206,18 +289,45 @@ fn nv12_to_bgra(width: u32, height: u32, stride: usize, nv12: &[u8]) -> Result<V
     if coded_height < h || coded_height % 2 != 0 {
         return Err("Short NV12 frame".into());
     }
-    let mut out = vec![0u8; w * h * 4];
+    let total = w * h * 4;
+    let mut out = Vec::with_capacity(total);
+    unsafe {
+        out.set_len(total);
+    }
+    let uv_plane = stride * coded_height;
+    let p_out: *mut u8 = out.as_mut_ptr();
+    let p_nv12 = nv12.as_ptr();
+
     for y in 0..h {
-        for x in 0..w {
-            let yy = (nv12[y * stride + x] as i32 - 16).max(0);
-            let uv = stride * coded_height + y / 2 * stride + x / 2 * 2;
-            let u = nv12[uv] as i32 - 128;
-            let v = nv12[uv + 1] as i32 - 128;
-            let p = (y * w + x) * 4;
-            out[p] = ((298 * yy + 516 * u + 128) >> 8).clamp(0, 255) as u8;
-            out[p + 1] = ((298 * yy - 100 * u - 208 * v + 128) >> 8).clamp(0, 255) as u8;
-            out[p + 2] = ((298 * yy + 409 * v + 128) >> 8).clamp(0, 255) as u8;
-            out[p + 3] = 255;
+        let y_row = y * stride;
+        let uv_row = uv_plane + (y / 2) * stride;
+        let out_row = y * w * 4;
+
+        for x in (0..w).step_by(2) {
+            let u = unsafe { *p_nv12.add(uv_row + x) as i32 - 128 };
+            let v = unsafe { *p_nv12.add(uv_row + x + 1) as i32 - 128 };
+
+            let r_coeff = 409 * v + 128;
+            let g_coeff = -100 * u - 208 * v + 128;
+            let b_coeff = 516 * u + 128;
+
+            let y0 = unsafe { (*p_nv12.add(y_row + x) as i32 - 16).max(0) * 298 };
+            let y1 = unsafe { (*p_nv12.add(y_row + x + 1) as i32 - 16).max(0) * 298 };
+
+            let p0 = out_row + x * 4;
+            let p1 = p0 + 4;
+
+            unsafe {
+                *p_out.add(p0) = ((y0 + b_coeff) >> 8).clamp(0, 255) as u8;
+                *p_out.add(p0 + 1) = ((y0 + g_coeff) >> 8).clamp(0, 255) as u8;
+                *p_out.add(p0 + 2) = ((y0 + r_coeff) >> 8).clamp(0, 255) as u8;
+                *p_out.add(p0 + 3) = 255;
+
+                *p_out.add(p1) = ((y1 + b_coeff) >> 8).clamp(0, 255) as u8;
+                *p_out.add(p1 + 1) = ((y1 + g_coeff) >> 8).clamp(0, 255) as u8;
+                *p_out.add(p1 + 2) = ((y1 + r_coeff) >> 8).clamp(0, 255) as u8;
+                *p_out.add(p1 + 3) = 255;
+            }
         }
     }
     Ok(out)
@@ -227,32 +337,59 @@ pub struct Encoder {
     transform: IMFTransform,
     width: u32,
     height: u32,
+    fps: u32,
     frame: i64,
 }
 
 impl Encoder {
     pub fn new(width: u32, height: u32) -> Result<Self, String> {
+        let bitrate_bps = (width as u64 * height as u64 * 3).clamp(800_000, 16_000_000) as u32;
+        Self::new_with_fps_and_bitrate(width, height, 60, bitrate_bps)
+    }
+
+    pub fn new_with_bitrate(width: u32, height: u32, bitrate_bps: u32) -> Result<Self, String> {
+        Self::new_with_fps_and_bitrate(width, height, 60, bitrate_bps)
+    }
+
+    pub fn new_with_fps_and_bitrate(width: u32, height: u32, fps: u32, bitrate_bps: u32) -> Result<Self, String> {
         if width == 0 || height == 0 || width % 2 != 0 || height % 2 != 0 {
             return Err("H.264 requires even dimensions".into());
         }
+        if !(800_000..=50_000_000).contains(&bitrate_bps) {
+            return Err("H.264 bitrate is out of range".into());
+        }
+        let fps = fps.clamp(30, 240);
         unsafe {
-            let transform: IMFTransform =
-                CoCreateInstance(&CLSID_MSH264EncoderMFT, None, CLSCTX_INPROC_SERVER)
-                    .map_err(|e| e.to_string())?;
+            let transform: IMFTransform = match find_mft_transform(
+                MFT_CATEGORY_VIDEO_ENCODER,
+                MFVideoFormat_NV12,
+                MFVideoFormat_H264,
+            ) {
+                Some(hw) => hw,
+                None => CoCreateInstance(&CLSID_MSH264EncoderMFT, None, CLSCTX_INPROC_SERVER)
+                    .map_err(|e| e.to_string())?,
+            };
             low_latency(&transform);
-            let out = media_type(&MFVideoFormat_H264, width, height)?;
-            out.SetUINT32(
-                &MF_MT_AVG_BITRATE,
-                (width as u64 * height as u64 * 3).clamp(800_000, 16_000_000) as u32,
-            )
-            .map_err(|e| e.to_string())?;
+            if let Ok(api) = transform.cast::<ICodecAPI>() {
+                let _ = api.SetValue(&CODECAPI_AVLowLatencyMode, &VARIANT::from(true));
+                let _ = api.SetValue(&CODECAPI_AVEncCommonRateControlMode, &VARIANT::from(0u32));
+                let _ = api.SetValue(&CODECAPI_AVEncMPVDefaultBPictureCount, &VARIANT::from(0u32));
+                let _ = api.SetValue(&CODECAPI_AVEncCommonQualityVsSpeed, &VARIANT::from(100u32));
+            }
+            let out = media_type(&MFVideoFormat_H264, width, height, fps)?;
+            out.SetUINT32(&MF_MT_AVG_BITRATE, bitrate_bps)
+                .map_err(|e| e.to_string())?;
             out.SetUINT32(&MF_MT_MPEG2_PROFILE, eAVEncH264VProfile_Base.0 as u32)
                 .map_err(|e| e.to_string())?;
             transform
                 .SetOutputType(0, &out, 0)
                 .map_err(|e| e.to_string())?;
+            if let Ok(api) = transform.cast::<ICodecAPI>() {
+                let _ = api.SetValue(&CODECAPI_AVEncCommonMeanBitRate, &VARIANT::from(bitrate_bps));
+                let _ = api.SetValue(&CODECAPI_AVEncCommonQualityVsSpeed, &VARIANT::from(100u32));
+            }
             transform
-                .SetInputType(0, &media_type(&MFVideoFormat_NV12, width, height)?, 0)
+                .SetInputType(0, &media_type(&MFVideoFormat_NV12, width, height, fps)?, 0)
                 .map_err(|e| e.to_string())?;
             transform
                 .ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0)
@@ -264,6 +401,7 @@ impl Encoder {
                 transform,
                 width,
                 height,
+                fps,
                 frame: 0,
             })
         }
@@ -274,9 +412,10 @@ impl Encoder {
             return Err("Invalid BGRA frame".into());
         }
         let nv12 = bgra_to_nv12(self.width, self.height, bgra);
+        let frame_duration_100ns = 10_000_000 / self.fps as i64;
         unsafe {
             self.transform
-                .ProcessInput(0, &sample(&nv12, self.frame * 333_333)?, 0)
+                .ProcessInput(0, &sample(&nv12, self.frame * frame_duration_100ns, frame_duration_100ns)?, 0)
                 .map_err(|e| e.to_string())?;
         }
         self.frame += 1;
@@ -302,15 +441,21 @@ pub struct Decoder {
 impl Decoder {
     pub fn new(width: u32, height: u32) -> Result<Self, String> {
         unsafe {
-            let transform: IMFTransform =
-                CoCreateInstance(&CLSID_MSH264DecoderMFT, None, CLSCTX_INPROC_SERVER)
-                    .map_err(|e| e.to_string())?;
+            let transform: IMFTransform = match find_mft_transform(
+                MFT_CATEGORY_VIDEO_DECODER,
+                MFVideoFormat_H264,
+                MFVideoFormat_NV12,
+            ) {
+                Some(hw) => hw,
+                None => CoCreateInstance(&CLSID_MSH264DecoderMFT, None, CLSCTX_INPROC_SERVER)
+                    .map_err(|e| e.to_string())?,
+            };
             low_latency(&transform);
             transform
-                .SetInputType(0, &media_type(&MFVideoFormat_H264, width, height)?, 0)
+                .SetInputType(0, &media_type(&MFVideoFormat_H264, width, height, 60)?, 0)
                 .map_err(|e| e.to_string())?;
             transform
-                .SetOutputType(0, &media_type(&MFVideoFormat_NV12, width, height)?, 0)
+                .SetOutputType(0, &media_type(&MFVideoFormat_NV12, width, height, 60)?, 0)
                 .map_err(|e| e.to_string())?;
             transform
                 .ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0)
@@ -330,7 +475,7 @@ impl Decoder {
     pub fn decode(&mut self, encoded: &[u8]) -> Result<Option<Vec<u8>>, String> {
         unsafe {
             self.transform
-                .ProcessInput(0, &sample(encoded, self.frame * 333_333)?, 0)
+                .ProcessInput(0, &sample(encoded, self.frame * 166_667, 166_667)?, 0)
                 .map_err(|e| e.to_string())?;
         }
         self.frame += 1;
