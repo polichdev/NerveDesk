@@ -799,18 +799,107 @@
       .home-grid { gap: 8px; }
       .setting-right { flex-wrap: wrap; }
     }
+    .toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      z-index: 10000;
+      pointer-events: none;
+      max-width: 420px;
+      width: calc(100% - 48px);
+    }
+    .toast-card {
+      pointer-events: auto;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      animation: toastSlideIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+    .toast-card.toast-hiding {
+      opacity: 0;
+      transform: translateX(30px) scale(0.96);
+    }
+    @keyframes toastSlideIn {
+      from {
+        opacity: 0;
+        transform: translateY(16px) scale(0.96);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+    .toast-icon {
+      flex-shrink: 0;
+      width: 22px;
+      height: 22px;
+      margin-top: 1px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .toast-icon.success { color: var(--success); }
+    .toast-icon.error { color: var(--danger); }
+    .toast-icon.info { color: var(--accent); }
+    .toast-content {
+      flex: 1;
+      min-width: 0;
+    }
+    .toast-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1.4;
+      word-break: break-word;
+    }
+    .toast-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 3px;
+      line-height: 1.4;
+      word-break: break-all;
+      user-select: text;
+    }
+    .toast-close {
+      background: transparent;
+      border: none;
+      color: var(--text-dark);
+      cursor: pointer;
+      padding: 2px;
+      margin-left: 4px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.15s ease, background 0.15s ease;
+    }
+    .toast-close:hover {
+      color: var(--text);
+      background: var(--card-border-subtle);
+    }
   </style>
 </head>
 <body>
   <aside>
     <div class="nav-list" style="padding-top: 20px; margin-bottom: 12px;">
-      <div class="nav-item active" id="navHome" onclick="switchTab('home')" title="Головна">
+      <div class="nav-item active" id="navHome" onclick="switchTab('home')" title="Головна" data-i18n-title="nav_home">
         <div class="nav-icon">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
         </div>
         <span data-i18n="nav_home">Головна</span>
       </div>
-      <div class="nav-item" id="navDevices" onclick="switchTab('devices')" title="Пристрої">
+      <div class="nav-item" id="navDevices" onclick="switchTab('devices')" title="Пристрої" data-i18n-title="nav_devices">
         <div class="nav-icon">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
         </div>
@@ -820,35 +909,35 @@
 
     <div class="nav-group-title" data-i18n="nav_section_navigation">Навігація</div>
     <div class="nav-list">
-      <div class="nav-item" id="navKvm" onclick="switchTab('kvm')" title="Безмежна миша">
+      <div class="nav-item" id="navKvm" onclick="switchTab('kvm')" title="Безмежна миша" data-i18n-title="nav_kvm">
         <div class="nav-icon">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 0-4 4v12a4 4 0 0 0 8 0V6a4 4 0 0 0-4-4z"/><path d="M12 2v6"/></svg>
         </div>
         <span data-i18n="nav_kvm">Безмежна миша</span>
       </div>
 
-      <div class="nav-item" id="navCast" onclick="switchTab('cast')" title="Трансляція дисплея">
+      <div class="nav-item" id="navCast" onclick="switchTab('cast')" title="Трансляція дисплея" data-i18n-title="nav_cast">
         <div class="nav-icon">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
         </div>
         <span data-i18n="nav_cast">Дублювання екрана</span>
       </div>
 
-      <div class="nav-item" id="navAudio" onclick="switchTab('audio')" title="Аудіоміст">
+      <div class="nav-item" id="navAudio" onclick="switchTab('audio')" title="Аудіоміст" data-i18n-title="nav_audio">
         <div class="nav-icon">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10v4h4l5 4V6l-5 4H4z"/><path d="M17 9a5 5 0 0 1 0 6"/><path d="M20 6a9 9 0 0 1 0 12"/></svg>
         </div>
         <span data-i18n="nav_audio">Аудіоміст</span>
       </div>
 
-      <div class="nav-item" id="navSync" onclick="switchTab('sync')" title="Синхронізація папок">
+      <div class="nav-item" id="navSync" onclick="switchTab('sync')" title="Синхронізація папок" data-i18n-title="nav_sync">
         <div class="nav-icon">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h7l2 2h9v10H3z"/><path d="M7 3h7l2 2"/><path d="M8 14h8"/><path d="m13 11 3 3-3 3"/></svg>
         </div>
         <span data-i18n="nav_sync">Синхронізація папок</span>
       </div>
 
-      <div class="nav-item" id="navMobile" onclick="switchTab('mobile')" title="Мобільний пульт">
+      <div class="nav-item" id="navMobile" onclick="switchTab('mobile')" title="Мобільний пульт" data-i18n-title="nav_mobile">
         <div class="nav-icon">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="3"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
         </div>
@@ -863,7 +952,7 @@
         </div>
         <span data-i18n="nav_help">Інструкції</span>
       </div>
-      <div class="nav-item" id="navSettings" onclick="switchTab('settings')" title="Налаштування" style="margin: 0;">
+      <div class="nav-item" id="navSettings" onclick="switchTab('settings')" title="Налаштування" data-i18n-title="nav_settings" style="margin: 0;">
         <div class="nav-icon">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         </div>
@@ -1050,7 +1139,7 @@
               </div>
             </div>
             <div class="setting-right">
-              <span id="thisDeviceNameText" style="font-family: var(--font-mono); font-size: 13px; font-weight: 600; color: var(--text);">DESKTOP-PC</span>
+              <span id="thisDeviceNameText" style="font-family: var(--font-mono); font-size: 13px; font-weight: 600; color: var(--text);">—</span>
               <button class="btn-icon" onclick="copyDeviceName()" title="Скопіювати ім'я" data-i18n-title="copy_name_title">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
               </button>
@@ -1486,6 +1575,38 @@
           <button class="btn btn-secondary" style="align-self: flex-start;" onclick="openMobileReceivedFolder()" data-i18n="mobile_share_open_folder">Відкрити отримані файли</button>
         </div>
 
+        <div class="section-title" data-i18n="mobile_camera_section_title">Віртуальна вебкамера (Continuity Camera)</div>
+        <div class="setting-card" style="align-items: stretch; flex-direction: column; gap: 14px;">
+          <div>
+            <div class="setting-name" data-i18n="mobile_camera_title">Камера смартфона або іншого ПК як вебкамера</div>
+            <div class="setting-desc" id="continuityCamStatusDesc" data-i18n="mobile_camera_desc">Транслюйте камеру смартфона з низькою затримкою для Zoom, Google Meet, Teams, Discord та OBS.</div>
+          </div>
+
+          <div id="continuityCamPreviewBox" style="width: 100%; aspect-ratio: 16 / 9; max-height: 440px; min-height: 280px; background: #000; border-radius: 10px; overflow: hidden; display: flex; align-items: center; justify-content: center; position: relative; border: 1px solid var(--card-border);">
+            <img id="continuityCamImg" style="max-width: 100%; max-height: 100%; object-fit: contain; display: none; transition: transform 0.15s ease;" alt="">
+            <div id="continuityCamPlaceholder" style="display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--text-muted); font-size: 13px;">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              <span data-i18n="mobile_camera_waiting">Відкрийте вкладку «Камера» на смартфоні або іншому ПК та почніть трансляцію</span>
+            </div>
+          </div>
+
+          <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+            <button class="btn btn-secondary" onclick="rotateContinuityCam()" data-i18n="btn_cam_rotate">Повернути на 90°</button>
+            <button class="btn btn-secondary" id="btnToggleCamMirror" onclick="toggleContinuityCamMirror()" data-i18n="btn_cam_mirror">Дзеркало</button>
+            <button class="btn btn-secondary" onclick="toggleContinuityCamFullscreen()" data-i18n="btn_cam_fullscreen">На весь екран</button>
+            <button class="btn btn-secondary" onclick="copyContinuityCamStreamUrl()" data-i18n="btn_cam_copy_url">Скопіювати посилання для OBS</button>
+          </div>
+
+          <div style="font-size: 12px; color: var(--text-muted); line-height: 1.6; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--card-border); border-radius: 8px; padding: 10px 14px;">
+            <strong data-i18n="mobile_cam_obs_hint_title">Як використовувати у Zoom / Meet / Teams / Discord:</strong>
+            <ol style="margin: 4px 0 0 18px; padding: 0;">
+              <li data-i18n="mobile_cam_step_1">У Google Meet, Zoom або Teams у налаштуваннях відео виберіть «OBS Virtual Camera» (програму OBS відкривати НЕ потрібно).</li>
+              <li data-i18n="mobile_cam_step_2">NerveDesk транслює потік зі смартфона у системну віртуальну камеру Windows автоматично у фоні.</li>
+              <li data-i18n="mobile_cam_step_3">Для OBS Studio (за бажанням) потік також доступний за кнопкою копіювання вище.</li>
+            </ol>
+          </div>
+        </div>
+
       </div>
 
       <div class="view-container" id="viewHelp">
@@ -1653,6 +1774,8 @@
       <div class="sync-actions"><button class="btn btn-secondary" onclick="respondSyncRequest(false)" data-i18n="sync_request_decline">Відхилити</button><button class="btn" onclick="respondSyncRequest(true)" data-i18n="sync_request_accept">Підтвердити</button></div>
     </div>
   </div>
+
+  <div id="toastContainer" class="toast-container" aria-live="polite"></div>
 
   <script>
     const translations = {
@@ -1905,6 +2028,7 @@
         btn_copy_url: "Скопіювати",
         btn_open_browser: "Відкрити в браузері",
         toast_copied_url: "Посилання скопійовано в буфер обміну!",
+        toast_cam_obs_copied: "Адресу потоку для OBS Studio скопійовано!",
         mobile_share_title: "Швидкий обмін",
         mobile_share_from_pc: "З ПК на телефон",
         mobile_share_hint: "Оберіть файл або введіть текст. Він стане доступним у вкладці «Обмін» на телефоні.",
@@ -1922,6 +2046,18 @@
         mobile_share_receive_hint: "Отримані файли зберігаються у вибраній папці.",
         mobile_share_change_folder: "Вибрати папку",
         mobile_share_default_folder: "За замовчуванням",
+        mobile_camera_section_title: "Віртуальна вебкамера (Continuity Camera)",
+        mobile_camera_title: "Камера смартфона або іншого ПК як вебкамера",
+        mobile_camera_desc: "Транслюйте камеру смартфона з низькою затримкою для Zoom, Google Meet, Teams, Discord та OBS.",
+        mobile_camera_waiting: "Відкрийте вкладку «Камера» на смартфоні або іншому ПК та почніть трансляцію",
+        btn_cam_rotate: "Повернути на 90°",
+        btn_cam_mirror: "Дзеркало",
+        btn_cam_fullscreen: "На весь екран",
+        btn_cam_copy_url: "Скопіювати посилання для OBS",
+        mobile_cam_obs_hint_title: "Як використовувати у Zoom / Meet / Teams / Discord:",
+        mobile_cam_step_1: "У Google Meet, Zoom або Teams у налаштуваннях відео виберіть «OBS Virtual Camera» (програму OBS відкривати НЕ потрібно).",
+        mobile_cam_step_2: "NerveDesk транслює потік зі смартфона у системну віртуальну камеру Windows автоматично у фоні.",
+        mobile_cam_step_3: "Для OBS Studio (за бажанням) потік також доступний за кнопкою копіювання вище.",
 
         settings_title: "Загальні налаштування",
         settings_desc: "Налаштування параметрів програми, оформлення, мови та мережевих зв'язків.",
@@ -2196,6 +2332,7 @@
         btn_copy_url: "Copy Link",
         btn_open_browser: "Open in Browser",
         toast_copied_url: "Link copied to clipboard!",
+        toast_cam_obs_copied: "Stream URL for OBS Studio copied to clipboard!",
         mobile_share_title: "Quick Share",
         mobile_share_from_pc: "From PC to phone",
         mobile_share_hint: "Choose a file or enter text. It will appear in the Share tab on your phone.",
@@ -2213,6 +2350,18 @@
         mobile_share_receive_hint: "Received files are saved in the selected folder.",
         mobile_share_change_folder: "Choose folder",
         mobile_share_default_folder: "Default",
+        mobile_camera_section_title: "Virtual Webcam (Continuity Camera)",
+        mobile_camera_title: "Phone or Second PC Camera as Webcam",
+        mobile_camera_desc: "Stream your smartphone camera with ultra-low latency for Zoom, Google Meet, Teams, Discord, and OBS.",
+        mobile_camera_waiting: "Open the Camera tab on your phone or second PC and start broadcasting",
+        btn_cam_rotate: "Rotate 90°",
+        btn_cam_mirror: "Mirror",
+        btn_cam_fullscreen: "Fullscreen",
+        btn_cam_copy_url: "Copy URL for OBS",
+        mobile_cam_obs_hint_title: "How to use in Zoom / Meet / Teams / Discord:",
+        mobile_cam_step_1: "In Google Meet, Zoom, or Teams video settings, select 'OBS Virtual Camera' (you DO NOT need to open OBS).",
+        mobile_cam_step_2: "NerveDesk automatically feeds the phone video directly into the Windows virtual camera in the background.",
+        mobile_cam_step_3: "For OBS Studio (optional), the stream is also available via the copy button above.",
 
         settings_title: "General Settings",
         settings_desc: "Configure application parameters, hardware bindings, and network settings.",
@@ -2240,13 +2389,75 @@
       }
     };
 
-    let currentLang = localStorage.getItem('nervedesk_lang') || 'en';
+    let currentLang = localStorage.getItem('nervedesk_lang') || 'uk';
     let currentTheme = localStorage.getItem('nervedesk_theme') || 'dark';
 
     function t(key, fallback = "") {
       const langDict = translations[currentLang] || translations.en;
       return langDict[key] !== undefined ? langDict[key] : (fallback || key);
     }
+
+    function showToast(title, type = 'info', subtitle = '', duration = 3500) {
+      const container = document.getElementById('toastContainer');
+      if (!container) return;
+      const toast = document.createElement('div');
+      toast.className = 'toast-card';
+
+      let iconSvg = '';
+      if (type === 'success') {
+        iconSvg = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
+      } else if (type === 'error') {
+        iconSvg = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
+      } else {
+        iconSvg = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>';
+      }
+
+      const iconDiv = document.createElement('div');
+      iconDiv.className = 'toast-icon ' + type;
+      iconDiv.innerHTML = iconSvg;
+
+      const contentDiv = document.createElement('div');
+      contentDiv.className = 'toast-content';
+
+      const titleDiv = document.createElement('div');
+      titleDiv.className = 'toast-title';
+      titleDiv.textContent = title;
+      contentDiv.appendChild(titleDiv);
+
+      if (subtitle) {
+        const descDiv = document.createElement('div');
+        descDiv.className = 'toast-desc';
+        descDiv.textContent = subtitle;
+        contentDiv.appendChild(descDiv);
+      }
+
+      const closeBtn = document.createElement('button');
+      closeBtn.className = 'toast-close';
+      closeBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+      closeBtn.onclick = () => removeToast(toast);
+
+      toast.appendChild(iconDiv);
+      toast.appendChild(contentDiv);
+      toast.appendChild(closeBtn);
+      container.appendChild(toast);
+
+      let timer = setTimeout(() => removeToast(toast), duration);
+      toast.onmouseenter = () => clearTimeout(timer);
+      toast.onmouseleave = () => { timer = setTimeout(() => removeToast(toast), 1500); };
+    }
+
+    function removeToast(toast) {
+      if (!toast || toast._removing) return;
+      toast._removing = true;
+      toast.classList.add('toast-hiding');
+      setTimeout(() => { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 220);
+    }
+
+    window.alert = function(msg) {
+      const str = String(msg);
+      const isErr = /помилка|error|failed|не вдалося/i.test(str);
+      showToast(str, isErr ? 'error' : 'info');
+    };
 
     function setLanguage(lang, persist = true) {
       currentLang = lang;
@@ -2403,6 +2614,7 @@
         }
       } catch (e) {}
       refreshDesktopShareStatus();
+      updateContinuityCameraStatus();
     }
 
     async function regenerateMobilePin() {
@@ -2433,7 +2645,7 @@
       const urlInput = document.getElementById('mobileUrlInput');
       if (urlInput && urlInput.value) {
         navigator.clipboard.writeText(urlInput.value).then(() => {
-          alert(t('toast_copied_url'));
+          showToast(t('toast_copied_url'), 'success');
         }).catch(() => {});
       }
     }
@@ -2503,8 +2715,113 @@
       } catch (error) { alert(String(error)); }
     }
 
+    let continuityCamMirrored = false;
+    let continuityCamRotation = 0;
+    let continuityCamStreaming = false;
+
+    function applyContinuityCamTransform() {
+      const img = document.getElementById('continuityCamImg');
+      const box = document.getElementById('continuityCamPreviewBox');
+      if (!img) return;
+      const isRotated90 = (continuityCamRotation === 90 || continuityCamRotation === 270);
+      let scale = 1;
+      if (isRotated90 && box) {
+        const boxW = box.clientWidth || 640;
+        const boxH = box.clientHeight || 360;
+        const imgW = img.offsetWidth || 1;
+        const imgH = img.offsetHeight || 1;
+        const scaleW = boxW / imgH;
+        const scaleH = boxH / imgW;
+        scale = Math.min(scaleW, scaleH);
+      }
+      const parts = [];
+      if (continuityCamMirrored) parts.push('scaleX(-1)');
+      if (continuityCamRotation) parts.push(`rotate(${continuityCamRotation}deg)`);
+      if (isRotated90 && scale > 1.01) parts.push(`scale(${scale.toFixed(4)})`);
+      img.style.transform = parts.length > 0 ? parts.join(' ') : 'none';
+    }
+
+    function rotateContinuityCam() {
+      continuityCamRotation = (continuityCamRotation + 90) % 360;
+      applyContinuityCamTransform();
+      callTauri('set_continuity_camera_transform', { rotation: continuityCamRotation, mirrored: continuityCamMirrored }).catch(() => {});
+    }
+
+    function toggleContinuityCamFullscreen() {
+      const box = document.getElementById('continuityCamPreviewBox');
+      if (!box) return;
+      if (!document.fullscreenElement) {
+        box.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+
+    async function updateContinuityCameraStatus() {
+      try {
+        const info = await callTauri('get_continuity_camera_info');
+        const img = document.getElementById('continuityCamImg');
+        const placeholder = document.getElementById('continuityCamPlaceholder');
+        if (info && info.active) {
+          if (!continuityCamStreaming && !document.hidden) {
+            continuityCamStreaming = true;
+            if (img) {
+              img.onerror = () => { continuityCamStreaming = false; };
+              const url = info.stream_url || ('http://127.0.0.1:' + (info.http_port || 5859) + '/camera/mjpeg');
+              img.src = `${url}?t=${Date.now()}`;
+              img.style.display = 'block';
+              applyContinuityCamTransform();
+            }
+            if (placeholder) placeholder.style.display = 'none';
+          }
+        } else {
+          continuityCamStreaming = false;
+          if (img) {
+            img.style.display = 'none';
+            img.removeAttribute('src');
+          }
+          if (placeholder) placeholder.style.display = 'flex';
+        }
+      } catch (_) {}
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        continuityCamStreaming = false;
+        const img = document.getElementById('continuityCamImg');
+        if (img) img.removeAttribute('src');
+      } else {
+        updateContinuityCameraStatus();
+      }
+    });
+
+    window.addEventListener('resize', applyContinuityCamTransform);
+
+    function toggleContinuityCamMirror() {
+      continuityCamMirrored = !continuityCamMirrored;
+      applyContinuityCamTransform();
+      const btn = document.getElementById('btnToggleCamMirror');
+      if (btn) {
+        btn.classList.toggle('active', continuityCamMirrored);
+      }
+      callTauri('set_continuity_camera_transform', { rotation: continuityCamRotation, mirrored: continuityCamMirrored }).catch(() => {});
+    }
+
+    async function copyContinuityCamStreamUrl() {
+      try {
+        const info = await callTauri('get_continuity_camera_info');
+        const base = (info && info.obs_url) ? info.obs_url : (info && info.stream_url ? info.stream_url : 'http://127.0.0.1:5859/camera/obs');
+        const parsed = new URL(base);
+        if (continuityCamRotation) parsed.searchParams.set('rotate', String(continuityCamRotation));
+        if (continuityCamMirrored) parsed.searchParams.set('mirror', '1');
+        const finalUrl = parsed.toString();
+        await navigator.clipboard.writeText(finalUrl);
+        showToast(t('toast_cam_obs_copied'), 'success', finalUrl);
+      } catch (_) {}
+    }
+
     let activeEdge = 'Right';
-    let myDeviceName = 'DESKTOP-PC';
+    let myDeviceName = '';
     let isPeerDisabled = false;
     let isProjecting = false;
     let isReconnecting = false;
@@ -3474,8 +3791,11 @@
     setInterval(refreshMetrics, 1000);
     refreshMetrics();
     setInterval(() => {
-      if (document.getElementById('viewMobile').classList.contains('active')) refreshDesktopShareStatus();
-    }, 3000);
+      if (document.getElementById('viewMobile').classList.contains('active')) {
+        refreshDesktopShareStatus();
+        updateContinuityCameraStatus();
+      }
+    }, 2000);
     setInterval(() => {
       if (document.getElementById('viewAudio').classList.contains('active')) refreshPhoneAudioStatus();
     }, 3000);

@@ -47,7 +47,7 @@
   </div>
   <script>
     const invoke = window.__TAURI__.core.invoke;
-    const langAtLoad = localStorage.getItem('nervedesk_lang') || 'en';
+    const langAtLoad = localStorage.getItem('nervedesk_lang') || 'uk';
     const uk = langAtLoad === 'uk';
     function applyTheme() {
       const theme = localStorage.getItem('nervedesk_theme') || 'dark';
@@ -69,7 +69,7 @@
     let metrics = null;
     async function refresh() {
       try {
-        if ((localStorage.getItem('nervedesk_lang') || 'en') !== langAtLoad) { location.reload(); return; }
+        if ((localStorage.getItem('nervedesk_lang') || 'uk') !== langAtLoad) { location.reload(); return; }
         applyTheme();
         metrics = await invoke('get_metrics');
         document.getElementById('peerName').textContent = metrics.peer_device || labels.noPeer;
