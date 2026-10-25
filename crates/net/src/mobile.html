@@ -48,10 +48,10 @@
 
     .bottom-nav {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(6, minmax(0, 1fr));
       align-items: stretch;
-      gap: 3px;
-      padding: 7px 8px calc(7px + env(safe-area-inset-bottom));
+      gap: 2px;
+      padding: 5px 3px calc(5px + env(safe-area-inset-bottom));
       background: rgba(24, 26, 32, 0.98);
       border-top: 1px solid var(--border);
       flex-shrink: 0;
@@ -60,23 +60,24 @@
 
     .tab-btn {
       min-width: 0;
-      min-height: 54px;
+      min-height: 48px;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 3px;
+      gap: 2px;
       background: transparent;
       border: 0;
-      border-radius: 10px;
+      border-radius: 8px;
       color: var(--text-muted);
       font: inherit;
-      font-size: 10px;
+      font-size: 9px;
       font-weight: 600;
       cursor: pointer;
+      padding: 2px 1px;
     }
 
-    .tab-btn svg { width: 21px; height: 21px; stroke: currentColor; }
+    .tab-btn svg { width: 18px; height: 18px; stroke: currentColor; }
     .tab-btn.active { color: #fff; background: rgba(0, 120, 212, 0.22); }
     .tab-btn.active svg { color: #55aaff; }
 
@@ -106,6 +107,91 @@
     .share-actions button.secondary { background: var(--surface); color: var(--text); }
     .share-outbox { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--border); overflow-wrap: anywhere; }
     .share-outbox a { color: var(--accent); }
+
+    #tabGame {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      z-index: 999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      touch-action: none;
+    }
+    #tabGame.active {
+      display: flex;
+    }
+    #gameWrap {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      background: #000;
+    }
+    #gameCanvas {
+      max-width: 100%;
+      max-height: 100%;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+    #gameFallbackImg {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: none;
+    }
+    #gameHud {
+      position: absolute;
+      top: max(12px, env(safe-area-inset-top));
+      right: max(16px, env(safe-area-inset-right));
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(18, 20, 26, 0.82);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 20px;
+      padding: 6px 14px;
+      z-index: 1001;
+      transition: opacity 0.35s ease;
+      user-select: none;
+    }
+    #gameHud.faded {
+      opacity: 0.18;
+    }
+    .game-hud-stat {
+      font-size: 11px;
+      font-weight: 700;
+      color: #10b981;
+      letter-spacing: 0.05em;
+    }
+    #gameAudioStatus {
+      max-width: 150px;
+      color: #f87171;
+      font-size: 10px;
+      line-height: 1.2;
+    }
+    .game-hud-btn {
+      background: transparent;
+      border: none;
+      color: var(--text);
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 6px;
+    }
+    .game-hud-btn:active {
+      background: rgba(255, 255, 255, 0.2);
+    }
 
     #screenWrap {
       flex: 1;
@@ -398,6 +484,129 @@
       color: #ffffff;
       font-weight: 700;
     }
+
+    #tabCamera {
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px;
+      gap: 12px;
+      background: #000;
+    }
+    #tabCamera.active {
+      display: flex;
+    }
+    .cam-preview-container {
+      position: relative;
+      width: 100%;
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0b0d11;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    #camVideo {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .cam-badge {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      background: rgba(18, 20, 26, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #94a3b8;
+      backdrop-filter: blur(8px);
+      letter-spacing: 0.05em;
+    }
+    .cam-badge.live {
+      color: #10b981;
+      border-color: rgba(16, 185, 129, 0.4);
+    }
+    .cam-stats {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      background: rgba(18, 20, 26, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #38bdf8;
+      backdrop-filter: blur(8px);
+    }
+    .cam-controls {
+      width: 100%;
+      max-width: 420px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .cam-main-btn {
+      width: 100%;
+      height: 48px;
+      border-radius: 12px;
+      border: none;
+      background: var(--accent);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(0, 120, 212, 0.35);
+    }
+    .cam-main-btn.stop {
+      background: var(--danger);
+      box-shadow: 0 4px 14px rgba(239, 68, 68, 0.35);
+    }
+    .cam-btn-row {
+      display: flex;
+      gap: 8px;
+    }
+    .cam-sub-btn {
+      flex: 1;
+      height: 40px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #181a20;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+    .cam-sub-btn:active {
+      background: var(--accent);
+      color: #fff;
+    }
+    .cam-select {
+      flex: 1;
+      height: 40px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #181a20;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 0 10px;
+      outline: none;
+    }
   </style>
 </head>
 <body>
@@ -429,6 +638,22 @@
       <button onclick="submitPin()" style="width: 100%; height: 46px; margin-top: 14px; background: var(--accent); border: none; border-radius: 10px; color: #fff; font-size: 15px; font-weight: 700; cursor: pointer;">
         <span data-i18n="confirm">Confirm</span>
       </button>
+    </div>
+  </div>
+
+  <div class="tab-content" id="tabGame">
+    <div id="gameWrap" onclick="resetGameHudTimer()" ontouchstart="resetGameHudTimer()">
+      <canvas id="gameCanvas"></canvas>
+      <img id="gameFallbackImg" alt="Гра" data-i18n-alt="game_stream_alt">
+      <div id="gameHud">
+        <span class="game-hud-stat" id="gameFpsBadge">-- FPS</span>
+        <span class="game-hud-stat" id="gameVideoStats"></span>
+        <span id="gameAudioStatus"></span>
+        <button class="game-hud-btn" id="gameFpsBtn" onclick="toggleGameFps(event)" title="Частота кадрів" data-i18n-title="game_fps_title">60 FPS</button>
+        <button class="game-hud-btn" id="gameQualityBtn" onclick="toggleGameQuality(event)" title="Якість відео" data-i18n-title="game_quality_title">720p</button>
+        <button class="game-hud-btn" id="gameAudioBtn" onclick="toggleGameAudio(event)" title="Звук гри" data-i18n-title="game_audio_title">🔊</button>
+        <button class="game-hud-btn" onclick="exitGameMode(event)" title="Вийти з гри" data-i18n-title="game_exit_title">✕</button>
+      </div>
     </div>
   </div>
 
@@ -506,6 +731,35 @@
     </div>
   </div>
 
+  <div class="tab-content" id="tabCamera">
+    <div class="cam-preview-container">
+      <video id="camVideo" autoplay playsinline muted></video>
+      <div class="cam-badge" id="camBadge" data-i18n="cam_offline">OFFLINE</div>
+      <div class="cam-stats" id="camStats">0 FPS</div>
+    </div>
+    <div class="cam-controls">
+      <button class="cam-main-btn" id="camBroadcastBtn" onclick="toggleCameraBroadcast()">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4" fill="currentColor"/></svg>
+        <span id="camBroadcastLabel" data-i18n="cam_start">Start Camera</span>
+      </button>
+      <div class="cam-btn-row">
+        <button class="cam-sub-btn" id="camFlipBtn" onclick="flipCamera()">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0-4.418-3.582-8-8-8s-8 3.582-8 8c0 2.21 0 4.42 2 6l-2 2h6v-6l-2 2c-1.33-1.33-2-2.67-2-4 0-3.314 2.686-6 6-6s6 2.686 6 6-2.686 6-6 6v2c4.418 0 8-3.582 8-8z"/></svg>
+          <span data-i18n="cam_flip">Flip</span>
+        </button>
+        <button class="cam-sub-btn" id="camTorchBtn" onclick="toggleTorch()">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6V2H6v4l3 3v9a3 3 0 0 0 6 0V9l3-3z"/></svg>
+          <span data-i18n="cam_torch">Torch</span>
+        </button>
+        <select id="camQualitySelect" class="cam-select" onchange="changeCameraQuality(this.value)">
+          <option value="60fps" selected data-i18n="cam_60fps">60 FPS (Fast 540p)</option>
+          <option value="720" data-i18n="cam_720p">720p HD</option>
+          <option value="1080" data-i18n="cam_1080p">1080p FHD</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
   <div id="keyDrawer">
     <div class="key-input-row">
       <input type="text" id="textInput" class="key-input" placeholder="Type text to send to the PC..." data-i18n-placeholder="text_placeholder">
@@ -520,17 +774,23 @@
   </div>
 
   <nav class="bottom-nav" aria-label="Mobile controls">
-    <button class="tab-btn active" id="tabScreenBtn" onclick="switchTab('screen')" aria-label="Screen">
-      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg><span data-i18n="screen">Screen</span>
+    <button class="tab-btn active" id="tabScreenBtn" onclick="switchTab('screen')" aria-label="Екран">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg><span data-i18n="screen">Екран</span>
     </button>
-    <button class="tab-btn" id="tabTrackpadBtn" onclick="switchTab('trackpad')" aria-label="Trackpad">
-      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M3 13h18M12 13v8"/></svg><span data-i18n="trackpad">Trackpad</span>
+    <button class="tab-btn" id="tabGameBtn" onclick="switchTab('game')" aria-label="Гра">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="4"/><path d="M6 12h4M8 10v4M15 11h.01M18 13h.01"/></svg><span data-i18n="game">Гра</span>
     </button>
-    <button class="tab-btn" id="tabAudioBtn" onclick="switchTab('audio')" aria-label="Audio">
-      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M4 9v6h4l5 4V5L8 9H4zM17 9a5 5 0 0 1 0 6M19 6a9 9 0 0 1 0 12"/></svg><span data-i18n="audio">Audio</span>
+    <button class="tab-btn" id="tabTrackpadBtn" onclick="switchTab('trackpad')" aria-label="Тачпад">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M3 13h18M12 13v8"/></svg><span data-i18n="trackpad">Тачпад</span>
     </button>
-    <button class="tab-btn" id="tabShareBtn" onclick="switchTab('share')" aria-label="Share">
-      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 16V3m0 0L7 8m5-5 5 5M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg><span data-i18n="share">Share</span>
+    <button class="tab-btn" id="tabCameraBtn" onclick="switchTab('camera')" aria-label="Камера">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg><span data-i18n="camera">Камера</span>
+    </button>
+    <button class="tab-btn" id="tabAudioBtn" onclick="switchTab('audio')" aria-label="Звук">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M4 9v6h4l5 4V5L8 9H4zM17 9a5 5 0 0 1 0 6M19 6a9 9 0 0 1 0 12"/></svg><span data-i18n="audio">Звук</span>
+    </button>
+    <button class="tab-btn" id="tabShareBtn" onclick="switchTab('share')" aria-label="Обмін">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 16V3m0 0L7 8m5-5 5 5M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg><span data-i18n="share">Обмін</span>
     </button>
   </nav>
 
@@ -538,32 +798,53 @@
     const mobileTranslations = {
       en: {
         pin_title: 'NerveDesk access', pin_subtitle: 'Enter the 6-digit PIN shown on your computer', confirm: 'Confirm',
-        screen: 'Screen', trackpad: 'Trackpad', audio: 'Audio', audio_title: 'PC audio on your phone', audio_description: 'Connect the phone and PC to the same Wi-Fi network, then tap Play audio.', audio_play: 'Play audio', audio_stop: 'Stop audio', audio_playing: 'Playing PC audio', audio_error: 'Could not play PC audio', left_short: 'Left', right_short: 'Right', double_click: 'Double', keyboard: 'Keys',
+        screen: 'Screen', game: 'Game', trackpad: 'Trackpad', audio: 'Audio', audio_title: 'PC audio on your phone', audio_description: 'Connect the phone and PC to the same Wi-Fi network, then tap Play audio.', audio_play: 'Play audio', audio_stop: 'Stop audio', audio_playing: 'Playing PC audio', audio_error: 'Could not play PC audio', left_short: 'Left', right_short: 'Right', double_click: 'Double', keyboard: 'Keys',
         trackpad_hint_title: 'Touchpad', trackpad_hint_move: 'Drag a finger to move the cursor',
         trackpad_hint_tap: 'Tap to left-click; tap with two fingers to right-click', scroll: 'Scroll',
         left_button: 'Left button', right_button: 'Right button', text_placeholder: 'Type text to send to the PC...', send: 'Send',
         pin_required: 'Enter the 6-digit PIN', pin_invalid: 'Incorrect PIN. Try again', connection_error: 'Could not connect to the PC',
         session_expired: 'Session expired or the PIN changed',
+        camera: 'Camera', cam_start: 'Start Camera', cam_stop: 'Stop Broadcast',
+        cam_live: 'BROADCASTING', cam_offline: 'OFFLINE', cam_flip: 'Flip', cam_torch: 'Torch',
+        cam_quality: 'Quality', cam_err: 'Camera permission denied or camera not found',
+        game_fps_title: 'Frame rate', game_quality_title: 'Video quality',
+        game_audio_title: 'Game sound', game_exit_title: 'Exit Game Mode', game_stream_alt: 'Game stream',
+        cam_60fps: '60 FPS (Fast 540p)', cam_720p: '720p HD', cam_1080p: '1080p FHD',
         share: 'Share', share_title: 'Quick Share', share_description: 'Send files, photos, text, or a link to this PC. Files are saved in the folder selected on the PC.', share_choose_files: 'Choose files', share_choose_photos: 'Choose photos', share_text_hint: 'Paste text or a link', share_send_text: 'Send text to PC', share_from_pc: 'From this PC', share_from_pc_hint: 'Prepare a file or text in NerveDesk on your PC, then download or copy it here.', share_copy_text: 'Copy text', share_download: 'Download file', share_refresh: 'Refresh', share_sent: 'Sent to PC', share_failed: 'Could not send', share_empty: 'Nothing shared yet', share_too_large: 'Maximum file size is 100 MB'
       },
       uk: {
         pin_title: 'Доступ до NerveDesk', pin_subtitle: 'Введіть 6-значний PIN-код, показаний на екрані вашого комп’ютера', confirm: 'Підтвердити',
-        screen: 'Екран', trackpad: 'Тачпад', audio: 'Звук', audio_title: 'Звук ПК на телефоні', audio_description: 'Підключіть телефон і ПК до однієї мережі Wi-Fi та натисніть «Відтворити звук».', audio_play: 'Відтворити звук', audio_stop: 'Зупинити звук', audio_playing: 'Звук ПК відтворюється', audio_error: 'Не вдалося відтворити звук ПК', left_short: 'ЛКМ', right_short: 'ПКМ', double_click: '2x Клік', keyboard: 'Клавіші',
+        screen: 'Екран', game: 'Гра', trackpad: 'Тачпад', audio: 'Звук', audio_title: 'Звук ПК на телефоні', audio_description: 'Підключіть телефон і ПК до однієї мережі Wi-Fi та натисніть «Відтворити звук».', audio_play: 'Відтворити звук', audio_stop: 'Зупинити звук', audio_playing: 'Звук ПК відтворюється', audio_error: 'Не вдалося відтворити звук ПК', left_short: 'ЛКМ', right_short: 'ПКМ', double_click: '2x Клік', keyboard: 'Клавіші',
         trackpad_hint_title: 'Сенсорна панель', trackpad_hint_move: 'Водіть пальцем для руху курсору',
         trackpad_hint_tap: 'Тап — лівий клік, тап двома пальцями — правий клік', scroll: 'Прокрутка',
         left_button: 'Ліва кнопка (ЛКМ)', right_button: 'Права кнопка (ПКМ)', text_placeholder: 'Введіть текст для надсилання на ПК...', send: 'Надіслати',
         pin_required: 'Введіть 6 цифр PIN-коду', pin_invalid: 'Невірний PIN-код. Спробуйте ще раз', connection_error: 'Помилка зв’язку з ПК',
         session_expired: 'Сесію завершено або змінено PIN',
+        camera: 'Камера', cam_start: 'Увімкнути камеру', cam_stop: 'Зупинити трансляцію',
+        cam_live: 'В ЕФІРІ', cam_offline: 'ОФЛАЙН', cam_flip: 'Змінити камеру', cam_torch: 'Спалах',
+        cam_quality: 'Якість', cam_err: 'Доступ до камери заборонено або її не знайдено',
+        game_fps_title: 'Частота кадрів', game_quality_title: 'Якість відео',
+        game_audio_title: 'Звук гри', game_exit_title: 'Вийти з гри', game_stream_alt: 'Ігровий потік',
+        cam_60fps: '60 FPS (Швидко 540p)', cam_720p: '720p HD', cam_1080p: '1080p FHD',
         share: 'Обмін', share_title: 'Швидкий обмін', share_description: 'Надішліть файли, фото, текст або посилання на ПК. Файли зберігаються у вибраній на ПК папці.', share_choose_files: 'Вибрати файли', share_choose_photos: 'Вибрати фото', share_text_hint: 'Вставте текст або посилання', share_send_text: 'Надіслати текст на ПК', share_from_pc: 'Із цього ПК', share_from_pc_hint: 'Підготуйте файл або текст у NerveDesk на ПК, а тут завантажте чи скопіюйте.', share_copy_text: 'Скопіювати текст', share_download: 'Завантажити файл', share_refresh: 'Оновити', share_sent: 'Надіслано на ПК', share_failed: 'Не вдалося надіслати', share_empty: 'Поки нічого не підготовлено', share_too_large: 'Максимальний розмір файла — 100 МБ'
       }
     };
-    const phoneLocale = navigator.languages?.[0] || navigator.language || 'en';
-    const mobileLanguage = /^uk(?:-|$)/i.test(phoneLocale) ? 'uk' : 'en';
+    const urlParams = new URLSearchParams(window.location.search);
+    const langParam = urlParams.get('lang');
+    const storedLang = localStorage.getItem('nervedesk_mobile_lang');
+    const phoneLocale = navigator.languages?.[0] || navigator.language || '';
+    const isExplicitEn = (langParam === 'en') || (storedLang === 'en') || (/^en/i.test(phoneLocale) && !/^uk|^ru/i.test(phoneLocale) && langParam !== 'uk');
+    const mobileLanguage = isExplicitEn ? 'en' : 'uk';
+    if (langParam === 'uk' || langParam === 'en') {
+      try { localStorage.setItem('nervedesk_mobile_lang', langParam); } catch (_) {}
+    }
     function mt(key) { return mobileTranslations[mobileLanguage][key] || key; }
     function applyMobileLanguage() {
       document.documentElement.lang = mobileLanguage;
       document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = mt(el.dataset.i18n); });
       document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = mt(el.dataset.i18nPlaceholder); });
+      document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = mt(el.dataset.i18nTitle); });
+      document.querySelectorAll('[data-i18n-alt]').forEach(el => { el.alt = mt(el.dataset.i18nAlt); });
       document.querySelectorAll('.bottom-nav .tab-btn').forEach(button => {
         const key = button.querySelector('[data-i18n]')?.dataset.i18n;
         if (key) button.setAttribute('aria-label', mt(key));
@@ -593,7 +874,8 @@
 
     function hidePinModal() {
       document.getElementById('pinModal').style.display = 'none';
-      startStream();
+      if (document.getElementById('tabGame').classList.contains('active')) startGameLoop();
+      else startStream();
     }
 
     function appendPinDigit(digit) {
@@ -693,7 +975,307 @@
       img.src = '/stream?token=' + encodeURIComponent(authToken);
     }
 
+    let gameWakeLock = null;
+    let gameHudTimer = null;
+    let gameRunning = false;
+    let gameAbortController = null;
+    let gameReader = null;
+    let gameGeneration = 0;
+    let gameEntryId = 0;
+    let gameDecoder = null;
+    let gameStatsTimer = null;
+    let gameUsingH264 = false;
+    let gameStats = null;
+    let gameQuality = 'speed';
+    let gameTargetFps = 60;
+
+    function startGameLoop() {
+      if (gameRunning) return;
+      gameRunning = true;
+      const generation = ++gameGeneration;
+      gameUsingH264 = true;
+      gameStats = { started: performance.now(), received: 0, displayed: 0,
+        firstHostTime: null, lastHostTime: null, queue: 0 };
+      gameStatsTimer = setInterval(() => {
+        if (!gameRunning || generation !== gameGeneration || !gameUsingH264) return;
+        const elapsed = Math.max((performance.now() - gameStats.started) / 1000, 0.001);
+        const hostSpan = gameStats.lastHostTime - gameStats.firstHostTime;
+        const hostFps = gameStats.received > 1 && hostSpan > 0
+          ? Math.round((gameStats.received - 1) * 1000000 / hostSpan) : 0;
+        const receivedFps = Math.round(gameStats.received / elapsed);
+        const displayFps = Math.round(gameStats.displayed / elapsed);
+        const canvas = document.getElementById('gameCanvas');
+        document.getElementById('gameFpsBadge').textContent =
+          `ПК ${hostFps || '—'} / тел ${displayFps} FPS · ${canvas.height || '—'}p`;
+        document.getElementById('gameVideoStats').textContent =
+          `мер ${receivedFps} · черга ${gameStats.queue}`;
+        gameStats = { started: performance.now(), received: 0, displayed: 0,
+          firstHostTime: null, lastHostTime: null, queue: gameStats.queue };
+      }, 1000);
+      runGamePipeline(generation);
+    }
+
+    function stopGameLoop() {
+      gameRunning = false;
+      gameUsingH264 = false;
+      gameGeneration++;
+      clearInterval(gameStatsTimer);
+      gameStatsTimer = null;
+      if (gameAbortController) {
+        try { gameAbortController.abort(); } catch (_) {}
+        gameAbortController = null;
+      }
+      if (gameReader) {
+        gameReader.cancel().catch(() => {});
+        gameReader = null;
+      }
+      if (gameDecoder) {
+        try { gameDecoder.close(); } catch (_) {}
+        gameDecoder = null;
+      }
+      document.getElementById('gameFallbackImg').removeAttribute('src');
+    }
+
+    function drawGameFrame(frame, generation) {
+      try {
+        if (!gameRunning || generation !== gameGeneration) return;
+        const canvas = document.getElementById('gameCanvas');
+        if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) {
+          canvas.width = frame.displayWidth;
+          canvas.height = frame.displayHeight;
+        }
+        canvas.getContext('2d', { alpha: false, desynchronized: true }).drawImage(frame, 0, 0);
+        gameStats.displayed++;
+      } finally {
+        frame.close();
+      }
+    }
+
+    function h264CodecFromSps(data) {
+      for (let i = 0; i + 7 < data.length; i++) {
+        const start = data[i] === 0 && data[i + 1] === 0 && data[i + 2] === 1 ? 3 :
+          data[i] === 0 && data[i + 1] === 0 && data[i + 2] === 0 && data[i + 3] === 1 ? 4 : 0;
+        if (start && (data[i + start] & 31) === 7) {
+          return 'avc1.' + Array.from(data.subarray(i + start + 1, i + start + 4),
+            byte => byte.toString(16).padStart(2, '0')).join('').toUpperCase();
+        }
+      }
+      return 'avc1.42E020';
+    }
+
+    async function runGamePipeline(generation) {
+      const canvas = document.getElementById('gameCanvas');
+      if (!canvas) return;
+      const fallback = document.getElementById('gameFallbackImg');
+      canvas.style.display = 'block';
+      fallback.style.display = 'none';
+      document.getElementById('gameFpsBadge').textContent = '-- FPS';
+      document.getElementById('gameVideoStats').textContent = '';
+      let firstFrameTimer = null;
+      try {
+        if (!('VideoDecoder' in window) || !('EncodedVideoChunk' in window)) {
+          throw new Error('WebCodecs unavailable');
+        }
+        const controller = new AbortController();
+        gameAbortController = controller;
+        firstFrameTimer = setTimeout(() => controller.abort(), 5000);
+        const response = await fetch('/game/h264?quality=' + gameQuality + '&fps=' + gameTargetFps + '&token=' + encodeURIComponent(authToken), {
+          signal: controller.signal,
+          cache: 'no-store'
+        });
+        if (response.status === 401) {
+          showPinModal(mt('session_expired'));
+          stopGameLoop();
+          return;
+        }
+        if (!response.ok || !response.body) throw new Error('H.264 stream unavailable');
+        const reader = response.body.getReader();
+        gameReader = reader;
+        let pending = new Uint8Array(0);
+        let decoder = null;
+        let decoderError = null;
+        while (gameRunning && generation === gameGeneration) {
+          const { value, done } = await reader.read();
+          if (done) throw new Error('H.264 stream ended');
+          const joined = new Uint8Array(pending.length + value.length);
+          joined.set(pending);
+          joined.set(value, pending.length);
+          pending = joined;
+          let offset = 0;
+          while (pending.length - offset >= 17 && gameRunning && generation === gameGeneration) {
+            const view = new DataView(pending.buffer, pending.byteOffset + offset);
+            const size = view.getUint32(0);
+            if (!size || size > 4 * 1024 * 1024) throw new Error('Invalid video frame');
+            if (pending.length - offset < 17 + size) break;
+            const width = view.getUint16(4);
+            const height = view.getUint16(6);
+            const timestamp = Number(view.getBigUint64(8));
+            gameStats.received++;
+            if (gameStats.firstHostTime === null) gameStats.firstHostTime = timestamp;
+            gameStats.lastHostTime = timestamp;
+            const key = view.getUint8(16) === 1;
+            const data = pending.subarray(offset + 17, offset + 17 + size);
+            if (!decoder) {
+              const config = { codec: h264CodecFromSps(data), codedWidth: width, codedHeight: height,
+                optimizeForLatency: true, hardwareAcceleration: 'prefer-hardware' };
+              const support = await VideoDecoder.isConfigSupported(config);
+              if (!gameRunning || generation !== gameGeneration) return;
+              if (!support.supported) throw new Error('H.264 decoder unavailable');
+              decoder = new VideoDecoder({
+                output: frame => {
+                  if (firstFrameTimer) { clearTimeout(firstFrameTimer); firstFrameTimer = null; }
+                  drawGameFrame(frame, generation);
+                },
+                error: err => {
+                  decoderError = err;
+                  controller.abort();
+                }
+              });
+              decoder.configure(config);
+              gameDecoder = decoder;
+            }
+            if (decoder.decodeQueueSize > 4) {
+              await new Promise(resolve => requestAnimationFrame(resolve));
+            }
+            if (decoderError) throw decoderError;
+            decoder.decode(new EncodedVideoChunk({
+              type: key ? 'key' : 'delta', timestamp,
+              data
+            }));
+            gameStats.queue = decoder.decodeQueueSize;
+            offset += 17 + size;
+          }
+          if (offset) pending = pending.slice(offset);
+        }
+      } catch (err) {
+        if (gameRunning && generation === gameGeneration) {
+          gameUsingH264 = false;
+          console.warn('Falling back to MJPEG game stream:', err);
+          if (gameDecoder) { try { gameDecoder.close(); } catch (_) {} gameDecoder = null; }
+          canvas.style.display = 'none';
+          fallback.style.display = 'block';
+          fallback.src = '/game/stream?token=' + encodeURIComponent(authToken);
+          document.getElementById('gameFpsBadge').textContent = 'MJPEG';
+          document.getElementById('gameVideoStats').textContent = '';
+        }
+      } finally {
+        if (firstFrameTimer) clearTimeout(firstFrameTimer);
+        if (gameReader && generation === gameGeneration) {
+          gameReader.cancel().catch(() => {});
+          gameReader = null;
+        }
+      }
+    }
+
+    async function enterGameMode() {
+      const entryId = ++gameEntryId;
+      if (mobileAudioController) stopMobileAudio();
+      toggleMobileAudio(true);
+      document.getElementById('streamImg').removeAttribute('src');
+      document.getElementById('keyDrawer').style.display = 'none';
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      document.getElementById('tabGameBtn').classList.add('active');
+      document.getElementById('tabGame').classList.add('active');
+
+      let wakeLock = null;
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await navigator.wakeLock.request('screen');
+        }
+      } catch (_) {}
+      if (entryId !== gameEntryId) {
+        if (wakeLock) wakeLock.release().catch(() => {});
+        return;
+      }
+      gameWakeLock = wakeLock;
+
+      const el = document.documentElement;
+      if (el.requestFullscreen) { el.requestFullscreen().catch(() => {}); }
+      else if (el.webkitRequestFullscreen) { el.webkitRequestFullscreen(); }
+
+      try {
+        if (screen.orientation && screen.orientation.lock) {
+          screen.orientation.lock('landscape').catch(() => {});
+        }
+      } catch (_) {}
+
+      resetGameHudTimer();
+      vibrate(15);
+      startGameLoop();
+    }
+
+    function exitGameMode(e) {
+      if (e) e.stopPropagation();
+      gameEntryId++;
+      stopGameLoop();
+
+      if (gameWakeLock) {
+        gameWakeLock.release().catch(() => {});
+        gameWakeLock = null;
+      }
+
+      if (document.exitFullscreen) { document.exitFullscreen().catch(() => {}); }
+      else if (document.webkitExitFullscreen) { document.webkitExitFullscreen(); }
+
+      try {
+        if (screen.orientation && screen.orientation.unlock) {
+          screen.orientation.unlock();
+        }
+      } catch (_) {}
+
+      clearTimeout(gameHudTimer);
+      switchTab('screen');
+    }
+
+    function resetGameHudTimer() {
+      const hud = document.getElementById('gameHud');
+      if (!hud) return;
+      hud.classList.remove('faded');
+      clearTimeout(gameHudTimer);
+      gameHudTimer = setTimeout(() => {
+        hud.classList.add('faded');
+      }, 3500);
+    }
+
+    function toggleGameAudio(e) {
+      if (e) e.stopPropagation();
+      if (mobileAudioController) {
+        stopMobileAudio();
+      } else {
+        toggleMobileAudio(true);
+      }
+    }
+
+    function toggleGameFps(e) {
+      if (e) e.stopPropagation();
+      gameTargetFps = gameTargetFps === 60 ? 120 : 60;
+      document.getElementById('gameFpsBtn').textContent = gameTargetFps + ' FPS';
+      stopGameLoop();
+      startGameLoop();
+    }
+
+    function toggleGameQuality(e) {
+      if (e) e.stopPropagation();
+      gameQuality = gameQuality === 'speed' ? 'high' : 'speed';
+      document.getElementById('gameQualityBtn').textContent = gameQuality === 'high' ? '1080p' : '720p';
+      stopGameLoop();
+      startGameLoop();
+    }
+
     function switchTab(tab) {
+      if (tab === 'game') {
+        enterGameMode();
+        return;
+      }
+      if (document.getElementById('tabGame').classList.contains('active')) {
+        gameEntryId++;
+        stopGameLoop();
+        if (tab === 'screen') startStream();
+        if (gameWakeLock) { gameWakeLock.release().catch(() => {}); gameWakeLock = null; }
+        clearTimeout(gameHudTimer);
+      }
+
       document.getElementById('keyDrawer').style.display = 'none';
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
@@ -704,6 +1286,9 @@
       } else if (tab === 'trackpad') {
         document.getElementById('tabTrackpadBtn').classList.add('active');
         document.getElementById('tabTrackpad').classList.add('active');
+      } else if (tab === 'camera') {
+        document.getElementById('tabCameraBtn').classList.add('active');
+        document.getElementById('tabCamera').classList.add('active');
       } else if (tab === 'audio') {
         document.getElementById('tabAudioBtn').classList.add('active');
         document.getElementById('tabAudio').classList.add('active');
@@ -713,6 +1298,167 @@
         refreshShareOutbox();
       }
       vibrate(10);
+    }
+
+    let camStream = null;
+    let camBroadcasting = false;
+    let camFacing = 'environment';
+    let camTorch = false;
+    let camQuality = '60fps';
+    let camBusy = false;
+    let camFrameSeq = 0;
+    let camFpsFrames = 0;
+    let camFpsStart = performance.now();
+    const camCanvas = document.createElement('canvas');
+    const camCtx = camCanvas.getContext('2d');
+
+    async function toggleCameraBroadcast() {
+      if (camBroadcasting) {
+        stopCameraBroadcast();
+      } else {
+        await startCameraBroadcast();
+      }
+    }
+
+    async function startCameraBroadcast() {
+      try {
+        const is60fps = camQuality === '60fps';
+        const targetLong = is60fps ? 960 : camQuality === 1080 ? 1920 : 1280;
+        const targetShort = is60fps ? 540 : camQuality === 1080 ? 1080 : 720;
+        const constraints = {
+          video: {
+            facingMode: camFacing,
+            width: { ideal: targetLong },
+            height: { ideal: targetShort },
+            frameRate: { ideal: 60, min: 30 }
+          },
+          audio: false
+        };
+        camStream = await navigator.mediaDevices.getUserMedia(constraints);
+        const video = document.getElementById('camVideo');
+        video.srcObject = camStream;
+        await video.play();
+
+        camBroadcasting = true;
+        document.getElementById('camBroadcastBtn').classList.add('stop');
+        document.getElementById('camBroadcastLabel').textContent = mt('cam_stop');
+        const badge = document.getElementById('camBadge');
+        badge.classList.add('live');
+        badge.textContent = mt('cam_live');
+
+        camFpsFrames = 0;
+        camFpsStart = performance.now();
+        requestAnimationFrame(camLoop);
+        vibrate(20);
+      } catch (err) {
+        alert(mt('cam_err') + ': ' + (err.message || err));
+      }
+    }
+
+    function stopCameraBroadcast() {
+      camBroadcasting = false;
+      camBusy = false;
+      if (camStream) {
+        camStream.getTracks().forEach(t => t.stop());
+        camStream = null;
+      }
+      const video = document.getElementById('camVideo');
+      video.srcObject = null;
+      document.getElementById('camBroadcastBtn').classList.remove('stop');
+      document.getElementById('camBroadcastLabel').textContent = mt('cam_start');
+      const badge = document.getElementById('camBadge');
+      badge.classList.remove('live');
+      badge.textContent = mt('cam_offline');
+      document.getElementById('camStats').textContent = '0 FPS';
+      vibrate(20);
+    }
+
+    async function flipCamera() {
+      camFacing = camFacing === 'environment' ? 'user' : 'environment';
+      if (camBroadcasting) {
+        if (camStream) camStream.getTracks().forEach(t => t.stop());
+        await startCameraBroadcast();
+      }
+    }
+
+    async function toggleTorch() {
+      if (!camStream) return;
+      const track = camStream.getVideoTracks()[0];
+      if (!track) return;
+      try {
+        camTorch = !camTorch;
+        await track.applyConstraints({ advanced: [{ torch: camTorch }] });
+      } catch (_) {}
+    }
+
+    function changeCameraQuality(val) {
+      camQuality = val === '60fps' ? '60fps' : parseInt(val, 10) || 720;
+      if (camBroadcasting) {
+        if (camStream) camStream.getTracks().forEach(t => t.stop());
+        startCameraBroadcast();
+      }
+    }
+
+    async function camLoop() {
+      if (!camBroadcasting) return;
+      const video = document.getElementById('camVideo');
+      if (camBusy || video.readyState < 2) {
+        if (camBroadcasting) requestAnimationFrame(camLoop);
+        return;
+      }
+      camBusy = true;
+      try {
+        const vw = video.videoWidth || 1280;
+        const vh = video.videoHeight || 720;
+        const is60fps = camQuality === '60fps';
+        const maxDim = is60fps ? 960 : camQuality === 1080 ? 1920 : 1280;
+        let targetW = vw;
+        let targetH = vh;
+        if (Math.max(targetW, targetH) > maxDim) {
+          const scale = maxDim / Math.max(targetW, targetH);
+          targetW = (Math.round(targetW * scale) & ~1) || 2;
+          targetH = (Math.round(targetH * scale) & ~1) || 2;
+        } else {
+          targetW = (targetW & ~1) || 2;
+          targetH = (targetH & ~1) || 2;
+        }
+        if (camCanvas.width !== targetW || camCanvas.height !== targetH) {
+          camCanvas.width = targetW;
+          camCanvas.height = targetH;
+        }
+        camCtx.drawImage(video, 0, 0, targetW, targetH);
+        const quality = is60fps ? 0.48 : camQuality === 1080 ? 0.50 : 0.52;
+        camCanvas.toBlob((blob) => {
+          if (!blob || !camBroadcasting) {
+            camBusy = false;
+            if (camBroadcasting) requestAnimationFrame(camLoop);
+            return;
+          }
+          const seq = ++camFrameSeq;
+          fetch(`/api/camera/frame?token=${encodeURIComponent(authToken)}&w=${targetW}&h=${targetH}&seq=${seq}`, {
+            method: 'POST',
+            body: blob,
+            headers: { 'Content-Type': 'image/jpeg' },
+          }).then((res) => {
+            if (res.ok) {
+              camFpsFrames++;
+              const now = performance.now();
+              if (now - camFpsStart >= 1000) {
+                const fps = Math.round((camFpsFrames * 1000) / (now - camFpsStart));
+                document.getElementById('camStats').textContent = `${targetW}x${targetH} • ${fps} FPS`;
+                camFpsFrames = 0;
+                camFpsStart = now;
+              }
+            }
+          }).catch(() => {}).finally(() => {
+            camBusy = false;
+            if (camBroadcasting) requestAnimationFrame(camLoop);
+          });
+        }, 'image/jpeg', quality);
+      } catch (_) {
+        camBusy = false;
+        if (camBroadcasting) requestAnimationFrame(camLoop);
+      }
     }
 
     let sharedFromPc = null;
@@ -832,14 +1578,22 @@
     let mobileAudioController = null;
     let mobileAudioContext = null;
     let nextAudioTime = 0;
+    let scheduledAudioSources = [];
 
     function stopMobileAudio() {
       mobileAudioController?.abort();
       mobileAudioController = null;
+      for (const entry of scheduledAudioSources) {
+        try { entry.node.stop(); } catch (_) {}
+      }
+      scheduledAudioSources = [];
       mobileAudioContext?.close().catch(() => {});
       mobileAudioContext = null;
       document.getElementById('audioPlayButton').textContent = mt('audio_play');
       document.getElementById('audioPlaybackStatus').textContent = '';
+      const gameAudioBtn = document.getElementById('gameAudioBtn');
+      if (gameAudioBtn) gameAudioBtn.textContent = '🔇';
+      document.getElementById('gameAudioStatus').textContent = '';
     }
 
     function playPcmPacket(packet, format, context) {
@@ -863,14 +1617,29 @@
       const source = context.createBufferSource();
       source.buffer = audio;
       source.connect(context.destination);
-      if (nextAudioTime < context.currentTime + 0.08 || nextAudioTime > context.currentTime + 0.8) {
-        nextAudioTime = context.currentTime + 0.12;
+      const now = context.currentTime;
+      if (nextAudioTime > now + 0.11) {
+        for (const entry of scheduledAudioSources) {
+          if (entry.start > now) {
+            try { entry.node.stop(); } catch (_) {}
+          }
+        }
+        scheduledAudioSources = scheduledAudioSources.filter(entry => entry.start <= now);
+        nextAudioTime = now + 0.035;
+      } else if (nextAudioTime < now + 0.025) {
+        nextAudioTime = now + 0.035;
       }
-      source.start(nextAudioTime);
+      const entry = { node: source, start: nextAudioTime };
+      source.onended = () => {
+        const index = scheduledAudioSources.indexOf(entry);
+        if (index !== -1) scheduledAudioSources.splice(index, 1);
+      };
+      scheduledAudioSources.push(entry);
+      source.start(entry.start);
       nextAudioTime += frames / rate;
     }
 
-    async function toggleMobileAudio() {
+    async function toggleMobileAudio(gameMode = false) {
       if (mobileAudioController) { stopMobileAudio(); return; }
       const controller = new AbortController();
       mobileAudioController = controller;
@@ -878,13 +1647,23 @@
       let context;
       let errorMessage = '';
       try {
-        context = new (window.AudioContext || window.webkitAudioContext)();
+        context = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
         mobileAudioContext = context;
         await context.resume();
-        const response = await fetch('/audio.pcm', { headers: { 'X-Auth-Token': authToken }, signal: controller.signal, cache: 'no-store' });
+        let response;
+        for (let attempt = 0; attempt < 4; attempt++) {
+          response = await fetch(gameMode ? '/game/audio.pcm' : '/audio.pcm', {
+            headers: { 'X-Auth-Token': authToken }, signal: controller.signal, cache: 'no-store'
+          });
+          if (response.status !== 409 || attempt === 3) break;
+          await new Promise(resolve => setTimeout(resolve, 250));
+        }
         if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
+        document.getElementById('gameAudioStatus').textContent = '';
         document.getElementById('audioPlayButton').textContent = mt('audio_stop');
         document.getElementById('audioPlaybackStatus').textContent = mt('audio_playing');
+        const gameAudioBtn = document.getElementById('gameAudioBtn');
+        if (gameAudioBtn) gameAudioBtn.textContent = '🔊';
         const reader = response.body.getReader();
         let pending = new Uint8Array(0);
         let format = null;
@@ -918,6 +1697,12 @@
         if (mobileAudioController === controller) {
           stopMobileAudio();
           document.getElementById('audioPlaybackStatus').textContent = errorMessage;
+          if (gameMode && errorMessage) {
+            const button = document.getElementById('gameAudioBtn');
+            button.textContent = '⚠';
+            button.title = errorMessage;
+            document.getElementById('gameAudioStatus').textContent = errorMessage;
+          }
         }
       }
     }
