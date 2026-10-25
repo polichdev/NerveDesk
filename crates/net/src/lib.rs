@@ -7,6 +7,7 @@ pub mod mobile_server;
 mod mobile_tls;
 pub mod secure_input;
 pub mod udp;
+pub mod vcam;
 pub mod video;
 
 pub use audio::{AudioBridge, AudioStatus};
@@ -24,8 +25,8 @@ pub use mirror::{
     MirrorReceiver, MirrorSender,
 };
 pub use mobile_server::{
-    generate_qr_svg, get_local_ip, MobileInputPayload, MobileServer, MobileShareInfo,
-    VerifyPinPayload,
+    generate_qr_svg, get_local_ip, ContinuityCameraInfo, MobileInputPayload, MobileServer,
+    MobileShareInfo, VerifyPinPayload,
 };
 pub use udp::{UdpInputReceiver, UdpInputSender};
 pub use video::{VideoReceiver, VideoSender};

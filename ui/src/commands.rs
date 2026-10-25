@@ -1,4 +1,4 @@
-﻿use std::net::SocketAddr;
+use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -946,7 +946,7 @@ pub fn get_mobile_remote_info(state: State<'_, AppState>) -> MobileRemoteInfo {
     let ip = get_local_ip();
     let port = state.mobile_server.port();
     let is_active = state.mobile_server.is_active();
-    let url = format!("https://{}:{}", ip, port);
+    let url = format!("https://{}:{}?lang=uk", ip, port);
     let qr_svg = generate_qr_svg(&url).unwrap_or_default();
     let pin = state.mobile_server.get_pin();
     let certificate_fingerprint = state
@@ -1073,9 +1073,32 @@ pub fn open_mobile_received_folder(state: State<'_, AppState>) -> Result<(), Str
 pub fn open_mobile_remote_url(state: State<'_, AppState>) {
     let ip = get_local_ip();
     let port = state.mobile_server.port();
-    let url = format!("https://{}:{}", ip, port);
+    let url = format!("https://{}:{}?lang=uk", ip, port);
     let _ = std::process::Command::new("cmd")
         .args(["/c", "start", &url])
+        .spawn();
+}
+
+#[command]
+pub fn get_continuity_camera_info(state: State<'_, AppState>) -> net::ContinuityCameraInfo {
+    state.mobile_server.camera_info()
+}
+
+#[command]
+pub fn get_continuity_camera_frame(state: State<'_, AppState>) -> Option<Vec<u8>> {
+    state.mobile_server.latest_camera_frame().map(|f| (*f).clone())
+}
+
+#[command]
+pub fn set_continuity_camera_transform(state: State<'_, AppState>, rotation: u32, mirrored: bool) {
+    state.mobile_server.set_camera_transform(rotation, mirrored);
+}
+
+#[command]
+pub fn open_continuity_camera_preview(state: State<'_, AppState>) {
+    let info = state.mobile_server.camera_info();
+    let _ = std::process::Command::new("cmd")
+        .args(["/c", "start", &info.preview_url])
         .spawn();
 }
 

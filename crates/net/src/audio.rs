@@ -8,7 +8,7 @@ use std::time::Duration;
 use serde::Serialize;
 use windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume;
 use windows::Win32::Media::Audio::{
-    eConsole, eRender, IAudioCaptureClient, IAudioClient, IAudioRenderClient, IMMDeviceEnumerator,
+    eConsole, eMultimedia, eRender, IAudioCaptureClient, IAudioClient, IAudioRenderClient, IMMDeviceEnumerator,
     MMDeviceEnumerator, AUDCLNT_BUFFERFLAGS_SILENT, AUDCLNT_SHAREMODE_SHARED,
     AUDCLNT_STREAMFLAGS_LOOPBACK, WAVEFORMATEX, WAVEFORMATEXTENSIBLE,
 };
@@ -362,6 +362,17 @@ fn audio_client() -> Result<IAudioClient, String> {
     }
 }
 
+fn mobile_audio_client() -> Result<IAudioClient, String> {
+    unsafe {
+        let enumerator: IMMDeviceEnumerator =
+            CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).map_err(|e| e.to_string())?;
+        let device = enumerator
+            .GetDefaultAudioEndpoint(eRender, eMultimedia)
+            .map_err(|e| format!("Default multimedia audio device: {e}"))?;
+        device.Activate(CLSCTX_ALL, None).map_err(|e| e.to_string())
+    }
+}
+
 pub(crate) fn capture_for_mobile(
     sender: tokio::sync::mpsc::Sender<Vec<u8>>,
     running: Arc<AtomicBool>,
@@ -371,7 +382,7 @@ pub(crate) fn capture_for_mobile(
         return Err("Mobile audio is disabled".into());
     }
     let _com = ComApartment::init()?;
-    let client = audio_client()?;
+    let client = mobile_audio_client()?;
     unsafe {
         let format = client.GetMixFormat().map_err(|e| e.to_string())?;
         let wave = &*format;
@@ -446,8 +457,10 @@ pub(crate) fn capture_for_mobile(
                     std::slice::from_raw_parts(data, bytes).to_vec()
                 };
                 capture.ReleaseBuffer(frames).map_err(|e| e.to_string())?;
-                if sender.blocking_send(packet).is_err() {
-                    break;
+                match sender.try_send(packet) {
+                    Ok(()) => {}
+                    Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => continue,
+                    Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => break,
                 }
             }
             Ok(())
