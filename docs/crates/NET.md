@@ -116,19 +116,38 @@ Port: **TCP 48106**.
 
 ### `folder_sync` — Folder Synchronisation
 
-Bidirectional background sync with conflict resolution and version history.
+Bidirectional event-driven background sync with conflict resolution and version history.
 
 **Session setup:**
 1. Initiator sends an encrypted setup request (signed with the pairing key).
 2. Receiver waits for user approval via the UI before creating the local folder.
 3. A per-session nonce is exchanged; all subsequent records use it as part of the encryption context: `folder-sync:{nonce}:{direction}:{sequence}`.
 
-**Sync loop:**
-- The peer with the lexicographically smaller hostname coordinates scans every 600 ms.
+**Event-Driven Sync Engine:**
+- Changes detected via kernel-level `ReadDirectoryChangesW` notifications using the `notify` crate.
+- Watches active pair local directories recursively and dynamically adapts to pair additions or removals.
+- A 250 ms debounce interval collapses rapid file bursts into single atomic sync operations.
+- Worker wakeups (`wake_worker()`) occur immediately upon local filesystem changes, pair approvals, or user sync commands via an `Arc<(Mutex<bool>, Condvar)>`.
+- Fallback 15-second heartbeat ensures sync integrity if kernel events are missed.
+- The peer with the lexicographically smaller hostname coordinates bidirectional scans.
 - File hashes (SHA-256) determine whether a transfer is needed.
 - Conflicts: both versions are kept. Replaced/deleted files go to version history.
 
 Port: **TCP 48108**.
+
+---
+
+### Socket Buffer Configuration & Tuning
+
+To prevent TCP window throttling and buffer starvation across multi-gigabit transfers and 60+ FPS video streaming, socket buffer sizes are explicitly tuned using `socket2::SockRef`:
+
+| Subsystem | Port / Transport | Send Buffer (`SO_SNDBUF`) | Recv Buffer (`SO_RCVBUF`) | Notes |
+|---|---|---|---|---|
+| **Video Mirror** | TCP 48105 | 4 MB | 4 MB | Eliminates frame drops during high-motion bursts |
+| **File Transfer** | TCP 48106 | 4 MB | 4 MB | Sustains maximum LAN throughput |
+| **Folder Sync** | TCP 48108 | 2 MB | 2 MB | Optimized for rapid differential file streaming |
+| **Audio Bridge** | TCP 48107 | 512 KB | 512 KB | Minimizes buffering latency (`TCP_NODELAY` enabled) |
+| **Secure Input** | UDP 48100 | 512 KB | 512 KB | Prevents packet loss under high-frequency mouse movements |
 
 ---
 

@@ -24,6 +24,7 @@ NerveDesk separates concerns into distinct ports and transport layers to prevent
 | **48107** | TCP | Low-Latency Audio | Opus / Raw PCM 48kHz stereo frames | ChaCha20-Poly1305 AEAD |
 | **48108** | TCP | Folder Sync Engine | Metadata sync + bidirectional differential stream | ChaCha20-Poly1305 AEAD |
 | **48110** | TCP | Mobile Web Remote | HTTPS / WSS WebSockets | TLS 1.3 (ChaCha20 / AES-GCM) |
+| **48112** | TCP | Mutual Device Pairing | Challenge-response authentication & key handshake | ChaCha20-Poly1305 AEAD |
 
 ---
 
@@ -117,3 +118,36 @@ stateDiagram-v2
     Reconnecting --> Idle: Timeout (> 5000 ms)
     Connected --> [*]: Stop Service
 ```
+
+---
+
+## 5. Video Streaming & FEC Protocol (:48105)
+
+H.264 access units are partitioned into chunk packets protected by Forward Error Correction (FEC).
+
+### 5.1 Chunk Packet Layout
+
+```text
+ 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|       Chunk Index (u16)       |       Total Chunks (u16)      |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|   Flags (u8)  |              Payload Data ...                 |
++-+-+-+-+-+-+-+-+                                               +
+|                                                               |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+```
+
+### 5.2 Header Fields
+- **Chunk Index (2 bytes BE)**: 0-based index of this packet within the current frame group.
+- **Total Chunks (2 bytes BE)**: Total number of packets comprising the frame, including parity chunks.
+- **Flags (1 byte)**:
+  - `0x00`: Standard data chunk containing H.264 bitstream slice.
+  - `0x01`: FEC Parity chunk computed across payload bytes of preceding chunks.
+- **Payload Data**: Variable slice data or parity vector.
+
+### 5.3 Recovery Mechanism
+When a single packet in a group is lost, the receiver calculates:
+$$\text{MissingPayload} = P_{\text{parity}} \oplus \bigoplus_{i \neq \text{missing}} C_i$$
+This reconstructs the missing slice with zero round-trip latency, eliminating TCP retransmission stalls.

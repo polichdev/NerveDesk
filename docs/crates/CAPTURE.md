@@ -44,9 +44,14 @@ The driver pushes swap-chain frames as raw BGRA buffers. The capture crate accep
 
 ---
 
-## Frame Format
+## Frame Format & Zero-Allocation Conversion
 
-All capture paths produce `BGRA` pixel data (4 bytes per pixel, row-major). The codec crate converts to `NV12` before hardware encoding.
+All capture paths produce `BGRA` pixel data (4 bytes per pixel, row-major). 
+
+**Direct COM Memory Locking Pipeline:**
+- Instead of allocating intermediate CPU vectors for color space conversion, the pipeline locks the Media Foundation input buffer directly via `IMFMediaBuffer::Lock`.
+- In-place conversion is performed via `bgra_to_nv12_into`, writing directly from the mapped DXGI surface into the encoder's locked buffer in a single stride-aware pass.
+- Encoder input samples (`IMFSample`) and memory buffers are cached and reused across frames, eliminating per-frame COM allocations and garbage collection overhead.
 
 ---
 

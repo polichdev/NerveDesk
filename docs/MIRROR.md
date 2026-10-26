@@ -40,7 +40,7 @@ The sender automatically detects encoder availability at runtime. If the client 
 ## How to Use
 
 1. Run NerveDesk on both the source PC and the receiving PC. Connect both to the same LAN.
-2. Generate a pairing key on one device and enter the same key on both. Select the peer by name.
+2. On the receiving PC, read its Security Key in Devices. On the source PC, enter the receiver's name and key and click Connect.
 3. On the source PC, open **Screen Mirror**, click **Refresh**, and select the receiving PC from the device list.
 4. Choose **Entire primary screen** or a specific open application window.
 5. Click **Start Streaming**. Allow NerveDesk through Windows Firewall if prompted.

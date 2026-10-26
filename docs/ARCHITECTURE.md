@@ -127,7 +127,9 @@ See [Screen Mirror](MIRROR.md) and [Virtual Display Driver](DRIVER.md).
 - After approval, a per-session nonce is generated; all records are encrypted (`ChaCha20-Poly1305`) with directional context strings.
 - A SHA-256 hash verifies every transferred file.
 - Conflicting edits keep both copies; replaced or deleted files are moved to version history.
-- The peer with the lexicographically smaller hostname coordinates bidirectional scans every 600 ms.
+- Change detection is **event-driven** via the `notify` crate and Windows kernel `ReadDirectoryChangesW` events with a 250 ms debounce batch window.
+- Condition variable signaling (`wake_worker()`) immediately triggers sync on local modifications, pairing approvals, and user actions, backed by a 15-second heartbeat.
+- The peer with the lexicographically smaller hostname coordinates bidirectional scans.
 
 ### File Transfer
 
@@ -152,6 +154,18 @@ See [Screen Mirror](MIRROR.md) and [Virtual Display Driver](DRIVER.md).
 - `DiscoveryListener` rejects unsigned beacons from the paired peer IP to prevent beacon spoofing.
 
 See [ADR-004](adr/ADR-004-hmac-discovery-beacons.md).
+
+---
+
+## Performance & Transport Architecture
+
+| Optimization | Layer | Impact |
+|---|---|---|
+| `mimalloc` Global Allocator | All Binaries (`ui`, `host`, `client`) | Replaces system CRT allocator; eliminates heap fragmentation and speeds up multi-threaded allocations under high frame rates. |
+| Direct COM Buffer Locking | Video Encoding (`capture` & `codec`) | Uses `IMFMediaBuffer::Lock` with in-place `bgra_to_nv12_into`, caching COM samples to eliminate per-frame heap allocations. |
+| Forward Error Correction (FEC) | Video Transport (`chunker`) | Parity chunks reconstructed dynamically by receiver on packet loss, preventing video frame stalls and retransmission lag. |
+| Event-Driven Folder Sync | Filesystem (`folder_sync`) | Windows kernel `ReadDirectoryChangesW` (`notify`) with 250 ms debouncing and condvar signaling replaces 600 ms periodic polling. |
+| Socket Buffer Tuning | Network Sockets (`socket2`) | 4 MB for video & file transfers, 2 MB for folder sync, 512 KB for low-latency audio & UDP input. Prevents TCP window collapse. |
 
 ---
 

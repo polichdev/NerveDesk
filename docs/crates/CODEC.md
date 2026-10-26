@@ -55,14 +55,20 @@ pub struct VideoDecoderConfig {
 
 ---
 
-## Chunker (`chunker.rs`)
+## Chunker & Forward Error Correction (`chunker.rs`)
 
-Splits H.264 access unit streams into length-prefixed frames for TCP framing and reassembles them on the receiver side.
+Splits encoded H.264 access units into MTU-safe chunks and provides Forward Error Correction (FEC) to guarantee uninterrupted streaming over lossy networks.
 
-Frame format:
+**Packet Chunk Format:**
 ```
-[ length: 4 bytes BE ] [ NAL unit data ]
+[ chunk_index: 2 bytes BE ] [ total_chunks: 2 bytes BE ] [ flags: 1 byte ] [ payload ]
 ```
+- Flags include `FLAG_FEC_PARITY` (`0x01`) designating parity packets.
+
+**Forward Error Correction (FEC):**
+- **Parity Generation**: Every group of $K$ data chunks generates 1 or more parity chunks computed across payload bytes.
+- **Loss Recovery**: If any single chunk in a group is dropped in transit, the receiver reconstructs the missing packet instantly using the remaining chunks and the parity chunk without requesting a TCP retransmission.
+- **Zero-Allocation Buffer Pooling**: Hot-path buffer reassembly reuses pre-allocated vector pools and slice references, avoiding heap allocations per packet.
 
 ---
 

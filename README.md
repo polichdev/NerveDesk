@@ -27,15 +27,17 @@ NerveDesk is a lightweight, low-latency hybrid KVM (Keyboard, Video, Mouse) and 
 
 ### Performance Highlights
 
-- Binary Footprint: 8 MB standalone executable (NSIS setup package is under 2 MB).
-- Memory Usage: 20 MB RAM in active background operation (compared to 300–800 MB for Electron-based solutions).
+- Binary Footprint: ~8 MB standalone executable (NSIS setup package is under 3 MB).
+- Memory Usage: 10–20 MB RAM in active background operation (compared to 300–800 MB for Electron-based solutions), tuned via the `mimalloc` global allocator and frame buffer pooling.
 - Input Latency: Sub-millisecond (< 1 ms) over local networks via raw UDP datagrams without TCP Head-of-Line Blocking.
-- Video Transport: ~16 ms glass-to-glass latency at 60 FPS using a direct DirectX 11 GPU capture pipeline with under 2% host CPU usage.
+- Video Transport: ~16 ms glass-to-glass latency at 60 FPS using a direct DirectX 11 GPU capture pipeline with under 2% host CPU usage, protected against packet loss by Forward Error Correction (FEC).
+- Network Throughput: Tuned socket send/receive buffers (4 MB for video & file transfers, 2 MB for folder sync, 512 KB for audio & input) to prevent TCP window throttling and buffer starvation.
+- Event-Driven Sync: Zero polling overhead for folder synchronization using kernel-level `ReadDirectoryChangesW` notifications.
 
 ## Tech Stack
 
-- Systems Core: Rust 1.80+, Tokio asynchronous runtime, windows-rs / winapi, crossbeam channels.
-- Graphics & Media: DirectX 11 (DXGI Desktop Duplication), Windows Graphics Capture, Media Foundation H.264 (Hardware MFT), WebCodecs API, WASAPI Audio Loopback.
+- Systems Core: Rust 1.80+, Tokio asynchronous runtime, `mimalloc` global allocator, windows-rs / winapi, crossbeam channels, `notify` event-driven filesystem watcher.
+- Graphics & Media: DirectX 11 (DXGI Desktop Duplication), Windows Graphics Capture, Media Foundation H.264 & AV1 (Hardware MFT with Direct COM Buffer Locking), Forward Error Correction (FEC), WebCodecs API, WASAPI Audio Loopback.
 - Display Driver: C++ UMDF v2 Indirect Display Driver (IddCx).
 - Desktop GUI: Tauri v2, system WebView2, Windows DWM Immersive Dark Mode.
 
@@ -71,14 +73,14 @@ flowchart LR
 ### Non-Blocking Input Transport
 Traditional software KVMs rely on TCP, where dropped packets stall the entire event stream while waiting for retransmission. NerveDesk uses non-blocking Raw UDP sockets with monotonic sequence numbering, eliminating cursor hitching and micro-stutters during network spikes.
 
-### Zero-Copy GPU Pipeline
-Unlike solutions that copy frames into system RAM for software compression, NerveDesk captures frames directly inside GPU VRAM via DirectX 11 (DXGI Desktop Duplication) or Windows Graphics Capture. Frames are compressed using hardware encoders (NVENC, Intel QuickSync, AMD AMF) with ultra-low-latency CBR settings.
+### Zero-Copy GPU Pipeline & Forward Error Correction
+Unlike solutions that copy frames into system RAM for software compression, NerveDesk captures frames directly inside GPU VRAM via DirectX 11 (DXGI Desktop Duplication) or Windows Graphics Capture. Frames are converted into NV12 directly within locked Media Foundation COM buffers (`IMFMediaBuffer::Lock`), avoiding intermediate heap allocations and sample reallocations. Compressed streams are protected by Forward Error Correction (FEC) with parity chunk generation, guaranteeing seamless recovery from dropped packets without transmission halts.
 
 ### Isolated Asynchronous Clipboard
 Clipboard listening and writing run in an isolated Tokio background task. Large text or image payloads (including DIB/DIBV5 formats) are deduplicated with content hashing and streamed independently, preventing mouse input freezes.
 
-### Lightweight Native Shell
-Built using Rust and Tauri v2 with the system WebView2 runtime, NerveDesk avoids bundling a dedicated Chromium browser. It links the MSVC CRT statically, requiring no external .NET or runtime installations.
+### Lightweight Native Shell & High-Performance Memory
+Built using Rust and Tauri v2 with the system WebView2 runtime, NerveDesk avoids bundling a dedicated Chromium browser. It links the MSVC CRT statically and uses the `mimalloc` memory allocator globally to eliminate heap fragmentation and optimize multi-threaded allocation latency.
 
 
 ## Core Features
@@ -88,7 +90,7 @@ Built using Rust and Tauri v2 with the system WebView2 runtime, NerveDesk avoids
 - Screen Mirroring: Stream an entire desktop or a selected application window to another computer without requiring a display driver on the receiving device.
 - Audio Bridge: Stream system audio bi-directionally between machines using low-latency WASAPI Loopback Capture.
 - Phone Audio: Play Android or iPhone audio through the PC's speakers using Windows Bluetooth A2DP sink support. Pair the phone in Windows, then connect it from Audio Bridge.
-- Folder Synchronization: Bi-directional background folder synchronization with 600 ms delta polling and safe change resolution.
+- Folder Synchronization: Event-driven bi-directional directory synchronization powered by Windows filesystem notifications (`notify` / `ReadDirectoryChangesW`) with 250 ms debounced batching, condition-variable worker signaling, and conflict resolution.
 - Mobile Web Remote: View live screen output and control input from a phone browser via an embedded HTTPS server secured by a 6-digit PIN. Add the page to the phone's home screen for the NerveDesk icon. A verified phone stays recognized while the PC app runs and the PIN remains unchanged.
 - Continuity Camera & Virtual Webcam: Transform an iPhone or Android phone into a high-definition PC webcam for conferencing (Google Meet, Zoom, Discord, Teams) and streaming (OBS Studio). Features low-latency MJPEG streaming, virtual camera DirectShow/MediaFoundation driver integration, camera switching, torch/flash control, 90° rotation increments, mirroring, and direct OBS browser source URL copying.
 - Mobile Game Streaming Mode: Ultra-low-latency game streaming directly to mobile browsers at 60 or 120 FPS powered by hardware-accelerated Media Foundation H.264 encoding and client-side WebCodecs decoding. Includes real-time performance HUD (host/device FPS, network packets, decoding queue), 720p/1080p resolution scaling, PC game audio forwarding, automatic landscape orientation lock, and screen wake lock.
