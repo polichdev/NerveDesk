@@ -9,12 +9,11 @@ use net::{encode_mirror_bgra, MirrorCodec as Codec, MirrorSender};
 use tracing::{error, warn};
 
 enum Source {
-    Screen {
-        duplicator: DxgiOutputDuplicator,
-        pixels: Vec<u8>,
-    },
+    Screen(DxgiOutputDuplicator),
     Window(WindowCapture),
 }
+
+type Frame = (u32, u32, i16, i16, Vec<u8>);
 
 impl Source {
     fn new(
@@ -26,23 +25,24 @@ impl Source {
         }
         let config = screen_config.ok_or("Missing screen capture configuration")?;
         let dup = DxgiOutputDuplicator::new(config).map_err(|e| e.to_string())?;
-        let (w, h) = dup.dimensions();
-        Ok(Self::Screen {
-            duplicator: dup,
-            pixels: vec![0u8; w as usize * h as usize * 4],
-        })
+        Ok(Self::Screen(dup))
     }
 
-    fn next_frame(&mut self) -> Result<Option<(u32, u32, i16, i16, Vec<u8>)>, String> {
+    fn next_frame(&mut self, previous: &mut Option<Frame>) -> Result<Option<Frame>, String> {
         match self {
-            Self::Screen { duplicator, pixels } => {
+            Self::Screen(duplicator) => {
                 let Some(frame) = duplicator.acquire_frame().map_err(|e| e.to_string())? else {
                     return Ok(None);
                 };
                 let len = frame.width as usize * frame.height as usize * 4;
+                // Reuse the previous frame's allocation after a new DXGI frame is acquired.
+                let mut pixels = previous
+                    .take()
+                    .map(|(_, _, _, _, pixels)| pixels)
+                    .unwrap_or_default();
                 pixels.resize(len, 0);
-                frame.copy_to_cpu(pixels).map_err(|e| e.to_string())?;
-                Ok(Some((frame.width, frame.height, 0, 0, pixels.clone())))
+                frame.copy_to_cpu(&mut pixels).map_err(|e| e.to_string())?;
+                Ok(Some((frame.width, frame.height, 0, 0, pixels)))
             }
             Self::Window(cap) => {
                 let Some((w, h, pix)) = cap.next_frame()? else {
@@ -112,7 +112,7 @@ pub async fn start(
         let mut encoder_size = (0, 0);
 
         let mut in_flight = 0u32;
-        let mut last_frame: Option<(u32, u32, i16, i16, Vec<u8>)> = None;
+        let mut last_frame: Option<Frame> = None;
         let mut has_new_frame = false;
         let mut last_sent = Instant::now();
         let mut stat_frames = 0u64;
@@ -157,7 +157,7 @@ pub async fn start(
                 in_flight = 0;
             }
 
-            match source.next_frame() {
+            match source.next_frame(&mut last_frame) {
                 Ok(Some(f)) => {
                     last_frame = Some(f);
                     has_new_frame = true;
@@ -299,6 +299,8 @@ pub async fn start(
         unsafe {
             let _ = windows::Win32::Media::timeEndPeriod(1);
         }
+
+        let _ = sender.stream.shutdown(std::net::Shutdown::Both);
 
         if generation.load(Ordering::SeqCst) == current_generation {
             projecting.store(false, Ordering::SeqCst);

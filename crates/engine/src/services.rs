@@ -874,19 +874,21 @@ fn spawn_mirror_receiver(state: &AppState) {
                 let mut last_id = 0u32;
                 let mut report = Instant::now();
                 loop {
-                    let (width, height, offset_x, offset_y, payload) =
-                        match MirrorReceiver::read_frame(
+                    let (width, height, offset_x, offset_y, payload) = match tokio::time::timeout(
+                        Duration::from_millis(1000),
+                        MirrorReceiver::read_frame(
                             &mut read_half,
                             codec,
                             &key,
                             &mut replay,
                             &mut last_id,
-                        )
-                        .await
-                        {
-                            Ok(frame) => frame,
-                            Err(_) => break,
-                        };
+                        ),
+                    )
+                    .await
+                    {
+                        Ok(Ok(frame)) => frame,
+                        _ => break,
+                    };
 
                     if let Some((ref frame_tx, _)) = decode_worker {
                         if frame_tx

@@ -292,7 +292,7 @@ unsafe fn render_loop(
         }
 
         let is_active = active.load(Ordering::Relaxed);
-        let timed_out = last_time.lock().unwrap().elapsed() >= Duration::from_secs(30);
+        let timed_out = last_time.lock().unwrap().elapsed() >= Duration::from_millis(1200);
         let should_run = is_active && !timed_out;
 
         if should_run {

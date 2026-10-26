@@ -100,8 +100,8 @@ impl MirrorSender {
         let stream = stream.into_std().map_err(|e| e.to_string())?;
         stream.set_nonblocking(false).map_err(|e| e.to_string())?;
         stream.set_nodelay(true).map_err(|e| e.to_string())?;
-        let _ = socket2::SockRef::from(&stream).set_send_buffer_size(128 * 1024);
-        let _ = socket2::SockRef::from(&stream).set_recv_buffer_size(64 * 1024);
+        let _ = socket2::SockRef::from(&stream).set_send_buffer_size(256 * 1024);
+        let _ = socket2::SockRef::from(&stream).set_recv_buffer_size(256 * 1024);
         stream
             .set_read_timeout(Some(std::time::Duration::from_millis(1)))
             .map_err(|e| e.to_string())?;
@@ -292,8 +292,8 @@ impl MirrorReceiver {
 
     pub async fn accept(&self) -> Result<(TcpStream, SocketAddr), String> {
         let (stream, peer_addr) = self.listener.accept().await.map_err(|e| e.to_string())?;
-        let _ = socket2::SockRef::from(&stream).set_recv_buffer_size(128 * 1024);
-        let _ = socket2::SockRef::from(&stream).set_send_buffer_size(64 * 1024);
+        let _ = socket2::SockRef::from(&stream).set_recv_buffer_size(256 * 1024);
+        let _ = socket2::SockRef::from(&stream).set_send_buffer_size(256 * 1024);
         let _ = stream.set_nodelay(true);
         Ok((stream, peer_addr))
     }
