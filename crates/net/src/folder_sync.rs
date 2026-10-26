@@ -8,6 +8,8 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use notify::{Config as NotifyConfig, RecommendedWatcher, RecursiveMode, Watcher};
+
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use windows::Win32::Security::Cryptography::{BCryptGenRandom, BCRYPT_USE_SYSTEM_PREFERRED_RNG};
@@ -38,6 +40,9 @@ struct SyncSecurity {
 
 impl TcpStream {
     fn new(socket: RawTcpStream) -> Self {
+        let _ = socket.set_nodelay(true);
+        let _ = socket2::SockRef::from(&socket).set_send_buffer_size(2 * 1024 * 1024);
+        let _ = socket2::SockRef::from(&socket).set_recv_buffer_size(2 * 1024 * 1024);
         Self {
             socket,
             security: None,
@@ -338,6 +343,7 @@ pub struct FolderSync {
     session: Mutex<()>,
     error: Mutex<Option<String>>,
     setup_key: Mutex<Option<Arc<Mutex<Option<String>>>>>,
+    sync_wake: Arc<(Mutex<bool>, std::sync::Condvar)>,
 }
 
 impl FolderSync {
@@ -347,6 +353,12 @@ impl FolderSync {
             .unwrap_or_else(std::env::temp_dir)
             .join("NerveDesk");
         Self::with_data_dir(base)
+    }
+
+    pub fn wake_worker(&self) {
+        let (lock, cvar) = &*self.sync_wake;
+        *lock.lock().unwrap() = true;
+        cvar.notify_all();
     }
 
     fn with_data_dir(data_dir: PathBuf) -> Arc<Self> {
@@ -367,6 +379,7 @@ impl FolderSync {
             session: Mutex::new(()),
             error: Mutex::new(None),
             setup_key: Mutex::new(None),
+            sync_wake: Arc::new((Mutex::new(false), std::sync::Condvar::new())),
         })
     }
 
@@ -485,6 +498,7 @@ impl FolderSync {
         self.save(&config)?;
         drop(config);
         *self.error.lock().unwrap() = None;
+        self.wake_worker();
         Ok(self.status())
     }
 
@@ -504,6 +518,7 @@ impl FolderSync {
         self.save(&config)?;
         drop(config);
         *self.error.lock().unwrap() = None;
+        self.wake_worker();
         Ok(self.status())
     }
 
@@ -517,6 +532,7 @@ impl FolderSync {
         self.save(&config)?;
         drop(config);
         *self.error.lock().unwrap() = None;
+        self.wake_worker();
         Ok(self.status())
     }
 
@@ -538,10 +554,12 @@ impl FolderSync {
                 let _ = self.save(&config);
             }
         }
-        if let Err(e) = self.ensure_listener() {
-            *self.error.lock().unwrap() = Some(e);
-        } else {
-            self.ensure_worker();
+        if self.config.lock().unwrap().enabled {
+            if let Err(e) = self.ensure_listener() {
+                *self.error.lock().unwrap() = Some(e);
+            } else {
+                self.ensure_worker();
+            }
         }
     }
 
@@ -610,24 +628,93 @@ impl FolderSync {
             return;
         }
         let manager = Arc::clone(self);
-        thread::spawn(move || loop {
-            thread::sleep(Duration::from_millis(600));
-            let pairs = {
-                let config = manager.config.lock().unwrap();
-                if !config.enabled {
+        thread::spawn(move || {
+            let (fs_tx, fs_rx) = std::sync::mpsc::channel();
+            let mut watcher: Option<RecommendedWatcher> =
+                RecommendedWatcher::new(fs_tx, NotifyConfig::default()).ok();
+            let mut current_watched: BTreeSet<PathBuf> = BTreeSet::new();
+
+            loop {
+                let (enabled, needed_dirs) = {
+                    let config = manager.config.lock().unwrap();
+                    let dirs = if config.enabled {
+                        config
+                            .pairs
+                            .iter()
+                            .filter(|p| p.enabled && p.approved)
+                            .map(|p| PathBuf::from(&p.local_dir))
+                            .collect::<BTreeSet<_>>()
+                    } else {
+                        BTreeSet::new()
+                    };
+                    (config.enabled, dirs)
+                };
+
+                if let Some(ref mut w) = watcher {
+                    for removed in current_watched.difference(&needed_dirs) {
+                        let _ = w.unwatch(removed);
+                    }
+                    for added in needed_dirs.difference(&current_watched) {
+                        if added.is_dir() {
+                            let _ = w.watch(added, RecursiveMode::Recursive);
+                        }
+                    }
+                    current_watched = needed_dirs;
+                }
+
+                let mut triggered = false;
+                let mut fs_changed = false;
+                {
+                    let (lock, cvar) = &*manager.sync_wake;
+                    let mut wake_guard = lock.lock().unwrap();
+                    if *wake_guard {
+                        *wake_guard = false;
+                        triggered = true;
+                    } else {
+                        let (guard, timeout_res) = cvar
+                            .wait_timeout(wake_guard, Duration::from_secs(3))
+                            .unwrap();
+                        wake_guard = guard;
+                        if *wake_guard {
+                            *wake_guard = false;
+                            triggered = true;
+                        } else if !timeout_res.timed_out() {
+                            triggered = true;
+                        }
+                    }
+                }
+
+                while let Ok(_) = fs_rx.try_recv() {
+                    triggered = true;
+                    fs_changed = true;
+                }
+
+                if triggered {
+                    thread::sleep(Duration::from_millis(100));
+                    while let Ok(_) = fs_rx.try_recv() {
+                        fs_changed = true;
+                    }
+                }
+
+                if !enabled {
                     continue;
                 }
-                config
-                    .pairs
-                    .iter()
-                    .filter(|p| {
-                        p.enabled
-                            && p.approved
-                            && device_name().to_ascii_lowercase() < p.peer_name.to_ascii_lowercase()
-                    })
-                    .cloned()
-                    .collect::<Vec<_>>()
-            };
+                let pairs = {
+                    let config = manager.config.lock().unwrap();
+                    if !config.enabled {
+                        continue;
+                    }
+                    config
+                        .pairs
+                        .iter()
+                        .filter(|p| {
+                            let is_coordinator = device_name().to_ascii_lowercase()
+                                < p.peer_name.to_ascii_lowercase();
+                            p.enabled && p.approved && (fs_changed || is_coordinator)
+                        })
+                        .cloned()
+                        .collect::<Vec<_>>()
+                };
             for pair in pairs {
                 if let Err(e) = manager.sync_pair(&pair) {
                     if e == "Sync is busy" {
@@ -638,8 +725,9 @@ impl FolderSync {
                     *manager.error.lock().unwrap() = None;
                 }
             }
-        });
-    }
+        }
+    });
+}
 
     pub fn sync_now(&self, id: &str) -> Result<SyncStatus, String> {
         let pair = {
@@ -724,6 +812,7 @@ impl FolderSync {
             pair.initial_files = initial_files;
             pair.snapshot_ready = true;
         })?;
+        self.wake_worker();
         Ok(self.status())
     }
 
@@ -1434,6 +1523,7 @@ impl FolderSync {
         config.enabled = true;
         self.save(&config)?;
         *self.error.lock().unwrap() = None;
+        self.wake_worker();
         Ok(())
     }
 
