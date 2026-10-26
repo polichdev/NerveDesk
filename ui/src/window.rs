@@ -39,9 +39,9 @@ pub fn apply_windows_dark_theme_raw(raw_hwnd: *mut std::ffi::c_void) {
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows::Win32::UI::WindowsAndMessaging::{
         CreateIcon, GetWindowLongPtrW, LoadImageW, SendMessageW, SetClassLongPtrW, SetWindowLongPtrW,
-        SetWindowPos, GCLP_HICON, GCLP_HICONSM, GWL_EXSTYLE, ICON_BIG, ICON_SMALL, IMAGE_ICON,
-        LR_DEFAULTSIZE, LR_SHARED, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
-        SWP_NOZORDER, WM_SETICON, WS_EX_APPWINDOW, WS_EX_DLGMODALFRAME, WS_EX_TOOLWINDOW,
+        SetWindowPos, GCLP_HICON, GCLP_HICONSM, GWL_EXSTYLE, ICON_BIG, ICON_SMALL, IDI_APPLICATION,
+        IMAGE_ICON, LR_DEFAULTSIZE, LR_SHARED, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE,
+        SWP_NOSIZE, SWP_NOZORDER, WM_SETICON, WS_EX_APPWINDOW, WS_EX_TOOLWINDOW,
     };
 
     let hwnd = HWND(raw_hwnd);
@@ -51,31 +51,29 @@ pub fn apply_windows_dark_theme_raw(raw_hwnd: *mut std::ffi::c_void) {
         SetWindowLongPtrW(
             hwnd,
             GWL_EXSTYLE,
-            (style | WS_EX_DLGMODALFRAME.0 as isize | WS_EX_APPWINDOW.0 as isize)
-                & !(WS_EX_TOOLWINDOW.0 as isize),
+            (style | WS_EX_APPWINDOW.0 as isize) & !(WS_EX_TOOLWINDOW.0 as isize),
         );
 
+        // Transparent 16x16 icon for window caption (top-left) so no icon appears in the titlebar
         let and_mask = [0xFFu8; 32];
         let xor_mask = [0x00u8; 32];
         let transparent_icon =
             CreateIcon(None, 16, 16, 1, 1, and_mask.as_ptr(), xor_mask.as_ptr()).ok();
-
-        let icon_param = transparent_icon
-            .map(|h| h.0 as isize)
-            .unwrap_or(0);
+        let small_param = transparent_icon.map(|h| h.0 as isize).unwrap_or(0);
 
         let _ = SendMessageW(
             hwnd,
             WM_SETICON,
             WPARAM(ICON_SMALL as usize),
-            LPARAM(icon_param),
+            LPARAM(small_param),
         );
-        SetClassLongPtrW(hwnd, GCLP_HICONSM, icon_param);
+        SetClassLongPtrW(hwnd, GCLP_HICONSM, small_param);
 
+        // Real application icon for Taskbar and Alt-Tab (resource 32512 / IDI_APPLICATION)
         if let Ok(hinstance) = GetModuleHandleW(None) {
             if let Ok(big_icon) = LoadImageW(
                 hinstance,
-                windows::core::PCWSTR(1 as usize as *const u16),
+                IDI_APPLICATION,
                 IMAGE_ICON,
                 0,
                 0,

@@ -1104,7 +1104,7 @@
               </div>
               <div class="setting-text">
                 <div class="setting-name" data-i18n="security_key_name">Ключ безпеки</div>
-                <div class="setting-desc" data-i18n="security_key_desc">Згенеруйте ключ на одному ПК та налаштуйте з'єднання з тим самим ключем на обох ПК.</div>
+                <div class="setting-desc" data-i18n="security_key_desc">Введіть ім'я іншого ПК та код, показаний на ньому. Дії на іншому ПК не потрібні.</div>
               </div>
             </div>
             <div class="setting-right">
@@ -1122,7 +1122,7 @@
 
           <div id="pairDrawer" style="display: none; background: var(--bg-tertiary); border-left: 1px solid var(--card-border); border-right: 1px solid var(--card-border); border-top: 1px solid var(--card-border-subtle); border-bottom: 1px solid var(--card-border-subtle); padding: 14px 18px;">
             <div class="pair-drawer-content">
-              <input type="text" id="peerKeyInput" class="code-input" placeholder="Ключ безпеки" data-i18n-placeholder="placeholder_key" onchange="preparePairingKey()" style="flex: 1;">
+              <input type="text" id="peerKeyInput" class="code-input" placeholder="Ключ безпеки" data-i18n-placeholder="placeholder_key" style="flex: 1;">
               <input type="text" id="peerDeviceNameInput" class="code-input" placeholder="Ім'я пристрою" data-i18n-placeholder="placeholder_device_name" style="flex: 1;">
               <button class="btn btn-primary" onclick="connectWithKeyAndDevice()" data-i18n="btn_connect">З'єднати</button>
             </div>
@@ -1619,8 +1619,8 @@
             <summary data-i18n="help_devices_question">Як підключити два ПК?</summary>
             <div class="help-body"><ol>
               <li data-i18n="help_devices_1">Запустіть NerveDesk на обох ПК в одній локальній мережі.</li>
-              <li data-i18n="help_devices_2">У «Пристроях» створіть ключ на першому ПК. На другому введіть той самий ключ.</li>
-              <li data-i18n="help_devices_3">На кожному ПК натисніть «З’єднати», введіть ім’я іншого ПК і ключ, потім ще раз натисніть «З’єднати».</li>
+              <li data-i18n="help_devices_2">На другому ПК відкрийте «Пристрої» та подивіться його ключ безпеки.</li>
+              <li data-i18n="help_devices_3">На першому ПК натисніть «З’єднати», введіть ім’я другого ПК та його ключ, потім ще раз натисніть «З’єднати».</li>
             </ol><button class="btn btn-secondary" onclick="switchTab('devices')" data-i18n="help_open_devices">Відкрити пристрої</button></div>
           </details>
           <details class="help-item">
@@ -1720,8 +1720,8 @@
           </div>
           <div class="setting-right">
             <select id="settingLangSelect" class="select-input" onchange="setLanguage(this.value)">
+              <option value="en" selected>English (EN)</option>
               <option value="uk">Українська (UK)</option>
-              <option value="en">English (EN)</option>
             </select>
           </div>
         </div>
@@ -1796,8 +1796,8 @@
         help_desc: "Короткі кроки для підключення пристроїв і роботи з кожним модулем.",
         help_devices_question: "Як підключити два ПК?",
         help_devices_1: "Запустіть NerveDesk на обох ПК в одній локальній мережі.",
-        help_devices_2: "У «Пристроях» створіть ключ на першому ПК. На другому введіть той самий ключ.",
-        help_devices_3: "На кожному ПК натисніть «З’єднати», введіть ім’я іншого ПК і ключ, потім ще раз натисніть «З’єднати».",
+        help_devices_2: "На другому ПК відкрийте «Пристрої» та подивіться його ключ безпеки.",
+        help_devices_3: "На першому ПК натисніть «З’єднати», введіть ім’я другого ПК та його ключ, потім ще раз натисніть «З’єднати».",
         help_open_devices: "Відкрити пристрої",
         help_kvm_question: "Як керувати другим ПК мишею та клавіатурою?",
         help_kvm_1: "Спочатку підключіть ПК у розділі «Пристрої».",
@@ -1952,7 +1952,7 @@
         kvm_activation_desc: "Увімкнути безперешкодне переміщення курсору та введення клавіатури між спареними пристроями",
         sec_encryption: "Ключ шифрування та ім'я пристрою",
         security_key_name: "Ключ безпеки",
-        security_key_desc: "Згенеруйте ключ на одному ПК та налаштуйте з'єднання з тим самим ключем на обох ПК.",
+        security_key_desc: "Введіть ім'я іншого ПК та код, показаний на ньому. Дії на іншому ПК не потрібні.",
         btn_new_key: "Новий ключ",
         btn_connect: "З'єднати",
         copy_key_title: "Скопіювати ключ",
@@ -2100,8 +2100,8 @@
         help_desc: "Quick steps to connect devices and use each module.",
         help_devices_question: "How do I connect two PCs?",
         help_devices_1: "Run NerveDesk on both PCs on the same local network.",
-        help_devices_2: "In Devices, create a key on the first PC. Enter the same key on the second PC.",
-        help_devices_3: "On each PC, click Connect, enter the other PC's name and the key, then click Connect again.",
+        help_devices_2: "On the other PC, open Devices and read its Security Key.",
+        help_devices_3: "On this PC, click Connect, enter the other PC's name and key, then click Connect again.",
         help_open_devices: "Open Devices",
         help_kvm_question: "How do I control the other PC with mouse and keyboard?",
         help_kvm_1: "First connect the PCs in Devices.",
@@ -2256,7 +2256,7 @@
         kvm_activation_desc: "Enable seamless border-crossing cursor and keyboard control across paired devices",
         sec_encryption: "Encryption Key & Device Name",
         security_key_name: "Security Key",
-        security_key_desc: "Generate a key on one PC, then configure the connection with that same key on both PCs.",
+        security_key_desc: "Enter the other PC's name and the code shown there. No action is needed on the other PC.",
         btn_new_key: "New Key",
         btn_connect: "Connect",
         copy_key_title: "Copy security key",
@@ -2389,7 +2389,7 @@
       }
     };
 
-    let currentLang = localStorage.getItem('nervedesk_lang') || 'uk';
+    let currentLang = localStorage.getItem('nervedesk_lang') || 'en';
     let currentTheme = localStorage.getItem('nervedesk_theme') || 'dark';
 
     function t(key, fallback = "") {
@@ -2825,6 +2825,7 @@
     let isPeerDisabled = false;
     let isProjecting = false;
     let isReconnecting = false;
+    let lastPeerReconnectAt = 0;
     let reverseKvmStarting = false;
     let reverseKvmRetryAt = 0;
     let lastMetrics = null;
@@ -3295,41 +3296,25 @@
 
     setInterval(refreshSyncStatus, 2000);
 
-    function generateNewKey() {
-      const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%^&*";
-      let key = "";
-      const values = new Uint32Array(24);
-      crypto.getRandomValues(values);
-      for (let i = 0; i < values.length; i++) {
-        key += chars.charAt(values[i] % chars.length);
+    async function generateNewKey() {
+      try {
+        const key = await callTauri('generate_new_pairing_key');
+        if (key) {
+          document.getElementById('securityKeyInput').value = key;
+        }
+      } catch (e) {
+        console.error('generateNewKey error:', e);
       }
-      document.getElementById('securityKeyInput').value = key;
     }
 
     async function loadPairingKey() {
-      const saved = await callTauri('get_saved_pairing_key');
-      const legacy = localStorage.getItem('paired_security_key');
-      if (saved) {
-        localStorage.removeItem('paired_security_key');
-        return saved;
-      }
-      if (legacy) {
-        await callTauri('prepare_pairing_key', { securityKey: legacy });
-        localStorage.removeItem('paired_security_key');
-        return legacy;
-      }
+      try {
+        const saved = await callTauri('get_saved_pairing_key');
+        if (saved && saved.length >= 16) {
+          return saved;
+        }
+      } catch (_) {}
       return '';
-    }
-
-    let pairingPreparation = Promise.resolve();
-    function preparePairingKey() {
-      const key = document.getElementById('peerKeyInput').value.trim();
-      if (key.length < 16 || key.length > 256) return pairingPreparation;
-      pairingPreparation = pairingPreparation
-        .then(() => callTauri('prepare_pairing_key', { securityKey: key }))
-        .then(() => { document.getElementById('securityKeyInput').value = key; })
-        .catch(err => { alert(String(err)); });
-      return pairingPreparation;
     }
 
     async function copySecurityKey() {
@@ -3362,8 +3347,7 @@
     }
 
     async function connectWithKeyAndDevice() {
-      const key = document.getElementById('peerKeyInput').value.trim()
-        || document.getElementById('securityKeyInput').value.trim();
+      const key = document.getElementById('peerKeyInput').value.trim();
       const name = document.getElementById('peerDeviceNameInput').value.trim();
       if (!name) {
         alert(t('alert_enter_device_name'));
@@ -3377,8 +3361,8 @@
       try {
         isReconnecting = true;
         renderPeerStatus(lastMetrics);
-        await pairingPreparation;
         await callTauri('pair_device', { targetName: name, securityKey: key });
+        document.getElementById('securityKeyInput').value = key;
         localStorage.setItem('paired_device_name', name);
         localStorage.removeItem('paired_security_key');
         localStorage.setItem('peer_device_disabled', 'false');
@@ -3431,6 +3415,7 @@
       const target = localStorage.getItem('paired_device_name');
       const key = await loadPairingKey().catch(() => '');
       if (!target || isReconnecting) return;
+      lastPeerReconnectAt = Date.now();
       isReconnecting = true;
       renderPeerStatus(lastMetrics);
 
@@ -3671,9 +3656,13 @@
       await callTauri('set_module_enabled', { module: 'mirror', enabled: mirrorEnabled }).catch(() => {});
       if (localStorage.getItem('audio_module_enabled') === 'true') {
         await callTauri('set_audio_enabled', { enabled: true }).catch(() => {});
+      } else {
+        await callTauri('set_audio_enabled', { enabled: false }).catch(() => {});
       }
       if (localStorage.getItem('mobile_module_enabled') === 'true') {
         await callTauri('toggle_mobile_remote', { enable: true }).catch(() => {});
+      } else {
+        await callTauri('toggle_mobile_remote', { enable: false }).catch(() => {});
       }
       await onPhoneAudioDirectionChanged();
 
@@ -3708,7 +3697,7 @@
       if (savedKey) {
         document.getElementById('securityKeyInput').value = savedKey;
       } else {
-        generateNewKey();
+        await generateNewKey();
       }
 
       const kbSharing = localStorage.getItem('keyboard_sharing_enabled') !== 'false';
@@ -3740,7 +3729,20 @@
       try {
         const m = await callTauri('get_metrics');
         lastMetrics = m;
+        if (m.peer_device && m.peer_online &&
+            localStorage.getItem('paired_device_name') !== m.peer_device) {
+          localStorage.setItem('paired_device_name', m.peer_device);
+          localStorage.setItem('peer_device_disabled', 'false');
+          document.getElementById('peerAvailableSlot').style.display = 'none';
+          document.getElementById('monitorBoxPeer').style.display = 'flex';
+          document.getElementById('peerBoxLabel').innerText = m.peer_device.toUpperCase();
+        }
         const savedPeer = localStorage.getItem('paired_device_name');
+        if (savedPeer && !m.peer_online && !isReconnecting &&
+            localStorage.getItem('peer_device_disabled') !== 'true' &&
+            Date.now() - lastPeerReconnectAt > 10000) {
+          reconnectCurrentPeer();
+        }
         if (m.peer_online && (m.peer_device || savedPeer) && !m.kvm_active && !isReconnecting &&
             localStorage.getItem('kvm_module_enabled') === 'true' &&
             localStorage.getItem('peer_device_disabled') !== 'true' &&
