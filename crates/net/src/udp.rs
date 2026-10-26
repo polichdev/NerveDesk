@@ -30,7 +30,7 @@ impl UdpInputSender {
         let std_socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))
             .map_err(|e| NerveError::Io(e))?;
 
-        let _ = std_socket.set_send_buffer_size(64 * 1024);
+        let _ = std_socket.set_send_buffer_size(512 * 1024);
         let _ = std_socket.set_nonblocking(true);
 
         let any_addr: SocketAddr = "0.0.0.0:0".parse().unwrap();
@@ -136,7 +136,7 @@ impl UdpInputReceiver {
         let std_socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))
             .map_err(|e| NerveError::Io(e))?;
 
-        let _ = std_socket.set_recv_buffer_size(64 * 1024);
+        let _ = std_socket.set_recv_buffer_size(512 * 1024);
         let _ = std_socket.set_nonblocking(true);
 
         std_socket

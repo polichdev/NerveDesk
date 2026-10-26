@@ -149,34 +149,75 @@ fn output(transform: &IMFTransform) -> Result<Output, String> {
     }
 }
 
-fn bgra_to_nv12(width: u32, height: u32, bgra: &[u8]) -> Vec<u8> {
+fn bgra_to_nv12_into(width: u32, height: u32, bgra: &[u8], out: &mut [u8]) {
     let w = width as usize;
     let h = height as usize;
-    let mut out = vec![0u8; w * h * 3 / 2];
-    for y in 0..h {
-        for x in 0..w {
-            let p = (y * w + x) * 4;
-            let b = bgra[p] as i32;
-            let g = bgra[p + 1] as i32;
-            let r = bgra[p + 2] as i32;
-            out[y * w + x] = ((66 * r + 129 * g + 25 * b + 128) >> 8)
-                .saturating_add(16)
-                .clamp(0, 255) as u8;
-            if y % 2 == 0 && x % 2 == 0 {
-                let pixels = [p, p + 4, p + w * 4, p + w * 4 + 4];
-                let b = pixels.iter().map(|&i| bgra[i] as i32).sum::<i32>() / 4;
-                let g = pixels.iter().map(|&i| bgra[i + 1] as i32).sum::<i32>() / 4;
-                let r = pixels.iter().map(|&i| bgra[i + 2] as i32).sum::<i32>() / 4;
-                let uv = w * h + y / 2 * w + x;
-                out[uv] = ((-38 * r - 74 * g + 112 * b + 128) >> 8)
-                    .saturating_add(128)
-                    .clamp(0, 255) as u8;
-                out[uv + 1] = ((112 * r - 94 * g - 18 * b + 128) >> 8)
-                    .saturating_add(128)
-                    .clamp(0, 255) as u8;
+    let total_len = w * h * 3 / 2;
+    if out.len() < total_len {
+        return;
+    }
+    let uv_offset = w * h;
+    let p_out_y: *mut u8 = out.as_mut_ptr();
+    let p_out_uv: *mut u8 = unsafe { out.as_mut_ptr().add(uv_offset) };
+    let p_bgra = bgra.as_ptr();
+
+    for y in (0..h).step_by(2) {
+        let y_row0 = y * w;
+        let y_row1 = (y + 1) * w;
+        let uv_row = (y / 2) * w;
+        let bgra_row0 = y * w * 4;
+        let bgra_row1 = (y + 1) * w * 4;
+
+        for x in (0..w).step_by(2) {
+            let p00 = bgra_row0 + x * 4;
+            let p01 = p00 + 4;
+            let p10 = bgra_row1 + x * 4;
+            let p11 = p10 + 4;
+
+            unsafe {
+                let b00 = *p_bgra.add(p00) as i32;
+                let g00 = *p_bgra.add(p00 + 1) as i32;
+                let r00 = *p_bgra.add(p00 + 2) as i32;
+
+                let b01 = *p_bgra.add(p01) as i32;
+                let g01 = *p_bgra.add(p01 + 1) as i32;
+                let r01 = *p_bgra.add(p01 + 2) as i32;
+
+                let b10 = *p_bgra.add(p10) as i32;
+                let g10 = *p_bgra.add(p10 + 1) as i32;
+                let r10 = *p_bgra.add(p10 + 2) as i32;
+
+                let b11 = *p_bgra.add(p11) as i32;
+                let g11 = *p_bgra.add(p11 + 1) as i32;
+                let r11 = *p_bgra.add(p11 + 2) as i32;
+
+                *p_out_y.add(y_row0 + x) =
+                    ((66 * r00 + 129 * g00 + 25 * b00 + 128) >> 8).saturating_add(16).clamp(0, 255) as u8;
+                *p_out_y.add(y_row0 + x + 1) =
+                    ((66 * r01 + 129 * g01 + 25 * b01 + 128) >> 8).saturating_add(16).clamp(0, 255) as u8;
+                *p_out_y.add(y_row1 + x) =
+                    ((66 * r10 + 129 * g10 + 25 * b10 + 128) >> 8).saturating_add(16).clamp(0, 255) as u8;
+                *p_out_y.add(y_row1 + x + 1) =
+                    ((66 * r11 + 129 * g11 + 25 * b11 + 128) >> 8).saturating_add(16).clamp(0, 255) as u8;
+
+                let r_avg = (r00 + r01 + r10 + r11 + 2) >> 2;
+                let g_avg = (g00 + g01 + g10 + g11 + 2) >> 2;
+                let b_avg = (b00 + b01 + b10 + b11 + 2) >> 2;
+
+                let uv_idx = uv_row + x;
+                *p_out_uv.add(uv_idx) =
+                    ((-38 * r_avg - 74 * g_avg + 112 * b_avg + 128) >> 8).saturating_add(128).clamp(0, 255) as u8;
+                *p_out_uv.add(uv_idx + 1) =
+                    ((112 * r_avg - 94 * g_avg - 18 * b_avg + 128) >> 8).saturating_add(128).clamp(0, 255) as u8;
             }
         }
     }
+}
+
+#[allow(dead_code)]
+fn bgra_to_nv12(width: u32, height: u32, bgra: &[u8]) -> Vec<u8> {
+    let mut out = vec![0u8; width as usize * height as usize * 3 / 2];
+    bgra_to_nv12_into(width, height, bgra, &mut out);
     out
 }
 
@@ -252,6 +293,7 @@ pub struct Encoder {
     height: u32,
     frame: i64,
     prev_nv12: Vec<u8>,
+    nv12: Vec<u8>,
 }
 
 impl Encoder {
@@ -283,12 +325,14 @@ impl Encoder {
             let _ = transform.ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0);
         }
 
+        let nv12 = vec![0u8; width as usize * height as usize * 3 / 2];
         Ok(Self {
             mft,
             width,
             height,
             frame: 0,
             prev_nv12: Vec::new(),
+            nv12,
         })
     }
 
@@ -297,11 +341,11 @@ impl Encoder {
             return Err("Invalid BGRA frame".into());
         }
 
-        let nv12 = bgra_to_nv12(self.width, self.height, bgra);
+        bgra_to_nv12_into(self.width, self.height, bgra, &mut self.nv12);
 
         if let Some(ref transform) = self.mft {
             unsafe {
-                if transform.ProcessInput(0, &sample(&nv12, self.frame * 166_666)?, 0).is_ok() {
+                if transform.ProcessInput(0, &sample(&self.nv12, self.frame * 166_666)?, 0).is_ok() {
                     self.frame += 1;
                     let mut bytes = Vec::new();
                     for _ in 0..8 {
@@ -318,22 +362,22 @@ impl Encoder {
             }
         }
 
-        let is_keyframe = self.frame == 0 || self.frame % 120 == 0 || self.prev_nv12.len() != nv12.len();
+        let is_keyframe = self.frame == 0 || self.frame % 120 == 0 || self.prev_nv12.len() != self.nv12.len();
         self.frame += 1;
 
-        let mut payload = Vec::with_capacity(32 + nv12.len() / 4);
+        let mut payload = Vec::with_capacity(32 + self.nv12.len() / 4);
         payload.extend_from_slice(&AV1_MAGIC_HEADER);
         payload.extend_from_slice(&(self.width as u16).to_le_bytes());
         payload.extend_from_slice(&(self.height as u16).to_le_bytes());
         payload.push(if is_keyframe { 1 } else { 0 });
 
         if is_keyframe {
-            let compressed = miniz_oxide::deflate::compress_to_vec_zlib(&nv12, 1);
+            let compressed = miniz_oxide::deflate::compress_to_vec_zlib(&self.nv12, 1);
             payload.extend_from_slice(&(compressed.len() as u32).to_le_bytes());
             payload.extend_from_slice(&compressed);
         } else {
-            let mut delta = vec![0u8; nv12.len()];
-            for (i, (&curr, &prev)) in nv12.iter().zip(self.prev_nv12.iter()).enumerate() {
+            let mut delta = vec![0u8; self.nv12.len()];
+            for (i, (&curr, &prev)) in self.nv12.iter().zip(self.prev_nv12.iter()).enumerate() {
                 delta[i] = curr.wrapping_sub(prev);
             }
             let compressed = miniz_oxide::deflate::compress_to_vec_zlib(&delta, 1);
@@ -341,7 +385,7 @@ impl Encoder {
             payload.extend_from_slice(&compressed);
         }
 
-        self.prev_nv12 = nv12;
+        self.prev_nv12.clone_from(&self.nv12);
         Ok(payload)
     }
 }

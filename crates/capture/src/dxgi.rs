@@ -125,11 +125,15 @@ impl<'a> GpuFrame<'a> {
             );
 
             let row_size = (self.width * 4) as usize;
-            for row in 0..self.height as usize {
-                let src_offset = row * mapped.RowPitch as usize;
-                let dst_offset = row * row_size;
-                dest[dst_offset..dst_offset + row_size]
-                    .copy_from_slice(&src_slice[src_offset..src_offset + row_size]);
+            if mapped.RowPitch as usize == row_size {
+                dest[..expected_size].copy_from_slice(&src_slice[..expected_size]);
+            } else {
+                for row in 0..self.height as usize {
+                    let src_offset = row * mapped.RowPitch as usize;
+                    let dst_offset = row * row_size;
+                    dest[dst_offset..dst_offset + row_size]
+                        .copy_from_slice(&src_slice[src_offset..src_offset + row_size]);
+                }
             }
 
             self.duplicator

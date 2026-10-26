@@ -22,6 +22,12 @@ const CONTROL_PORT: u16 = 48109;
 const MAX_FORMAT_BYTES: usize = std::mem::size_of::<WAVEFORMATEXTENSIBLE>();
 const MAX_PACKET_BYTES: usize = 512 * 1024;
 
+fn tune_audio_socket(socket: &TcpStream) {
+    let _ = socket.set_nodelay(true);
+    let _ = socket2::SockRef::from(socket).set_send_buffer_size(512 * 1024);
+    let _ = socket2::SockRef::from(socket).set_recv_buffer_size(512 * 1024);
+}
+
 fn audio_packet_context(sequence: u64) -> [u8; 20] {
     let mut context = [0u8; 20];
     context[..12].copy_from_slice(b"audio-packet");
@@ -103,6 +109,7 @@ impl AudioBridge {
             thread::spawn(move || loop {
                 match listener.accept() {
                     Ok((mut stream, peer)) if active.load(Ordering::SeqCst) => {
+                        tune_audio_socket(&stream);
                         let paired = paired_peer_ip.lock().ok().and_then(|ip| ip.clone());
                         if paired.as_deref() != Some(peer.ip().to_string().as_str()) {
                             continue;
@@ -238,6 +245,7 @@ impl AudioBridge {
                 return Err(format!("Audio target unavailable: {e}"));
             }
         };
+        tune_audio_socket(&socket);
         socket.set_write_timeout(Some(Duration::from_secs(2))).ok();
         socket.set_read_timeout(Some(Duration::from_secs(3))).ok();
         let mut ready = [0; 2];

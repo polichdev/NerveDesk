@@ -60,6 +60,41 @@ impl VideoChunkHeader {
         (self.flags & (1 << 1)) != 0
     }
 
+    pub fn new_fec(
+        frame_id: u64,
+        group_index: u16,
+        total_chunks: u16,
+        payload_size: u16,
+        start_chunk: u16,
+        chunk_count: u16,
+        timestamp_us: u64,
+    ) -> Self {
+        let mut reserved = [0u8; 4];
+        reserved[0..2].copy_from_slice(&start_chunk.to_le_bytes());
+        reserved[2..4].copy_from_slice(&chunk_count.to_le_bytes());
+        Self {
+            magic: VIDEO_PROTOCOL_MAGIC,
+            version: PROTOCOL_VERSION,
+            flags: 1 << 2,
+            chunk_index: group_index,
+            total_chunks,
+            payload_size,
+            _reserved: reserved,
+            frame_id,
+            timestamp_us,
+        }
+    }
+
+    pub fn is_fec_parity(&self) -> bool {
+        (self.flags & (1 << 2)) != 0
+    }
+
+    pub fn fec_group_range(&self) -> (u16, u16) {
+        let start = u16::from_le_bytes([self._reserved[0], self._reserved[1]]);
+        let count = u16::from_le_bytes([self._reserved[2], self._reserved[3]]);
+        (start, count)
+    }
+
     pub fn validate(&self) -> Result<()> {
         if self.magic != VIDEO_PROTOCOL_MAGIC {
             return Err(NerveError::Protocol("Invalid video packet magic".into()));

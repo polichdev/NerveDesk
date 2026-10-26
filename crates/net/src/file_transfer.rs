@@ -15,8 +15,8 @@ const MAX_SECURE_RECORD: usize = 1024 * 1024 + 28;
 fn tune_socket(socket: &TcpStream) {
     let _ = socket.set_nodelay(true);
     let sock_ref = socket2::SockRef::from(socket);
-    let _ = sock_ref.set_send_buffer_size(1024 * 1024);
-    let _ = sock_ref.set_recv_buffer_size(1024 * 1024);
+    let _ = sock_ref.set_send_buffer_size(4 * 1024 * 1024);
+    let _ = sock_ref.set_recv_buffer_size(4 * 1024 * 1024);
 }
 
 static STAGED_FILES: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());

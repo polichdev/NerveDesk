@@ -1,5 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 #[cfg(target_os = "windows")]
 fn terminate_other_instances() {
     use windows::Win32::Foundation::CloseHandle;

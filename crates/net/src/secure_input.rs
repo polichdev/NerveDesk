@@ -16,7 +16,11 @@ fn cipher(key: &str, context: &[u8]) -> Result<ChaCha20Poly1305, String> {
         return Err("Pairing key must contain 16 to 256 characters".into());
     }
 
-    let hash = Sha256::digest([b"NerveDesk v2:".as_slice(), context, key.as_bytes()].concat());
+    let mut hasher = Sha256::new();
+    hasher.update(b"NerveDesk v2:");
+    hasher.update(context);
+    hasher.update(key.as_bytes());
+    let hash = hasher.finalize();
     Ok(ChaCha20Poly1305::new_from_slice(&hash).expect("SHA-256 key length"))
 }
 
@@ -40,13 +44,16 @@ pub fn seal_payload(
     unsafe { BCryptGenRandom(None, &mut nonce, BCRYPT_USE_SYSTEM_PREFERRED_RNG) }
         .ok()
         .map_err(|e| format!("Random generator: {e}"))?;
-    let mut encrypted = plaintext.to_vec();
-    let tag = cipher(key, context)?
-        .encrypt_in_place_detached(Nonce::from_slice(&nonce), context, &mut encrypted)
-        .map_err(|_| "Could not encrypt input packet".to_string())?;
-    let mut packet = Vec::with_capacity(NONCE_BYTES + encrypted.len() + TAG_BYTES);
+    let mut packet = Vec::with_capacity(NONCE_BYTES + plaintext.len() + TAG_BYTES);
     packet.extend_from_slice(&nonce);
-    packet.extend_from_slice(&encrypted);
+    packet.extend_from_slice(plaintext);
+    let tag = cipher(key, context)?
+        .encrypt_in_place_detached(
+            Nonce::from_slice(&nonce),
+            context,
+            &mut packet[NONCE_BYTES..],
+        )
+        .map_err(|_| "Could not encrypt input packet".to_string())?;
     packet.extend_from_slice(&tag);
     Ok(packet)
 }

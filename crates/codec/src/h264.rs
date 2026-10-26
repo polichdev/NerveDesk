@@ -212,13 +212,12 @@ fn output(transform: &IMFTransform) -> Result<Output, String> {
     }
 }
 
-fn bgra_to_nv12(width: u32, height: u32, bgra: &[u8]) -> Vec<u8> {
+fn bgra_to_nv12_into(width: u32, height: u32, bgra: &[u8], out: &mut [u8]) {
     let w = width as usize;
     let h = height as usize;
     let total_len = w * h * 3 / 2;
-    let mut out = Vec::with_capacity(total_len);
-    unsafe {
-        out.set_len(total_len);
+    if out.len() < total_len {
+        return;
     }
     let uv_offset = w * h;
     let p_out_y: *mut u8 = out.as_mut_ptr();
@@ -276,10 +275,16 @@ fn bgra_to_nv12(width: u32, height: u32, bgra: &[u8]) -> Vec<u8> {
             }
         }
     }
+}
+
+#[allow(dead_code)]
+fn bgra_to_nv12(width: u32, height: u32, bgra: &[u8]) -> Vec<u8> {
+    let mut out = vec![0u8; width as usize * height as usize * 3 / 2];
+    bgra_to_nv12_into(width, height, bgra, &mut out);
     out
 }
 
-fn nv12_to_bgra(width: u32, height: u32, stride: usize, nv12: &[u8]) -> Result<Vec<u8>, String> {
+fn nv12_to_bgra_into(width: u32, height: u32, stride: usize, nv12: &[u8], out: &mut [u8]) -> Result<(), String> {
     let w = width as usize;
     let h = height as usize;
     if stride < w || nv12.len() * 2 % (stride * 3) != 0 {
@@ -290,9 +295,8 @@ fn nv12_to_bgra(width: u32, height: u32, stride: usize, nv12: &[u8]) -> Result<V
         return Err("Short NV12 frame".into());
     }
     let total = w * h * 4;
-    let mut out = Vec::with_capacity(total);
-    unsafe {
-        out.set_len(total);
+    if out.len() < total {
+        return Err("Output buffer too small".into());
     }
     let uv_plane = stride * coded_height;
     let p_out: *mut u8 = out.as_mut_ptr();
@@ -330,6 +334,12 @@ fn nv12_to_bgra(width: u32, height: u32, stride: usize, nv12: &[u8]) -> Result<V
             }
         }
     }
+    Ok(())
+}
+
+fn nv12_to_bgra(width: u32, height: u32, stride: usize, nv12: &[u8]) -> Result<Vec<u8>, String> {
+    let mut out = vec![0u8; width as usize * height as usize * 4];
+    nv12_to_bgra_into(width, height, stride, nv12, &mut out)?;
     Ok(out)
 }
 
@@ -339,6 +349,8 @@ pub struct Encoder {
     height: u32,
     fps: u32,
     frame: i64,
+    input_buffer: IMFMediaBuffer,
+    input_sample: IMFSample,
 }
 
 impl Encoder {
@@ -397,29 +409,59 @@ impl Encoder {
             transform
                 .ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0)
                 .map_err(|e| e.to_string())?;
+
+            let total_nv12_len = (width as usize * height as usize * 3 / 2) as u32;
+            let input_buffer = MFCreateMemoryBuffer(total_nv12_len).map_err(|e| e.to_string())?;
+            let input_sample = MFCreateSample().map_err(|e| e.to_string())?;
+            input_sample.AddBuffer(&input_buffer).map_err(|e| e.to_string())?;
+
             Ok(Self {
                 transform,
                 width,
                 height,
                 fps,
                 frame: 0,
+                input_buffer,
+                input_sample,
             })
         }
     }
 
     pub fn encode(&mut self, bgra: &[u8]) -> Result<Vec<u8>, String> {
-        if bgra.len() != self.width as usize * self.height as usize * 4 {
+        let expected_bgra = self.width as usize * self.height as usize * 4;
+        if bgra.len() != expected_bgra {
             return Err("Invalid BGRA frame".into());
         }
-        let nv12 = bgra_to_nv12(self.width, self.height, bgra);
+        let total_nv12_len = (self.width as usize * self.height as usize * 3 / 2) as u32;
         let frame_duration_100ns = 10_000_000 / self.fps as i64;
         unsafe {
+            let mut ptr = std::ptr::null_mut();
+            let mut max_len = 0u32;
+            let mut cur_len = 0u32;
+            self.input_buffer
+                .Lock(&mut ptr, Some(&mut max_len), Some(&mut cur_len))
+                .map_err(|e| e.to_string())?;
+
+            let dest_slice = std::slice::from_raw_parts_mut(ptr, max_len as usize);
+            bgra_to_nv12_into(self.width, self.height, bgra, dest_slice);
+
+            self.input_buffer.Unlock().map_err(|e| e.to_string())?;
+            self.input_buffer
+                .SetCurrentLength(total_nv12_len)
+                .map_err(|e| e.to_string())?;
+            self.input_sample
+                .SetSampleTime(self.frame * frame_duration_100ns)
+                .map_err(|e| e.to_string())?;
+            self.input_sample
+                .SetSampleDuration(frame_duration_100ns)
+                .map_err(|e| e.to_string())?;
+
             self.transform
-                .ProcessInput(0, &sample(&nv12, self.frame * frame_duration_100ns, frame_duration_100ns)?, 0)
+                .ProcessInput(0, &self.input_sample, 0)
                 .map_err(|e| e.to_string())?;
         }
         self.frame += 1;
-        let mut bytes = Vec::new();
+        let mut bytes = Vec::with_capacity(32 * 1024);
         for _ in 0..8 {
             match output(&self.transform)? {
                 Output::Data(part) => bytes.extend(part),
