@@ -9,6 +9,7 @@ use net::{FileTransferServer, FILE_TRANSFER_PORT};
 mod bluetooth_audio;
 mod commands;
 mod firewall;
+mod pairing;
 mod secret_store;
 mod tray;
 mod window;
@@ -17,10 +18,16 @@ pub use firewall::handle_cli as handle_firewall_cli;
 
 pub fn run() {
     let state = AppState::new();
-    if let Ok(Some(key)) = secret_store::load_key() {
-        if let Ok(mut saved) = state.paired_security_key.lock() {
-            *saved = Some(key);
+    let initial_key = match secret_store::load_key() {
+        Ok(Some(k)) if (16..=256).contains(&k.len()) => k,
+        _ => {
+            let new_k = pairing::generate_random_security_key();
+            let _ = secret_store::save_key(&new_k);
+            new_k
         }
+    };
+    if let Ok(mut saved) = state.paired_security_key.lock() {
+        *saved = Some(initial_key);
     }
     let app_handle_for_drop = Arc::new(Mutex::new(None::<tauri::AppHandle>));
     let app_handle_for_setup = app_handle_for_drop.clone();
@@ -36,10 +43,10 @@ pub fn run() {
             }
         })),
     );
-
     if let Err(e) = tauri::Builder::default()
         .manage(state)
         .setup(move |app| {
+            pairing::start_listener(&app.state::<AppState>());
             if let Ok(mut guard) = app_handle_for_setup.lock() {
                 *guard = Some(app.handle().clone());
             }
@@ -96,6 +103,7 @@ pub fn run() {
             commands::pair_device,
             commands::prepare_pairing_key,
             commands::get_saved_pairing_key,
+            commands::generate_new_pairing_key,
             commands::clear_pairing_key,
             commands::start_host,
             commands::stop_service,

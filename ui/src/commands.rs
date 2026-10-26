@@ -38,14 +38,14 @@ pub fn quit_app(app: tauri::AppHandle) {
 #[command]
 pub fn show_main_window(app: tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
-        if let Some(icon) = app.default_window_icon() {
-            let _ = window.set_icon(icon.clone());
-        }
         if window.is_minimized().unwrap_or(false) {
             let _ = window.unminimize();
         }
         let _ = window.show();
         let _ = window.set_focus();
+        if let Some(icon) = app.default_window_icon() {
+            let _ = window.set_icon(icon.clone());
+        }
         #[cfg(target_os = "windows")]
         crate::window::apply_windows_dark_theme_webview(&window);
     }
@@ -151,7 +151,7 @@ pub fn get_metrics(state: State<AppState>) -> AppMetrics {
 pub async fn discover_devices(state: State<'_, AppState>) -> Result<Vec<DiscoveredDevice>, String> {
     let my_name = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Host-PC".into());
     let (sw, sh) = get_screen_dimensions();
-    let beacon = DiscoveryBeacon::new(my_name, DeviceRole::Host, 48100, 48101, sw, sh)
+    let beacon = DiscoveryBeacon::new(my_name.clone(), DeviceRole::Host, 48100, 48101, sw, sh)
         .with_edge(state.screen_edge.lock().unwrap().clone());
 
     if let Ok(emitter) = DiscoveryBeaconEmitter::new(beacon).await {
@@ -195,18 +195,19 @@ pub async fn pair_device(
 
     let my_name = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Desktop-PC".into());
     let (sw, sh) = get_screen_dimensions();
-    let beacon = DiscoveryBeacon::new(my_name, DeviceRole::Host, 48100, 48101, sw, sh)
+    let beacon = DiscoveryBeacon::new(my_name.clone(), DeviceRole::Host, 48100, 48101, sw, sh)
         .with_edge(state.screen_edge.lock().unwrap().clone());
     if let Ok(emitter) = DiscoveryBeaconEmitter::new(beacon).await {
         let _ = emitter.emit_beacon().await;
     }
 
     let resolved_ip = resolve_target_ip(clean_name, &state).await?;
+    crate::pairing::request_pair(&resolved_ip, security_key.trim(), &my_name).await?;
     crate::secret_store::save_key(security_key.trim())?;
     *state
         .authenticated_peer_seen
         .lock()
-        .map_err(|e| e.to_string())? = None;
+        .map_err(|e| e.to_string())? = Some(Instant::now());
     if let Ok(mut key_guard) = state.paired_security_key.lock() {
         *key_guard = Some(security_key.trim().to_string());
     }
@@ -220,8 +221,37 @@ pub async fn pair_device(
 }
 
 #[command]
-pub fn get_saved_pairing_key() -> Result<Option<String>, String> {
-    crate::secret_store::load_key()
+pub fn get_saved_pairing_key(state: State<'_, AppState>) -> Result<String, String> {
+    if let Ok(guard) = state.paired_security_key.lock() {
+        if let Some(ref k) = *guard {
+            return Ok(k.clone());
+        }
+    }
+    let key = match crate::secret_store::load_key() {
+        Ok(Some(k)) if (16..=256).contains(&k.len()) => k,
+        _ => {
+            let new_k = crate::pairing::generate_random_security_key();
+            let _ = crate::secret_store::save_key(&new_k);
+            new_k
+        }
+    };
+    if let Ok(mut guard) = state.paired_security_key.lock() {
+        *guard = Some(key.clone());
+    }
+    Ok(key)
+}
+
+#[command]
+pub fn generate_new_pairing_key(state: State<'_, AppState>) -> Result<String, String> {
+    let new_k = crate::pairing::generate_random_security_key();
+    crate::secret_store::save_key(&new_k)?;
+    if let Ok(mut guard) = state.paired_security_key.lock() {
+        *guard = Some(new_k.clone());
+    }
+    *state.paired_peer_ip.lock().map_err(|e| e.to_string())? = None;
+    *state.peer_device.lock().map_err(|e| e.to_string())? = None;
+    *state.authenticated_peer_seen.lock().map_err(|e| e.to_string())? = None;
+    Ok(new_k)
 }
 
 #[command]
