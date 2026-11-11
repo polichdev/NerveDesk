@@ -46,3 +46,5 @@ dist/
 *.swo
 
 agent/
+
+.vite/
